@@ -2,9 +2,23 @@
   'use strict';
   const root = document.getElementById('wvw'), byId = id => document.getElementById('wvw-' + id);
   document.title = 'Varnish Cache';
-  let busy = false, snapshot;
+  let busy = false, snapshot, editingProfile = 'basic';
   const node = (tag, text) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; return el; };
-  function controls() { root.querySelectorAll('button,input,textarea').forEach(el => { el.disabled = busy || el.dataset.unavailable === '1'; }); }
+  function controls() { root.querySelectorAll('button,input,textarea,select').forEach(el => { el.disabled = busy || el.dataset.unavailable === '1'; }); }
+  function options(select, value) {
+    select.replaceChildren();
+    for (const profile of snapshot.profiles) { const option = node('option', profile.label); option.value = profile.name; select.append(option); }
+    select.value = value;
+  }
+  function profileEditor() {
+    const profile = snapshot.profiles.find(p => p.name === editingProfile);
+    byId('profile-description').textContent = profile.description;
+    byId('profile-source').textContent = profile.source;
+    byId('profile-recv').value = profile.recv_vcl;
+    byId('profile-backend').value = profile.backend_vcl;
+    const count = snapshot.sites.filter(s => s.enabled && s.profile === editingProfile).length;
+    byId('profile-targets').textContent = 'Applying these central rules clears cache for ' + count + ' enabled site(s) using ' + profile.label + '.';
+  }
   async function call(action, values = {}) {
     if (busy) return;
     busy = true; controls(); byId('error').hidden = true; byId('notice').hidden = true;
@@ -25,31 +39,37 @@
     byId('start').hidden = !snapshot.installed || snapshot.running;
     byId('remove').hidden = !snapshot.installed;
     byId('server').hidden = !snapshot.installed;
-    byId('site-settings').hidden = !snapshot.installed;
+    byId('profiles').hidden = !snapshot.installed;
     byId('memory').value = snapshot.memory_mb;
     byId('usage-result').hidden = true;
-    const details = byId('details'); details.replaceChildren();
+    options(byId('default-profile'), snapshot.default_profile);
+    options(byId('edit-profile'), editingProfile); profileEditor();
     const body = byId('sites'); body.replaceChildren();
     for (const site of snapshot.sites) {
       const row = node('tr'), name = node('td'); name.append(node('strong', site.domain), node('small', site.owner));
+      row.dataset.site = site.id;
       if (site.error) name.append(node('small', site.error));
+      row.append(name);
+      const profile = node('select'); options(profile, site.profile); profile.setAttribute('aria-label', 'VCL profile for ' + site.domain);
+      const profileCell = node('td'); profileCell.append(profile); row.append(profileCell);
       const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = site.enabled; enabled.setAttribute('aria-label', 'Enable Varnish for ' + site.domain);
-      const enabledCell = node('td'); enabledCell.append(enabled); row.append(name, enabledCell);
+      const enabledCell = node('td'); enabledCell.append(enabled); row.append(enabledCell);
       const ttl = node('input'); ttl.type = 'number'; ttl.min = '1'; ttl.max = '2147483647'; ttl.value = site.ttl; ttl.setAttribute('aria-label', 'Maximum cache lifetime for ' + site.domain);
       const ttlCell = node('td'); ttlCell.append(ttl, node('small', 'seconds')); row.append(ttlCell);
       const bypass = node('textarea'); bypass.value = site.bypass.join('\n'); bypass.placeholder = '/private-area/\n/custom-checkout/'; bypass.setAttribute('aria-label', 'Additional bypass paths for ' + site.domain);
       const bypassCell = node('td'); bypassCell.append(bypass, node('small', 'URL prefixes, one per line.')); row.append(bypassCell);
       const cell = node('td'), actions = node('div'); actions.className = 'wvw-actions';
       const save = node('button', 'Save & Apply'); save.type = 'button'; save.className = 'wvw-primary';
-      save.addEventListener('click', () => call('configure', {id: site.id, enabled: enabled.checked, ttl: Number(ttl.value), bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean)}));
+      save.addEventListener('click', () => call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, ttl: Number(ttl.value), bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value}));
       const purge = node('button', 'Clear cache'); purge.type = 'button'; purge.dataset.unavailable = String(!snapshot.installed || !site.enabled ? 1 : 0);
       purge.addEventListener('click', () => call('purge', {id: site.id}));
       actions.append(save, purge); cell.append(actions); row.append(cell); body.append(row);
-      for (const el of [enabled, ttl, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
-      const section = node('details'); section.className = 'wvw-card';
-      section.append(node('summary', site.domain));
+      for (const el of [profile, enabled, ttl, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      const detailRow = node('tr'); detailRow.hidden = true; detailRow.dataset.detailsFor = site.id;
+      const detailCell = node('td'); detailCell.colSpan = 6;
+      const section = node('div'); section.className = 'wvw-site-details'; detailCell.append(section); detailRow.append(detailCell); body.append(detailRow);
       const edit = node('button', 'VCL & connection'); edit.type = 'button'; edit.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
-      edit.addEventListener('click', () => { section.open = true; section.scrollIntoView({behavior: 'smooth', block: 'start'}); }); actions.append(edit);
+      edit.setAttribute('aria-expanded', 'false'); actions.append(edit);
       const connection = node('button', 'Show connection information & purge key'); connection.type = 'button';
       const connectionBox = node('div'); connectionBox.hidden = true;
       connection.addEventListener('click', async () => {
@@ -73,18 +93,21 @@
         connectionBox.replaceChildren(table, keyLabel, key, keyActions, node('p', 'This key clears only this site and its aliases. It does not provide panel access. The WordPress connector reads it automatically; install the connector ZIP in WordPress to use its Clear cache button. Remote TCP purges are not enabled.'));
         connectionBox.hidden = false; connection.textContent = 'Hide connection information & purge key';
       });
-      section.addEventListener('toggle', () => { if (!section.open) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information & purge key'; } });
-      section.append(node('p', 'Use site-local VCL rules to add cache exclusions or adjust public response caching.'), connection, connectionBox);
-      const requestLabel = node('label', 'Request VCL (vcl_recv)'), recv = node('textarea'); recv.value = site.recv_vcl; recv.className = 'wvw-vcl'; recv.setAttribute('aria-label', 'Request VCL for ' + site.domain); recv.placeholder = 'if (req.url ~ "^/members/") { return (pass); }';
-      const backendLabel = node('label', 'Response VCL (vcl_backend_response)'), backend = node('textarea'); backend.value = site.backend_vcl; backend.className = 'wvw-vcl'; backend.setAttribute('aria-label', 'Response VCL for ' + site.domain); backend.placeholder = 'if (bereq.url ~ "^/news/") { set beresp.ttl = 60s; }';
+      edit.addEventListener('click', () => {
+        detailRow.hidden = !detailRow.hidden; edit.setAttribute('aria-expanded', String(!detailRow.hidden));
+        if (detailRow.hidden) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information & purge key'; }
+      });
+      const description = node('p'), builtIn = node('details'), source = node('pre'); builtIn.append(node('summary', 'View selected profile VCL'), source);
+      function selectedProfile() { const selected = snapshot.profiles.find(p => p.name === profile.value); description.textContent = selected.description; source.textContent = selected.source; }
+      profile.addEventListener('change', selectedProfile); selectedProfile();
+      section.append(description, builtIn, connection, connectionBox);
+      const requestLabel = node('label', 'Additional site request VCL (vcl_recv)'), recv = node('textarea'); recv.value = site.recv_vcl; recv.className = 'wvw-vcl'; recv.setAttribute('aria-label', 'Request VCL for ' + site.domain); recv.placeholder = 'if (req.url ~ "^/members/") { return (pass); }';
+      const backendLabel = node('label', 'Additional site response VCL (vcl_backend_response)'), backend = node('textarea'); backend.value = site.backend_vcl; backend.className = 'wvw-vcl'; backend.setAttribute('aria-label', 'Response VCL for ' + site.domain); backend.placeholder = 'if (bereq.url ~ "^/news/") { set beresp.ttl = 60s; }';
       recv.id = 'wvw-recv-' + site.id; requestLabel.htmlFor = recv.id; backend.id = 'wvw-backend-' + site.id; backendLabel.htmlFor = backend.id;
-      const vclSave = node('button', 'Validate & Apply VCL'); vclSave.type = 'button'; vclSave.className = 'wvw-primary';
-      vclSave.addEventListener('click', () => call('vcl', {id: site.id, recv_vcl: recv.value, backend_vcl: backend.value}));
-      for (const el of [connection, recv, backend, vclSave]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
-      section.append(requestLabel, recv, backendLabel, backend, node('p', 'Rules apply only to this site. Supported: if/else, return (pass) in requests, X-User-* headers, response ttl/grace/keep, and regsub/regsuball. Cookie, login, private-response and site isolation protections remain in effect. The site maximum lifetime still applies.'), vclSave);
-      details.append(section);
+      for (const el of [connection, recv, backend]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      section.append(requestLabel, recv, backendLabel, backend, node('p', 'Save & Apply validates and saves this site\'s profile, settings and additional VCL. Additions support if/else, request return (pass), X-User-* headers, response ttl/grace/keep and regsub/regsuball. Private-response and site-isolation protections remain in effect.'));
     }
-    if (!snapshot.sites.length) { const row = node('tr'), cell = node('td', 'No hosting domains found.'); cell.colSpan = 5; row.append(cell); body.append(row); }
+    if (!snapshot.sites.length) { const row = node('tr'), cell = node('td', 'No hosting domains found.'); cell.colSpan = 6; row.append(cell); body.append(row); }
   }
   byId('install').addEventListener('click', () => call('install'));
   byId('start').addEventListener('click', () => call('start'));
@@ -92,6 +115,9 @@
     if (window.confirm('Disable Varnish for all sites and remove its service setup? Sites will return to their normal Webuzo routing.')) call('remove');
   });
   byId('refresh').addEventListener('click', () => call(snapshot && snapshot.installed ? 'reconcile' : 'status'));
+  byId('edit-profile').addEventListener('change', () => { editingProfile = byId('edit-profile').value; profileEditor(); });
+  byId('save-default').addEventListener('click', () => call('defaults', {profile: byId('default-profile').value}));
+  byId('save-profile').addEventListener('click', () => call('profile_rules', {profile: editingProfile, recv_vcl: byId('profile-recv').value, backend_vcl: byId('profile-backend').value}));
   byId('resize').addEventListener('click', () => {
     const memory = Number(byId('memory').value);
     if (!Number.isSafeInteger(memory) || memory < 1) { byId('error').textContent = 'Cache size must be a positive whole number of MiB.'; byId('error').hidden = false; return; }

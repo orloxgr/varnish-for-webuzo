@@ -4,7 +4,7 @@ Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Ap
 
 | Check | Result |
 | --- | --- |
-| Backend boundaries, repository verification, VCL and cache-budget recovery | 39 tests passed |
+| Backend boundaries, repository verification, profiles, VCL and cache-budget recovery | 63 tests passed |
 | Native panel permissions, CSRF, forged actors and unexpected uploads | 8 checks passed |
 | Fresh package/service setup through the Webuzo panel | Passed |
 | Varnish manager and worker run without root or effective Linux capabilities | Passed |
@@ -35,7 +35,13 @@ Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Ap
 | Invalid VCL / internal credential access / arbitrary code | Rejected; invalid native regex leaves active policy and settings intact |
 | Custom response lifetime with private responses / Set-Cookie | Responses remain uncacheable |
 | Connection information and site key | Scoped local capability verified; key excluded from normal status |
-| Native plugin ZIP upgrade with custom settings | Nondefault cache size, site VCL and enabled sites retained |
+| Native plugin ZIP upgrade with custom settings | Nondefault cache size, site VCL, site profiles, central Basic rules, default profile and enabled sites retained |
+| Four named profiles and central Basic default | Basic, WordPress, WooCommerce and UltraCache execute distinct native VCL; new inventory inherits the default and existing assignments are preserved |
+| Central profile edits | Native compiler validates additions; only enabled sites assigned to that profile are invalidated |
+| UltraCache ESI | Shared parent and separate per-visitor private cart fragments verified, including the native Apache/PHP route |
+| ESI boundaries and client headers | Cross-account includes rejected; client-supplied internal ESI headers cleared |
+| UltraCache local invalidation | Authenticated Unix contract, HTTP/HTTPS exact purge, malformed-expression rejection and cross-account denial verified |
+| Site interface | One site entry with inline profile, VCL and connection controls; no second site list |
 
 ## Reproduce
 
@@ -58,4 +64,10 @@ Settings integration checks use the same two disposable sites. They create tempo
 
 ```sh
 python3 tests/settings_runtime.py --disposable --address TEST_SERVER_IP --sites first.example.test second.example.test
+```
+
+Profile integration checks exercise all four policies through native Nginx → Varnish → Apache/PHP, including private ESI fragments, central Basic edits, defaults, purge authentication and account isolation. They restore the original profiles/defaults and remove their temporary PHP fixtures:
+
+```sh
+python3 tests/profiles_runtime.py --disposable --address TEST_SERVER_IP --sites first.example.test second.example.test
 ```

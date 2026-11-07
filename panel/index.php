@@ -11,9 +11,22 @@
     <p>The cache size is shared by all enabled sites. Changing it restarts Varnish and clears the shared cache. Total service memory also includes processing and connection overhead.</p>
     <div id="wvw-usage-result" role="status" hidden></div>
   </section>
-  <p>New sites start with Varnish disabled. Enable each site below. Logged-in visitors, cookies, query strings and write requests bypass the cache.</p>
-  <div class="wvw-scroll"><table><thead><tr><th>Site / Account</th><th>Varnish</th><th>Maximum cache lifetime</th><th>Additional bypass paths</th><th>Actions</th></tr></thead><tbody id="wvw-sites"></tbody></table></div>
-  <section id="wvw-site-settings"><h3>Site VCL and connection details</h3><div id="wvw-details"></div></section>
+  <section class="wvw-card" id="wvw-profiles" hidden>
+    <h3>VCL profiles</h3>
+    <div class="wvw-toolbar"><label for="wvw-default-profile">Default for new sites</label><select id="wvw-default-profile"></select><button type="button" id="wvw-save-default">Save default</button></div>
+    <p>New sites receive this profile when discovered and start with Varnish disabled. Existing sites keep their assigned profile. Basic is the initial default.</p>
+    <details><summary>Central profile VCL templates</summary>
+      <label for="wvw-edit-profile">Profile</label><select id="wvw-edit-profile"></select>
+      <p id="wvw-profile-description"></p>
+      <details><summary>View built-in VCL</summary><pre id="wvw-profile-source"></pre></details>
+      <p>Add central rules below to extend this profile. They apply to all sites assigned to this profile, including new sites. Per-site additions remain separate.</p>
+      <label for="wvw-profile-recv">Additional request VCL</label><textarea id="wvw-profile-recv" class="wvw-vcl"></textarea>
+      <label for="wvw-profile-backend">Additional response VCL</label><textarea id="wvw-profile-backend" class="wvw-vcl"></textarea>
+      <p id="wvw-profile-targets"></p><button type="button" id="wvw-save-profile" class="wvw-primary">Validate &amp; Apply profile rules</button>
+    </details>
+  </section>
+  <p>Choose a profile and enable Varnish for each site below. Open VCL &amp; connection in that site's row to view its profile rules, add site-specific rules or show its connection information.</p>
+  <div class="wvw-scroll"><table><thead><tr><th>Site / Account</th><th>Profile</th><th>Varnish</th><th>Maximum cache lifetime</th><th>Additional bypass paths</th><th>Actions</th></tr></thead><tbody id="wvw-sites"></tbody></table></div>
   <p><button type="button" id="wvw-remove" hidden>Remove Varnish setup</button></p>
 </section>
 <script><?php require __DIR__ . '/app.js'; ?></script>

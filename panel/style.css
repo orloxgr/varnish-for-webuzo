@@ -25,3 +25,9 @@
 #wvw dt { font-weight: 600; }
 #wvw dd { margin: 0; overflow-wrap: anywhere; }
 #wvw .wvw-key { display: block; width: 100%; max-width: 760px; padding: 9px; margin-bottom: 10px; border: 1px solid #b4bfd6; border-radius: 4px; font-family: monospace; }
+#wvw select { max-width: 100%; padding: 8px; color: #172644; background: #fff; border: 1px solid #b4bfd6; border-radius: 4px; }
+#wvw pre { max-height: 420px; overflow: auto; margin: 12px 0; padding: 14px; color: #172644; background: #f4f6fc; border: 1px solid #ccd4e4; border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#wvw .wvw-site-details { padding: 8px 14px 16px; max-width: 1150px; }
+#wvw .wvw-site-details > button { margin-top: 16px; }
+#wvw tr[hidden] { display: none; }
+#wvw tr[data-details-for] > td { max-width: none; }

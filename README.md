@@ -6,7 +6,7 @@ Cache public WordPress pages with Varnish while Nginx handles HTTPS and serves p
 
 1. Upload the Webuzo ZIP in **Admin → Plugins → Add New**, then activate it.
 2. Open **Varnish Cache** and click **Install & set up Varnish**. Setup installs Varnish 9.1 LTS from its official signed repository and creates a separate `varnish-for-webuzo` service. Its initial cache size is 256 MiB; change it under **Server cache**. Existing supported Varnish instances and their configuration are preserved; an older shared binary is not upgraded while another instance is running.
-3. Enable the desired domains and click **Save & Apply**. New domains start disabled and appear when you refresh the site list.
+3. Choose a profile, enable the desired domains and click **Save & Apply**. New domains start disabled and receive the central default profile, initially **Basic**, when you refresh the site list.
 4. Use **Clear cache** to clear that site's cached pages, including its aliases and HTTP/HTTPS variants.
 
 For WordPress administrators, install the separate WordPress connector ZIP and use **Tools → Varnish Cache**. The Webuzo plugin provisions a site credential under the hosting account's private `.varnish-for-webuzo` directory when saving an enabled site. It does not install WordPress plugins automatically. The connector needs PHP POSIX and cURL with Unix socket support, and uses WordPress filesystem/HTTP functions to send a scoped local purge. It never receives a panel password, general API key or command-execution capability.
@@ -25,7 +25,24 @@ Both Varnish manager and cache worker run as the dedicated `webuzo-varnish` syst
 
 **Show memory usage** reads an on-demand snapshot from the native counters of this Varnish instance: cache bytes used/free, configured budget, hits, misses and passes. Total service memory is shown separately because it includes connection and processing overhead in addition to stored objects.
 
-Only successful public HTML responses are eligible for caching. Cookies, Authorization, query strings, write requests, the WordPress dashboard/login/REST endpoints, and standard WooCommerce cart/checkout/account paths bypass the cache. Responses containing cookies, private/no-store/no-cache instructions, or errors are not cached. The per-site lifetime is an upper limit; shorter origin lifetimes remain effective.
+Only successful public HTML responses are eligible for caching. Authorization, write requests and private sessions bypass shared cache. Responses containing cookies, private/no-store/no-cache instructions, or errors are not cached. The per-site lifetime is an upper limit; shorter origin lifetimes remain effective unless an additional response VCL rule sets a different lifetime within that limit.
+
+## VCL profiles and new sites
+
+Each site has one profile selected in its own row:
+
+| Profile | Behavior |
+| --- | --- |
+| **Basic** | Conservative default: all cookies and query strings bypass cache, together with common WordPress and shop private paths. This retains the behavior of sites configured before named profiles were introduced. |
+| **WordPress** | Excludes login, dashboard, APIs, editors, previews and private/session cookies. Unrelated cookies can share public pages and remain available to the origin on a miss. |
+| **WooCommerce** | WordPress policy plus cart, checkout, customer-account and WooCommerce action exclusions. Cart/session cookies bypass cache. |
+| **UltraCache** | WordPress/WooCommerce policy with marketing-parameter normalization, origin-approved ESI and authenticated exact/batch/HTML/host/soft invalidation. A cart request can share an ESI parent only after the explicit request opt-in and origin response approval; its private fragments execute separately for each visitor. |
+
+**VCL profiles → Default for new sites** selects the profile assigned when a new site is first saved from the panel inventory. It starts as **Basic**. Changing this default does not change the profiles already assigned to existing sites or enable new sites automatically.
+
+**Central profile VCL templates** shows the four built-in VCL files and lets the administrator add request/response rules to each profile. Central Basic rules apply to every site using Basic, including new sites. Applying central rules validates them with Varnish and invalidates enabled sites using that profile; other profiles keep their cache and site-specific additions.
+
+No profile installs or detects WordPress plugins. Basic, WordPress and WooCommerce use HTTP behavior without a companion application plugin. UltraCache also works as a public-page policy without a plugin; ESI composition needs the origin's ESI handshake. Its advanced invalidation contract is **ultracache-webuzo-v2**, available only through the protected local Unix socket and the site's token. The existing WordPress connector continues to clear the whole selected site's cache with every profile.
 
 Add URL prefixes under **Additional bypass paths** for customized checkout/account pages, protected downloads and private application directories. These exclusions also send matching static files through the application. Public static extensions are CSS, JavaScript, common images, fonts, audio and video. Dotfile paths and standard WooCommerce protected upload directories are excluded from direct static serving. Apache-only access rules for other protected asset directories should be represented in the bypass list.
 
@@ -35,7 +52,7 @@ If Varnish is unavailable, GET/HEAD page requests fall back to the native Apache
 
 ## Site VCL and connection details
 
-Expand a domain under **Site VCL and connection details** to edit its request and response rules. **Validate & Apply VCL** checks the rules with the native Varnish compiler before activating them. A successful change invalidates only that site's cache; a rejected policy leaves the previous rules active.
+Open **VCL & connection** in the site's own row to view its selected profile VCL, edit additional site rules and access its connection details. **Save & Apply** checks the profile and additions with the native Varnish compiler before activating them. A successful site change invalidates only that site's cache; a rejected policy leaves the previous rules active.
 
 The site editor supports `if`/`else`, request `return (pass)`, `X-User-*` headers, response `ttl`/`grace`/`keep`, and `regsub`/`regsuball`. The rules run inside that site's scope. Imports, includes, inline C, backend selection, internal credentials and site identity are outside the editing scope. Private/cookie response checks and the site's maximum lifetime remain effective.
 

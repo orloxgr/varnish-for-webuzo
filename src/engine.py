@@ -11,6 +11,7 @@ import state
 import credentials
 import cache_size
 import fragments
+import profiles
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -23,11 +24,13 @@ def inventory(config):
         previous=config.get('sites',{}).get(sid,{})
         site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),ttl=previous.get('ttl',300),bypass=previous.get('bypass',[]))
         site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
+        site['profile']=profiles.name(previous.get('profile','basic' if sid in config.get('sites',{}) else profiles.default(config)))
     return sites
 
 def status():
     config=settings();sites=inventory(config)
     return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),memory_mb=config.get('memory_mb',256),
+                default_profile=profiles.default(config),profiles=profiles.catalog(config),
                 sites=[{k:v for k,v in s.items() if k not in ('token','uid','gid','home','custom_domains','credential_roots')} for s in sites.values()])
 
 def own_file(path,value,mode=0o600):
@@ -81,7 +84,7 @@ def recover():
 
 def apply(previous,next_config):
     changes=plans(previous,next_config)
-    content=policy.render(next_config['sites'],next_config['gateway'],next_config['origin'])
+    content=policy.render(next_config['sites'],next_config['gateway'],next_config['origin'],next_config)
     journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None)
     state.save(JOURNAL,journal)
     try:
@@ -95,7 +98,9 @@ def apply(previous,next_config):
                 service.wait()
             for sid,site in next_config['sites'].items():
                 old=previous.get('sites',{}).get(sid,{})
-                if site.get('enabled') and any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k) for k in ('enabled','ttl','bypass','names','recv_vcl','backend_vcl')):service.purge(site)
+                changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','ttl','bypass','names','recv_vcl','backend_vcl'))
+                changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
+                if site.get('enabled') and changed:service.purge(site)
         for change in changes:routing.replace(change)
         reload_servers()
         if next_config.get('installed'):service.write_vcl(service.ACTIVE,content)
@@ -109,12 +114,19 @@ def reload_servers():
     native.run(native.NGINX,'-t');native.run(native.APACHE,'-t')
     native.run(native.APACHE,'graceful');native.run(native.NGINX,'-s','reload')
 
+def validate_vcl(sites,config,sid=None):
+    validation=copy.deepcopy(sites)
+    if sid:validation[sid]['enabled']=True
+    _,candidate=service.load(policy.render(validation,config['gateway'],config['origin'],config))
+    service.admin('vcl.discard',candidate)
+    path=routing.CONFIG/'generations'/(candidate+'.vcl');state.trusted(path);path.unlink()
+
 def action(request):
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
-    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','vcl'}
+    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','vcl','defaults','profile_rules'}
     if operation not in allowed:raise ValueError('Unknown action')
-    fields={'configure':{'id','enabled','ttl','bypass'},'purge':{'id'},'connection':{'id'},'vcl':{'id','recv_vcl','backend_vcl'},'resize':{'memory_mb'}}
+    fields={'configure':{'id','enabled','ttl','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
     with state.locked():
@@ -138,6 +150,12 @@ def action(request):
             for site in sites.values():site['token']=secrets.token_hex(32)
         else:
             if not previous.get('installed'):raise ValueError('Install the Varnish service first')
+            if operation=='defaults':config['default_profile']=profiles.name(request.get('profile'))
+            if operation=='profile_rules':
+                profile=profiles.name(request.get('profile'))
+                row={field:request.get(field) for field in ('recv_vcl','backend_vcl')}
+                config.setdefault('profile_rules',{})[profile]=row
+                profiles.rules(config,profile);validate_vcl(sites,config)
             if operation in ('configure','purge','connection','vcl'):
                 sid=state.identity(request.get('id'))
                 if sid not in sites:raise ValueError('Unknown site')
@@ -148,14 +166,12 @@ def action(request):
                         socket='/run/varnish-for-webuzo-cache/frontend.sock',url='http://'+site['domain']+'/',header='X-Webuzo-Varnish-Token',key=site['token']))
                 if operation=='vcl':
                     if site['error']:raise ValueError(site['error'])
+                    site['profile']=profiles.name(request.get('profile',site['profile']))
                     for field,stage in (('recv_vcl','recv'),('backend_vcl','backend_response')):
                         source=request.get(field)
                         fragments.validate(source,stage);site[field]=source
                     # Compile even for a disabled site, without enabling its public routing.
-                    validation=copy.deepcopy(sites);validation[sid]['enabled']=True
-                    _,candidate=service.load(policy.render(validation,previous['gateway'],previous['origin']))
-                    service.admin('vcl.discard',candidate)
-                    path=routing.CONFIG/'generations'/(candidate+'.vcl');state.trusted(path);path.unlink()
+                    validate_vcl(sites,config,sid)
                 if operation=='purge':
                     if not site['enabled']:raise ValueError('Varnish is not enabled for this site')
                     service.purge(site);return dict(message='Site cache cleared')
@@ -164,9 +180,15 @@ def action(request):
                     if type(request.get('ttl')) is not int or not 1<=request['ttl']<=2147483647:raise ValueError('Use a positive cache lifetime within the supported integer range')
                     if site['error'] and request['enabled']:raise ValueError(site['error'])
                     site.update(enabled=request['enabled'],ttl=request['ttl'],bypass=policy.paths(request.get('bypass',[])))
+                    site['profile']=profiles.name(request.get('profile',site['profile']))
+                    if any(field in request for field in ('recv_vcl','backend_vcl')):
+                        for field,stage in (('recv_vcl','recv'),('backend_vcl','backend_response')):
+                            source=request.get(field,site[field]);fragments.validate(source,stage);site[field]=source
+                        if site['error']:raise ValueError(site['error'])
+                        validate_vcl(sites,config,sid)
         if operation=='configure':credentials.change(site,site['enabled'])
         apply(previous,config)
-        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.'}[operation])
+        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.'}[operation])
 
 def remove():
     with state.locked():

@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def build():
     version=json.loads((ROOT/'info.json').read_text())['version']
     paths=[ROOT/name for name in ('varnish-for-webuzo.php','info.json','LICENSE','UPSTREAM','README.md')]
-    for folder in ('src','templates','panel','docs'):
+    for folder in ('src','templates','profiles','panel','docs'):
         paths.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.zip'))
     epoch=int(os.environ.get('SOURCE_DATE_EPOCH',max(p.stat().st_mtime for p in paths)))
     stamp=datetime.fromtimestamp(epoch,timezone.utc).timetuple()[:6]

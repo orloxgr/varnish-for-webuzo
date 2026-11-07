@@ -29,6 +29,7 @@ proxy_set_header Forwarded "";
 proxy_set_header X-WV-Origin "";
 proxy_set_header X-WV-Gateway "'''+gateway+'''";
 proxy_set_header X-Webuzo-Varnish-Token "";
+proxy_set_header X-UltraCache-Token "";
 proxy_ssl_server_name on;
 proxy_ssl_name $host;
 proxy_connect_timeout 2s;
