@@ -3,6 +3,7 @@ import json
 import re
 from urllib.parse import quote,unquote
 import native
+import fragments
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
 
@@ -73,6 +74,8 @@ sub vcl_recv {
             # Literal prefix; no caller-supplied VCL or regular expression.
             pattern='(?i)^('+re.escape(path).replace('\\.','[.]')+'|'+literal_bytes(unquote(path))+')'
             text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+' && req.url ~ '+quoted(pattern)+') { set req.http.X-WV-Mode = "PASS"; return (pass); }')
+        fragment=fragments.validate(site.get('recv_vcl',''),'recv',mark_pass=True)
+        if fragment:text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+') { '+fragment+' }')
     text.append(''' return (hash);
 }
 sub vcl_hash {
@@ -82,6 +85,13 @@ sub vcl_hash {
 }
 sub vcl_backend_response {
  set beresp.http.X-WV-Site = bereq.http.X-WV-Site;
+ set beresp.grace = 0s;
+''')
+    for site in sites.values():
+        if not site.get('enabled') or site.get('error'):continue
+        fragment=fragments.validate(site.get('backend_vcl',''),'backend_response')
+        if fragment:text.append(' if (bereq.http.X-WV-Site == '+quoted(site['id'])+') { '+fragment+' }')
+    text.append('''
  if (beresp.status != 200 || beresp.http.Content-Type !~ "(?i)^text/html(?:;|$)" ||
      beresp.http.Set-Cookie || beresp.http.Vary == "*" || beresp.ttl <= 0s ||
      beresp.http.Cache-Control ~ "(?i)(private|no-store|no-cache)" || beresp.http.Pragma ~ "(?i)no-cache" ||
@@ -92,7 +102,7 @@ sub vcl_backend_response {
     for site in sites.values():
         if site.get('enabled') and not site.get('error'):
             text.append(' if (bereq.http.X-WV-Site == '+quoted(site['id'])+' && beresp.ttl > '+str(site['ttl'])+'s) { set beresp.ttl = '+str(site['ttl'])+'s; }')
-    text.append(''' set beresp.grace = 0s; return (deliver);
+    text.append(''' return (deliver);
 }
 sub vcl_deliver {
  if (req.http.X-WV-Mode == "PASS" || obj.uncacheable) { set resp.http.X-Webuzo-Varnish = "PASS"; }

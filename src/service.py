@@ -34,7 +34,13 @@ def wait():
         time.sleep(.1)
     raise RuntimeError('The Varnish child did not become ready')
 
-def unit():
+def memory_mb(value):
+    if type(value) is not int or value < 1:raise ValueError('Cache size must be a positive number of MiB')
+    return value
+
+def unit(size=None):
+    if size is None:size=state.read(state.ROOT/'settings.json',{}).get('memory_mb',256)
+    memory_mb(size)
     return '''[Unit]
 Description=Varnish for Webuzo
 After=network.target nginx.service
@@ -46,7 +52,7 @@ StateDirectory=varnish-for-webuzo-cache
 StateDirectoryMode=0700
 RuntimeDirectory=varnish-for-webuzo-cache
 RuntimeDirectoryMode=0755
-ExecStart=/usr/sbin/varnishd -j none -F -a public=/run/varnish-for-webuzo-cache/frontend.sock,mode=0666 -T 127.0.0.1:6086 -S /etc/varnish-for-webuzo/admin.secret -f /etc/varnish-for-webuzo/active.vcl -n /var/lib/varnish-for-webuzo-cache -s malloc,256m
+ExecStart=/usr/sbin/varnishd -j none -F -a public=/run/varnish-for-webuzo-cache/frontend.sock,mode=0666 -T 127.0.0.1:6086 -S /etc/varnish-for-webuzo/admin.secret -f /etc/varnish-for-webuzo/active.vcl -n /var/lib/varnish-for-webuzo-cache -s malloc,CACHE_BUDGETm
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=131072
@@ -59,7 +65,30 @@ PrivateDevices=true
 ReadWritePaths=/var/lib/varnish-for-webuzo-cache
 [Install]
 WantedBy=multi-user.target
-'''
+'''.replace('CACHE_BUDGET',str(size))
+
+def usage(config):
+    data=json.loads(native.run('/usr/bin/varnishstat','-n',CACHE,'-1','-j'))
+    counters=data.get('counters',data)
+    def counter(name):
+        value=counters.get(name,{}).get('value')
+        return value if type(value) in (int,float) and value>=0 else None
+    used,free=counter('SMA.s0.g_bytes'),counter('SMA.s0.g_space')
+    if used is None or free is None:raise RuntimeError('Native malloc cache counters are unavailable')
+    raw=native.run('systemctl','show','varnish-for-webuzo','--property=MemoryCurrent','--value').strip()
+    return dict(used_bytes=used,free_bytes=free,budget_mb=config.get('memory_mb',256),
+                process_bytes=int(raw) if raw.isdecimal() else None,
+                hits=counter('MAIN.cache_hit'),misses=counter('MAIN.cache_miss'),passes=counter('MAIN.s_pass'))
+
+def restart(size):
+    native.run('systemctl','daemon-reload')
+    native.run('systemctl','reset-failed','varnish-for-webuzo')
+    native.run('systemctl','restart','varnish-for-webuzo');wait()
+    pid=native.run('systemctl','show','varnish-for-webuzo','--property=MainPID','--value').strip()
+    if not pid.isdecimal() or int(pid)<1:raise RuntimeError('The Varnish manager is unavailable')
+    args=(Path('/proc')/pid/'cmdline').read_bytes().decode().split('\0')
+    if Path(args[0]).name!='varnishd' or sum(args[i]=='-s' and args[i+1]=='malloc,'+str(size)+'m' for i in range(len(args)-1))!=1:
+        raise RuntimeError('The running cache storage does not match the requested size')
 
 def prepare():
     for port in (6086,):

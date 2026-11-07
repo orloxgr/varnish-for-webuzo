@@ -4,7 +4,7 @@ Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Ap
 
 | Check | Result |
 | --- | --- |
-| Backend boundaries, repository verification and transaction recovery | 26 tests passed |
+| Backend boundaries, repository verification, VCL and cache-budget recovery | 39 tests passed |
 | Native panel permissions, CSRF, forged actors and unexpected uploads | 8 checks passed |
 | Fresh package/service setup through the Webuzo panel | Passed |
 | Varnish manager and worker run without root or effective Linux capabilities | Passed |
@@ -28,6 +28,14 @@ Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Ap
 | Disable/re-enable a domain | Native routing restored; only that site's cache invalidated |
 | Remove setup and immediately reinstall | Passed; native routes restored, credentials/unit/runtime removed |
 | Webuzo version upgrade | No newer release available: installed/latest were both 4.9.1 |
+| Cache-size change and no-op | Actual manager restart and storage argument verified; unchanged budget keeps the same manager |
+| Cache-size failure/interruption recovery | Previous unit and settings restored; failed recovery retains its journal |
+| Native memory snapshot | Own-instance used/free cache counters and separate service memory verified |
+| Site-local request/response VCL | Compiler validation, selected-site invalidation and other-account cache preservation verified |
+| Invalid VCL / internal credential access / arbitrary code | Rejected; invalid native regex leaves active policy and settings intact |
+| Custom response lifetime with private responses / Set-Cookie | Responses remain uncacheable |
+| Connection information and site key | Scoped local capability verified; key excluded from normal status |
+| Native plugin ZIP upgrade with custom settings | Nondefault cache size, site VCL and enabled sites retained |
 
 ## Reproduce
 
@@ -45,3 +53,9 @@ python3 tests/runtime.py --disposable --self-signed --address TEST_SERVER_IP --s
 ```
 
 The runtime harness covers cache behavior, HTTP/HTTPS, static assets, private requests, purge isolation, spoofed headers, outages, rebuilds and restarts. Additional native integration checks exercised actual WordPress nonce/capability handling, WooCommerce pages, protected socket permissions, new-account provisioning and removal/reinstallation.
+
+Settings integration checks use the same two disposable sites. They create temporary PHP fixtures as the hosting users, apply site-local VCL, test native compiler rejection, resize the shared cache and restore the original VCL and budget afterwards:
+
+```sh
+python3 tests/settings_runtime.py --disposable --address TEST_SERVER_IP --sites first.example.test second.example.test
+```

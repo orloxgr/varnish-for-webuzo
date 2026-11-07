@@ -9,6 +9,8 @@ import routing
 import service
 import state
 import credentials
+import cache_size
+import fragments
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -20,11 +22,12 @@ def inventory(config):
     for sid,site in sites.items():
         previous=config.get('sites',{}).get(sid,{})
         site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),ttl=previous.get('ttl',300),bypass=previous.get('bypass',[]))
+        site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
     return sites
 
 def status():
     config=settings();sites=inventory(config)
-    return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),
+    return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),memory_mb=config.get('memory_mb',256),
                 sites=[{k:v for k,v in s.items() if k not in ('token','uid','gid','home','custom_domains','credential_roots')} for s in sites.values()])
 
 def own_file(path,value,mode=0o600):
@@ -71,6 +74,7 @@ def restore(journal):
     state.save(SETTINGS,journal['previous'])
 
 def recover():
+    cache_size.recover(SETTINGS)
     journal=state.read(JOURNAL)
     if journal:
         restore(journal);JOURNAL.unlink()
@@ -91,7 +95,7 @@ def apply(previous,next_config):
                 service.wait()
             for sid,site in next_config['sites'].items():
                 old=previous.get('sites',{}).get(sid,{})
-                if site.get('enabled') and any(old.get(k)!=site.get(k) for k in ('enabled','ttl','bypass','names')):service.purge(site)
+                if site.get('enabled') and any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k) for k in ('enabled','ttl','bypass','names','recv_vcl','backend_vcl')):service.purge(site)
         for change in changes:routing.replace(change)
         reload_servers()
         if next_config.get('installed'):service.write_vcl(service.ACTIVE,content)
@@ -108,14 +112,20 @@ def reload_servers():
 def action(request):
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
-    allowed={'status','install','configure','purge','reconcile','start','remove'}
+    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','vcl'}
     if operation not in allowed:raise ValueError('Unknown action')
-    allowed_keys={'actor','admin','action'}|({'id','enabled','ttl','bypass'} if operation=='configure' else {'id'} if operation=='purge' else set())
+    fields={'configure':{'id','enabled','ttl','bypass'},'purge':{'id'},'connection':{'id'},'vcl':{'id','recv_vcl','backend_vcl'},'resize':{'memory_mb'}}
+    allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
     with state.locked():
         recover()
         if operation=='status':return status()
         previous=settings();sites=inventory(previous)
+        if operation in ('usage','resize','connection','vcl') and not previous.get('installed'):raise ValueError('Install the Varnish service first')
+        if operation=='usage':return dict(usage=service.usage(previous))
+        if operation=='resize':
+            changed=cache_size.resize(previous,request.get('memory_mb'),SETTINGS)
+            return dict(status(),message='Cache size saved. Varnish restarted and the shared cache was cleared.' if changed else 'Cache size is unchanged; Varnish was not restarted.')
         if operation=='remove':
             remove_setup(previous);return dict(status(),message='Varnish setup removed. Sites now use their native Webuzo routing.')
         if operation=='start':
@@ -128,20 +138,35 @@ def action(request):
             for site in sites.values():site['token']=secrets.token_hex(32)
         else:
             if not previous.get('installed'):raise ValueError('Install the Varnish service first')
-            if operation in ('configure','purge'):
+            if operation in ('configure','purge','connection','vcl'):
                 sid=state.identity(request.get('id'))
                 if sid not in sites:raise ValueError('Unknown site')
                 site=sites[sid]
+                if operation=='connection':
+                    if sid not in previous.get('sites',{}):raise ValueError('Save the site settings first')
+                    return dict(connection=dict(domain=site['domain'],names=site['names'],enabled=site['enabled'],method='PURGE',
+                        socket='/run/varnish-for-webuzo-cache/frontend.sock',url='http://'+site['domain']+'/',header='X-Webuzo-Varnish-Token',key=site['token']))
+                if operation=='vcl':
+                    if site['error']:raise ValueError(site['error'])
+                    for field,stage in (('recv_vcl','recv'),('backend_vcl','backend_response')):
+                        source=request.get(field)
+                        fragments.validate(source,stage);site[field]=source
+                    # Compile even for a disabled site, without enabling its public routing.
+                    validation=copy.deepcopy(sites);validation[sid]['enabled']=True
+                    _,candidate=service.load(policy.render(validation,previous['gateway'],previous['origin']))
+                    service.admin('vcl.discard',candidate)
+                    path=routing.CONFIG/'generations'/(candidate+'.vcl');state.trusted(path);path.unlink()
                 if operation=='purge':
                     if not site['enabled']:raise ValueError('Varnish is not enabled for this site')
                     service.purge(site);return dict(message='Site cache cleared')
-                if type(request.get('enabled')) is not bool:raise ValueError('Invalid enabled value')
-                if type(request.get('ttl')) is not int or not 1<=request['ttl']<=2147483647:raise ValueError('Use a positive cache lifetime within the supported integer range')
-                if site['error'] and request['enabled']:raise ValueError(site['error'])
-                site.update(enabled=request['enabled'],ttl=request['ttl'],bypass=policy.paths(request.get('bypass',[])))
+                if operation=='configure':
+                    if type(request.get('enabled')) is not bool:raise ValueError('Invalid enabled value')
+                    if type(request.get('ttl')) is not int or not 1<=request['ttl']<=2147483647:raise ValueError('Use a positive cache lifetime within the supported integer range')
+                    if site['error'] and request['enabled']:raise ValueError(site['error'])
+                    site.update(enabled=request['enabled'],ttl=request['ttl'],bypass=policy.paths(request.get('bypass',[])))
         if operation=='configure':credentials.change(site,site['enabled'])
         apply(previous,config)
-        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site settings saved.','reconcile':'Site list refreshed.'}[operation])
+        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.'}[operation])
 
 def remove():
     with state.locked():

@@ -3,6 +3,7 @@ from datetime import datetime,timezone
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import zipfile
 ROOT=Path(__file__).resolve().parents[1]
@@ -22,11 +23,21 @@ def build():
     digest=hashlib.sha256(target.read_bytes()).hexdigest()
     (target.parent/'SHA256SUMS').write_text(digest+'  '+target.name+'\n')
     print(target.name,digest)
-    connector=target.parent/('varnish-cache-for-webuzo-wordpress-'+version+'.zip')
-    with zipfile.ZipFile(connector,'w',zipfile.ZIP_DEFLATED) as archive:
-        for source,name in ((ROOT/'wordpress/varnish-cache-for-webuzo.php','varnish-cache-for-webuzo.php'),(ROOT/'LICENSE','LICENSE'),(ROOT/'wordpress/readme.txt','readme.txt')):
-            item=zipfile.ZipInfo('varnish-cache-for-webuzo/'+name,stamp);item.external_attr=0o100644<<16;item.compress_type=zipfile.ZIP_DEFLATED
-            archive.writestr(item,source.read_bytes())
+    connector_version=re.search(r'^\s*\*?\s*Version:\s*(\S+)',(ROOT/'wordpress/varnish-cache-for-webuzo.php').read_text(),re.M)[1]
+    connector=target.parent/('varnish-cache-for-webuzo-wordpress-'+connector_version+'.zip')
+    # An unchanged connector is a separate package, with its own version/date.
+    connector_sources=(ROOT/'wordpress/varnish-cache-for-webuzo.php',ROOT/'LICENSE',ROOT/'wordpress/readme.txt')
+    connector_stamp=datetime.fromtimestamp(int(os.environ.get('SOURCE_DATE_EPOCH',max(p.stat().st_mtime for p in connector_sources))),timezone.utc).timetuple()[:6]
+    connector_files={'varnish-cache-for-webuzo/'+name:source.read_bytes() for source,name in ((ROOT/'wordpress/varnish-cache-for-webuzo.php','varnish-cache-for-webuzo.php'),(ROOT/'LICENSE','LICENSE'),(ROOT/'wordpress/readme.txt','readme.txt'))}
+    unchanged=False
+    if connector.exists():
+        with zipfile.ZipFile(connector) as archive:
+            unchanged=len(archive.infolist())==len(connector_files) and set(archive.namelist())==set(connector_files) and all(archive.read(name)==data for name,data in connector_files.items())
+    if not unchanged:
+        with zipfile.ZipFile(connector,'w',zipfile.ZIP_DEFLATED) as archive:
+            for name,data in connector_files.items():
+                item=zipfile.ZipInfo(name,connector_stamp);item.external_attr=0o100644<<16;item.compress_type=zipfile.ZIP_DEFLATED
+                archive.writestr(item,data)
     digest=hashlib.sha256(connector.read_bytes()).hexdigest()
     with (target.parent/'SHA256SUMS').open('a') as output:output.write(digest+'  '+connector.name+'\n')
     print(connector.name,digest)
