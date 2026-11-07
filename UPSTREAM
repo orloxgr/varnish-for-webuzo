@@ -1,0 +1,4 @@
+Cache policy adapted from https://github.com/orloxgr/varnish-for-hestia
+Reference commit: ccf4a85bc9a2a42ae180cd2e174e3245ffdfff65 (GPL-3.0-or-later).
+Native metadata parser and panel IPC adapted from https://github.com/orloxgr/webuzo-de-noise and https://github.com/orloxgr/Mass-wp-update-webuzo (GPL-3.0-or-later).
+This integration is distributed under GPL-3.0-or-later.

@@ -1,0 +1,47 @@
+# Verification
+
+Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Apache/PHP-FPM, WordPress and WooCommerce.
+
+| Check | Result |
+| --- | --- |
+| Backend boundaries, repository verification and transaction recovery | 26 tests passed |
+| Native panel permissions, CSRF, forged actors and unexpected uploads | 8 checks passed |
+| Fresh package/service setup through the Webuzo panel | Passed |
+| Varnish manager and worker run without root or effective Linux capabilities | Passed |
+| HTTP/HTTPS HTML MISS → HIT and independent static delivery | Passed |
+| Cookies, Authorization, queries, writes, private responses, Set-Cookie and errors | Bypass/no stored private response verified |
+| WordPress login/REST and actual WooCommerce cart, checkout and account pages | PASS verified |
+| Site purge across aliases and HTTP/HTTPS, preserving another account's cache | Passed |
+| Another account's token or a public HTTP PURGE | Rejected |
+| Credential storage inside a document root | Rejected; private storage accepted with mode 0600 |
+| WordPress administrator POST and nonce | Passed; anonymous and invalid-nonce requests rejected |
+| Offline Unix socket impersonation by a hosting user | Rejected by directory permissions |
+| Credential disclosure through a generic HTTP transport or fake HTTP response | No token supplied; fake success rejected |
+| Static symlink into another account | 403, without application fallback |
+| Unicode/percent-encoded bypass paths | Passed for static and dynamic routing |
+| HEAD and alias handling | Passed |
+| Varnish stopped | Static delivery continues; GET/HEAD fall back to Apache; writes are not replayed |
+| New native account/domain | Discovered disabled, enabled through the panel, then MISS/HIT verified |
+| Native vhost rebuild, Nginx restart and Varnish restart | Passed |
+| Full VM reboot | Service started automatically; both accounts retained HTTP/HTTPS HITs and unprivileged processes |
+| Native Nginx/proxy/Apache factory configuration hashes | Unchanged |
+| Disable/re-enable a domain | Native routing restored; only that site's cache invalidated |
+| Remove setup and immediately reinstall | Passed; native routes restored, credentials/unit/runtime removed |
+| Webuzo version upgrade | No newer release available: installed/latest were both 4.9.1 |
+
+## Reproduce
+
+Backend checks on a disposable Linux server:
+
+```sh
+python3 -m unittest discover -s tests -v
+/usr/local/emps/bin/php tests/test_panel.php
+```
+
+The runtime harness needs two enabled disposable WordPress domains on separate accounts, with HTTP and HTTPS available. It creates temporary fixtures as the hosting users, stops/restarts the plugin's Varnish instance, invokes a native vhost rebuild and restores the selected sites' original settings. Replace the address and domain placeholders below. `--self-signed` applies only to the test client's certificate checks.
+
+```sh
+python3 tests/runtime.py --disposable --self-signed --address TEST_SERVER_IP --sites first.example.test second.example.test
+```
+
+The runtime harness covers cache behavior, HTTP/HTTPS, static assets, private requests, purge isolation, spoofed headers, outages, rebuilds and restarts. Additional native integration checks exercised actual WordPress nonce/capability handling, WooCommerce pages, protected socket permissions, new-account provisioning and removal/reinstallation.
