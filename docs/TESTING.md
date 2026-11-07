@@ -2,9 +2,15 @@
 
 Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Apache/PHP-FPM, WordPress and WooCommerce.
 
+On 8 November 2026, the backend suite and actual WooCommerce session regression
+checks were extended and rerun. The session-only caching candidate was rejected
+after a cross-visitor notice was reproduced. See [WooCommerce sessions](WOOCOMMERCE-SESSIONS.md)
+for the experiment, native Nginx comparison and policy decision.
+
 | Check | Result |
 | --- | --- |
-| Backend boundaries, repository verification, profiles, VCL and cache-budget recovery | 63 tests passed |
+| Backend boundaries, repository verification, profiles, VCL and cache-budget recovery | 67 tests passed |
+| Real WooCommerce session isolation with Storefront | 14 checks passed with the retained session bypass: anonymous HIT, cart/session PASS, private notices, lost cart markers and second-account isolation |
 | Native panel permissions, CSRF, forged actors and unexpected uploads | 8 checks passed |
 | Fresh package/service setup through the Webuzo panel | Passed |
 | Varnish manager and worker run without root or effective Linux capabilities | Passed |
@@ -70,4 +76,14 @@ Profile integration checks exercise all four policies through native Nginx → V
 
 ```sh
 python3 tests/profiles_runtime.py --disposable --address TEST_SERVER_IP --sites first.example.test second.example.test
+```
+
+Actual WooCommerce session checks require WooCommerce and Storefront active on
+the first disposable site. The runner creates and removes its own product and
+test callback, and restores the original profile:
+
+```sh
+python3 tests/woocommerce_runtime.py --disposable --address TEST_SERVER_IP \
+  --sites first.example.test second.example.test \
+  --php /path/to/site/php --wp /path/to/wp-cli
 ```

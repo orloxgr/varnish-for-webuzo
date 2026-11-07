@@ -2,10 +2,12 @@
 import re
 
 # WordPress private state, PHP sessions and common personalized Woo extensions.
-# Cart cookies are separate because UltraCache may explicitly approve an ESI parent.
+# A persistent session may hold notices/customer data without browser-session
+# cart markers. Both groups bypass shared HTML unless UltraCache approves ESI.
 PRIVATE = ('wordpress_logged_in_*', 'wordpress_sec_*', 'wp-postpass_*', 'comment_author_*',
            'PHPSESSID', 'woocommerce_recently_viewed', 'yith_wcwl_session_*', 'yith_woocompare_*')
-CART = ('woocommerce_items_in_cart', 'woocommerce_cart_hash', 'wp_woocommerce_session_*')
+CART = ('woocommerce_items_in_cart', 'woocommerce_cart_hash')
+SESSION = ('wp_woocommerce_session_*',)
 RULE = re.compile(r"[!#$%&'+.^_`|~0-9A-Za-z-]+\*?")
 
 

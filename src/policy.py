@@ -130,7 +130,8 @@ sub wvw_private_cookie_recv {
  }
 }
 sub wvw_cart_cookie_recv {
- if (req.http.Cookie ~ '''+cookie_policy.vcl_pattern(cookie_policy.CART)+''') {
+ if (req.http.Cookie ~ '''+cookie_policy.vcl_pattern(cookie_policy.CART)+''' ||
+     req.http.Cookie ~ '''+cookie_policy.vcl_pattern(cookie_policy.SESSION)+''') {
    if (req.http.X-WV-Profile == "ultracache" && req.http.X-UltraCache-ESI-Opt-In == "1") {
      set req.http.X-UltraCache-ESI-Candidate = "1";
    } else { set req.http.X-WV-Mode = "PASS"; return (pass); }

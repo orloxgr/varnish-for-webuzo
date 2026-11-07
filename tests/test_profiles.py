@@ -82,6 +82,32 @@ class NativeProfiles(unittest.TestCase):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public'),origin('/page','A'),origin('/page','B')],
                 [get('/page','public',cache='MISS'),get('/page','A',['Cookie: tracking=1','Cookie: wordpress_logged_in_a=A'],cache='PASS'),get('/page','B',['Cookie: PHPSESSID=B'],cache='PASS'),get('/page','public',cache='HIT')])
+    def test_shop_session_alone_cannot_share_unmarked_personal_html(self):
+        self.run_policy('woocommerce',
+            [origin('/product/example/','public'),origin('/product/example/','notice-A'),origin('/product/example/','visitor-B')],
+            [get('/product/example/','public',cache='MISS'),
+             get('/product/example/','notice-A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),
+             get('/product/example/','visitor-B',['Cookie: wp_woocommerce_session_demo=B'],cache='PASS'),
+             get('/product/example/','public',cache='HIT')])
+    def test_cart_markers_still_bypass_an_existing_public_object(self):
+        for marker in ('woocommerce_items_in_cart=1','woocommerce_cart_hash=nonempty'):
+            with self.subTest(marker=marker):self.run_policy('woocommerce',
+                [origin('/product/example/','public'),origin('/product/example/','cart-A'),origin('/product/example/','cart-B')],
+                [get('/product/example/','public',cache='MISS'),
+                 get('/product/example/','cart-A',['Cookie: wp_woocommerce_session_demo=A; '+marker],cache='PASS'),
+                 get('/product/example/','cart-B',['Cookie: wp_woocommerce_session_demo=B; '+marker],cache='PASS'),
+                 get('/product/example/','public',cache='HIT')])
+    def test_session_only_does_not_relax_other_profiles(self):
+        for profile in ('basic','wordpress','ultracache'):
+            with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','A'),origin('/page','B')],
+                [get('/page','A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),get('/page','B',['Cookie: wp_woocommerce_session_demo=B'],cache='PASS')])
+    def test_shop_session_does_not_override_origin_cookie_or_privacy_headers(self):
+        responses,requests=[],[]
+        for path,headers,cache in [('/private',[], 'private, no-store'),('/cookie',['Set-Cookie: wp_woocommerce_session_demo=new'],'public, max-age=120')]:
+            for visitor in ('A','B'):
+                responses.append(origin(path,visitor,headers,cache=cache))
+                requests.append(get(path,visitor,['Cookie: wp_woocommerce_session_demo='+visitor],cache='PASS'))
+        self.run_policy('woocommerce',responses,requests)
     def test_spoofed_esi_transport_headers_are_not_forwarded_by_any_profile(self):
         headers=['X-ESI-Private-Request: 1','X-ESI-Request-Level: 1','X-ESI-Original-Cookie: private_session=forged','X-UltraCache-ESI-Candidate: 1']
         expected=['expect req.http.X-ESI-Private-Request == <undef>','expect req.http.X-ESI-Request-Level == <undef>','expect req.http.X-ESI-Original-Cookie == <undef>','expect req.http.X-UltraCache-ESI-Candidate == <undef>']
