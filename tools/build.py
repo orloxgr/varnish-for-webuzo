@@ -7,8 +7,16 @@ import re
 from pathlib import Path
 import zipfile
 ROOT=Path(__file__).resolve().parents[1]
+def package_version():
+    version=json.loads((ROOT/'info.json').read_text(encoding='utf-8'))['version']
+    header=(ROOT/'varnish-for-webuzo.php').read_text(encoding='utf-8').split('*/',1)[0]
+    found=re.search(r'^[ \t]*Version:[ \t]*([^\r\n]+)',header,re.M)
+    if not isinstance(version,str) or not version or found is None or found[1].strip()!=version:
+        raise ValueError('The PHP plugin Version header must match info.json before packaging')
+    return version
+
 def build():
-    version=json.loads((ROOT/'info.json').read_text())['version']
+    version=package_version()
     paths=[ROOT/name for name in ('varnish-for-webuzo.php','info.json','LICENSE','UPSTREAM','README.md')]
     for folder in ('src','templates','profiles','panel','docs'):
         paths.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.zip'))
