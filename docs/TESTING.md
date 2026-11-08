@@ -11,7 +11,10 @@ for the experiment, native Nginx comparison and policy decision.
 
 | Check | Result |
 | --- | --- |
-| Backend boundaries, repository verification, profiles, VCL and cache-budget recovery | 67 tests passed |
+| Backend boundaries, repository verification, profiles, VCL, cache-budget recovery and hosting timeout inheritance | 77 tests passed |
+| Isolated generated proxies with 125-second GET/POST, streaming and warm cache | 4 checks passed; slow responses completed in 125.03 seconds and POST executed once |
+| Timeout refresh on the native Webuzo stack | Native factory hashes and Varnish manager PID preserved |
+| Native profiles/settings integration after timeout changes | 29 profile and 24 settings checks passed |
 | Real WooCommerce session isolation with Storefront | 18 checks passed with the retained session bypass: anonymous HIT, guest-only stock errors, cart/session PASS, lost cart markers and second-account isolation |
 | Native panel permissions, CSRF, forged actors and unexpected uploads | 8 checks passed |
 | Fresh package/service setup through the Webuzo panel | Passed |
@@ -52,6 +55,20 @@ for the experiment, native Nginx comparison and policy decision.
 | Site interface | One site entry with inline profile, VCL and connection controls; no second site list |
 
 ## Reproduce
+
+The timeout regression harness starts isolated Nginx and Varnish processes on
+loopback, with private temporary configuration and cache. It exercises the actual
+generated domain and origin proxy snippets, slow GET and POST responses delayed
+125 seconds, streaming, absence of POST replay and a subsequent cache HIT. The
+isolated engine is deliberately started with one-second response defaults so
+that passing also requires the generated VCL overrides to take effect:
+
+```sh
+python3 tests/timeouts_runtime.py --disposable
+```
+
+`--delay` changes only the test fixture's delay; it never changes hosting limits.
+The default exceeds both the former 60-second Varnish and 120-second proxy timers.
 
 Backend checks on a disposable Linux server:
 

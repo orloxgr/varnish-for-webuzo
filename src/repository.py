@@ -47,8 +47,8 @@ def setup():
         with urllib.request.urlopen(KEY_URL,timeout=30) as response:data=response.read(65537)
         if hashlib.sha256(data).hexdigest()!=KEY_SHA256:raise ValueError('The upstream signing key differs from the verified key')
         if not shutil.which('gpg'):
-            native.run('apt-get','update','-o','APT::Update::Error-Mode=any',timeout=600)
-            native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','gnupg',timeout=600)
+            native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
+            native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','gnupg')
         with tempfile.TemporaryDirectory(dir=state.ROOT) as home:
             result=subprocess.run(['/usr/bin/gpg','--homedir',home,'--batch','--no-options','--dearmor'],input=data,capture_output=True,check=True,timeout=30)
         record=dict(key=base64.b64encode(result.stdout).decode(),source=None if existing_source(codename) else source,key_source_sha256=KEY_SHA256,key_sha256=hashlib.sha256(result.stdout).hexdigest())
@@ -78,7 +78,7 @@ def ensure_package():
     before={key:native.run('systemctl','show','varnish','--property='+key,'--value').strip() for key in ('LoadState','UnitFileState')}
     if not installed and before['LoadState']!='not-found':raise ValueError('An independent Varnish unit exists without the distribution binary')
     setup()
-    native.run('apt-get','update','-o','APT::Update::Error-Mode=any',timeout=600)
+    native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
     versions=[]
     for line in native.run('apt-cache','madison','varnish').splitlines():
         parts=[part.strip() for part in line.split('|')]
@@ -90,7 +90,7 @@ def ensure_package():
     simulation=native.run('apt-get','-s','install','varnish='+version)
     removals=[line.split()[1] for line in simulation.splitlines() if line.startswith('Remv ')]
     if set(removals)-{'libvarnishapi1','libvarnishapi2','libvarnishapi3'}:raise ValueError('Varnish installation would remove another service')
-    native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','varnish='+version,timeout=600)
+    native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','varnish='+version)
     # Package scripts may start the vendor instance. Preserve its previous inactive
     # state; only a newly installed vendor unit is disabled by this setup.
     native.run('systemctl','stop','varnish')
@@ -100,4 +100,4 @@ def ensure_package():
     if previous.stdout.strip()=='installed':
         plan=native.run('apt-get','-s','remove','libvarnishapi3')
         if [line.split()[1] for line in plan.splitlines() if line.startswith('Remv ')]!=['libvarnishapi3']:raise ValueError('Removing an obsolete Varnish library would affect another package')
-        native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','remove','-y','libvarnishapi3',timeout=600);native.run('ldconfig')
+        native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','remove','-y','libvarnishapi3');native.run('ldconfig')

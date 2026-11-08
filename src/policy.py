@@ -6,6 +6,7 @@ import native
 import fragments
 import profiles
 import cookie_policy
+import timeouts
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
 
@@ -24,14 +25,24 @@ def literal_bytes(value):return ''.join('\\x'+format(b,'02x') for b in value.enc
 
 def render(sites,gateway,origin_secret,config=None):
     config=config or {}
+    allowances=timeouts.settings(config)
     if not re.fullmatch('[0-9a-f]{64}',gateway) or not re.fullmatch('[0-9a-f]{64}',origin_secret):raise ValueError('Invalid internal credential')
     text=['''vcl 4.1;
 import std;
 import purge;
-backend plain { .path = "/run/varnish-for-webuzo-origin-http.sock"; }
-backend secure { .path = "/run/varnish-for-webuzo-origin-https.sock"; }
-''',profiles.program(),'''
+''']
+    for scheme,name in (('http','plain'),('https','secure')):
+        text.append('backend '+name+' { .path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock"; '+
+            '.connect_timeout = '+timeouts.seconds(allowances['connect'])+'; '+
+            '.first_byte_timeout = '+timeouts.seconds(timeouts.first_byte(allowances))+'; '+
+            '.between_bytes_timeout = '+timeouts.seconds(allowances['read'])+'; }')
+    text += [profiles.program(),'''
 sub vcl_recv {
+ set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';
+ # Never shorten the engine's response budget; allow every upstream phase.
+ if (sess.send_timeout < '''+timeouts.seconds(timeouts.frontend(allowances)['read'])+''') {
+   set sess.send_timeout = '''+timeouts.seconds(timeouts.frontend(allowances)['read'])+''';
+ }
  unset req.http.X-WV-Site;
  unset req.http.X-WV-Profile;
  unset req.http.X-WV-Mode;

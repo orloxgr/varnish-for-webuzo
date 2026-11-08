@@ -4,6 +4,7 @@ import re
 import native
 import state
 import policy
+import timeouts
 from urllib.parse import unquote
 
 CONFIG=Path('/etc/varnish-for-webuzo')
@@ -11,7 +12,8 @@ BEGIN='# BEGIN Varnish for Webuzo\n'
 END='# END Varnish for Webuzo\n'
 TEMPLATES=Path(__file__).resolve().parents[1]/'templates'
 
-def proxy(target,gateway='',origin=False):
+def proxy(target,gateway='',origin=False,allowances=None):
+    allowances=timeouts.validate(allowances) if allowances is not None else timeouts.settings()
     return '''proxy_pass '''+target+''';
 proxy_cache off;
 proxy_http_version 1.1;
@@ -32,24 +34,25 @@ proxy_set_header X-Webuzo-Varnish-Token "";
 proxy_set_header X-UltraCache-Token "";
 proxy_ssl_server_name on;
 proxy_ssl_name $host;
-proxy_connect_timeout 2s;
-proxy_read_timeout 120s;
-proxy_send_timeout 120s;
+proxy_connect_timeout '''+timeouts.seconds(allowances['connect'])+''';
+proxy_read_timeout '''+timeouts.seconds(allowances['read'])+''';
+proxy_send_timeout '''+timeouts.seconds(allowances['send'])+''';
 proxy_next_upstream off;
 '''
 
-def domain(site,gateway):
+def domain(site,gateway,allowances=None):
+    allowances=timeouts.validate(allowances) if allowances is not None else timeouts.settings()
     hosts='^('+'|'.join(re.escape(native.hostname(n)).replace('\\.','[.]') for n in site['names'])+')$'
     exclusions=[]
     for path in policy.paths(site.get('bypass',[])):
         exclusions.append('if ($uri ~* '+policy.quoted('^'+policy.literal_bytes(unquote(path)))+') { return 419; }')
-    return (TEMPLATES/'domain.conf').read_text().replace('@@STATIC_BYPASS@@','\n'.join(exclusions)).replace('@@HOSTS@@',hosts).replace('@@VARNISH_PROXY@@',proxy('http://unix:/run/varnish-for-webuzo-cache/frontend.sock:',gateway)).replace('@@NATIVE_PROXY@@',proxy('$wv_native_origin'))
+    return (TEMPLATES/'domain.conf').read_text().replace('@@STATIC_BYPASS@@','\n'.join(exclusions)).replace('@@HOSTS@@',hosts).replace('@@VARNISH_PROXY@@',proxy('http://unix:/run/varnish-for-webuzo-cache/frontend.sock:',gateway,allowances=timeouts.frontend(allowances))).replace('@@NATIVE_PROXY@@',proxy('$wv_native_origin',allowances=allowances))
 
-def origins(secret):
+def origins(secret,allowances=None):
     text=[]
     for scheme,target in (('http','http://127.0.0.1:8081'),('https','https://127.0.0.1:8082')):
         text.append('server { listen unix:/run/varnish-for-webuzo-origin-'+scheme+'.sock; server_name _;\n'+
-            'if ($http_x_wv_origin != "'+secret+'") { return 403; }\nlocation / {\n'+proxy(target,origin=True)+'}\n}\n')
+            'if ($http_x_wv_origin != "'+secret+'") { return 403; }\nlocation / {\n'+proxy(target,origin=True,allowances=allowances)+'}\n}\n')
     return '\n'.join(text)
 
 def pointer(path,target,manifest,enabled):

@@ -18,10 +18,15 @@ PHP='/usr/local/emps/bin/php'
 CLI='/usr/local/webuzo/cli.php'
 ENV={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8'}
 
-def run(*args,timeout=120):
+def run(*args,timeout=None):
     result=subprocess.run([str(a) for a in args],capture_output=True,text=True,env=ENV,timeout=timeout)
-    if result.returncode:raise RuntimeError((result.stderr or result.stdout or 'Command failed')[-3000:])
+    if result.returncode:raise RuntimeError(result.stderr or result.stdout or 'Command failed')
     return result.stdout
+
+
+def proxy_timeouts():
+    import timeouts
+    return timeouts.discover(run(NGINX,'-T'))
 
 def hostname(value):
     if not isinstance(value,str) or len(value)>253 or not all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',p) for p in value.split('.')):

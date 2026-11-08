@@ -12,6 +12,7 @@ import credentials
 import cache_size
 import fragments
 import profiles
+import timeouts
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -30,7 +31,7 @@ def inventory(config):
 def status():
     config=settings();sites=inventory(config)
     return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),memory_mb=config.get('memory_mb',256),
-                default_profile=profiles.default(config),profiles=profiles.catalog(config),
+                default_profile=profiles.default(config),profiles=profiles.catalog(config),proxy_timeouts=timeouts.settings(config) if 'proxy_timeouts' in config else None,
                 sites=[{k:v for k,v in s.items() if k not in ('token','uid','gid','home','custom_domains','credential_roots')} for s in sites.values()])
 
 def own_file(path,value,mode=0o600):
@@ -40,13 +41,13 @@ def own_file(path,value,mode=0o600):
 def plans(previous,next_config):
     changes=[];manifest={};desired={}
     if next_config.get('installed'):
-        changes.append(own_file(routing.CONFIG/'origins.conf',routing.origins(next_config['origin'])))
+        changes.append(own_file(routing.CONFIG/'origins.conf',routing.origins(next_config['origin'],timeouts.settings(next_config))))
         changes.append(own_file(routing.CONFIG/'client-ip.conf','<IfModule remoteip_module>\nRemoteIPHeader X-Forwarded-For\nRemoteIPInternalProxy 127.0.0.1\n</IfModule>\n',0o644))
         desired[str(native.GLOBAL)]=routing.CONFIG/'origins.conf'
     for site in next_config['sites'].values():
         if not site['enabled'] or site['error']:continue
         target=routing.CONFIG/(site['id']+'.conf')
-        changes.append(own_file(target,routing.domain(site,next_config['gateway'])))
+        changes.append(own_file(target,routing.domain(site,next_config['gateway'],timeouts.settings(next_config))))
         for domain in site['custom_domains']:
             desired[str(native.CUSTOM/(domain+'.conf'))]=target
             desired[str(native.APACHE_CUSTOM/(domain+'.conf'))]=routing.CONFIG/'client-ip.conf'
@@ -83,6 +84,7 @@ def recover():
         restore(journal);JOURNAL.unlink()
 
 def apply(previous,next_config):
+    if next_config.get('installed'):next_config['proxy_timeouts']=native.proxy_timeouts()
     changes=plans(previous,next_config)
     content=policy.render(next_config['sites'],next_config['gateway'],next_config['origin'],next_config)
     journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None)
@@ -117,7 +119,8 @@ def reload_servers():
 def validate_vcl(sites,config,sid=None):
     validation=copy.deepcopy(sites)
     if sid:validation[sid]['enabled']=True
-    _,candidate=service.load(policy.render(validation,config['gateway'],config['origin'],config))
+    compile_config=dict(config,proxy_timeouts=native.proxy_timeouts())
+    _,candidate=service.load(policy.render(validation,config['gateway'],config['origin'],compile_config))
     service.admin('vcl.discard',candidate)
     path=routing.CONFIG/'generations'/(candidate+'.vcl');state.trusted(path);path.unlink()
 

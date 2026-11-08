@@ -38,6 +38,7 @@ class Boundaries(unittest.TestCase):
             patch.object(native,'APACHE_CUSTOM',self.base/'apache'),patch.object(service,'ACTIVE',self.config/'active.vcl')]
         self.patches += [patch.object(repository,'RECORD',self.root/'repository.json'),patch.object(repository,'KEY',self.config/'repo.gpg'),
             patch.object(repository,'SOURCE',self.config/'repo.list'),patch.object(repository,'PIN',self.config/'repo.pin')]
+        self.patches += [patch.object(native,'proxy_timeouts',return_value=dict(connect=300000,read=300000,send=300000))]
         for p in self.patches:p.start()
     def tearDown(self):
         for p in reversed(self.patches):p.stop()
@@ -164,6 +165,21 @@ class Boundaries(unittest.TestCase):
         with patch.object(service,'running',return_value=True),patch.object(service,'admin'),patch.object(service,'write_vcl'),patch.object(engine,'reload_servers'):
             engine.recover()
         self.assertEqual(path.read_text(),'previous');self.assertFalse(engine.JOURNAL.exists())
+    def test_timeout_refresh_keeps_existing_site_objects_and_persists_allowances(self):
+        current=site();previous=dict(installed=True,sites={current['id']:current},manifest={},gateway='e'*64,origin='f'*64)
+        desired=copy.deepcopy(previous);service.ACTIVE.write_text('old VCL')
+        with patch.object(engine,'plans',return_value=[]),patch.object(service,'load',return_value=('old','new')),patch.object(service,'admin'),patch.object(service,'prune'),patch.object(service,'write_vcl',side_effect=lambda p,c:p.write_text(c)),patch.object(engine,'reload_servers'),patch.object(service,'purge') as purge:
+            engine.apply(previous,desired)
+        purge.assert_not_called()
+        self.assertEqual(engine.settings()['proxy_timeouts'],dict(connect=300000,read=300000,send=300000))
+        self.assertIn('.first_byte_timeout = 900s;',service.ACTIVE.read_text())
+    def test_invalid_native_timeout_inspection_leaves_active_state_untouched(self):
+        previous=dict(installed=True,sites={},manifest={},gateway='e'*64,origin='f'*64)
+        state.save(engine.SETTINGS,previous);service.ACTIVE.write_text('old VCL')
+        with patch.object(native,'proxy_timeouts',side_effect=ValueError('Native configuration unavailable')),patch.object(engine,'plans') as plans:
+            with self.assertRaises(ValueError):engine.apply(previous,copy.deepcopy(previous))
+        plans.assert_not_called();self.assertEqual(service.ACTIVE.read_text(),'old VCL')
+        self.assertEqual(engine.settings(),previous);self.assertFalse(engine.JOURNAL.exists())
     def test_recovery_reloads_saved_policy_after_a_runtime_restart(self):
         journal=dict(previous={'installed':True},changes=[],active_before='old VCL',old_vcl='discarded_name')
         calls=[]

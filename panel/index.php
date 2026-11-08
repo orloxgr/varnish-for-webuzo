@@ -10,6 +10,7 @@
     <div class="wvw-toolbar"><label for="wvw-memory">Cache size (MiB)</label><input type="number" id="wvw-memory" min="1" step="1"><button type="button" id="wvw-resize">Apply cache size</button><button type="button" id="wvw-usage">Show memory usage</button></div>
     <p>The cache size is shared by all enabled sites. Changing it restarts Varnish and clears the shared cache. Total service memory also includes processing and connection overhead.</p>
     <div id="wvw-usage-result" role="status" hidden></div>
+    <p id="wvw-timeouts"></p>
   </section>
   <section class="wvw-card" id="wvw-profiles" hidden>
     <h3>VCL profiles</h3>

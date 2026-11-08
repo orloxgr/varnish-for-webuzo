@@ -3,21 +3,23 @@
 Audited on 8 November 2026 against the addon source and its Varnish 9.1.0
 instance on the disposable Webuzo VM. Values below are observed lab settings
 or explicit source constants, not a measurement of a production installation.
-No tuning values were changed for this audit.
+The request-timeout section reflects the subsequent hosting-inheritance fix,
+tested on the same VM. Other values remain the observed audit settings.
 
 ## Request processing
 
 | Setting | Value | Owner and effect |
 | --- | --- | --- |
-| Nginx upstream connection timeout | 2 seconds | Addon `src/routing.py`; applies to its Varnish, native fallback and origin-bridge proxy snippets. |
-| Nginx upstream read timeout | 120 seconds | Addon; inactivity between reads, not an overall job duration. The lab's unmodified native proxy configuration uses 300 seconds. |
-| Nginx upstream send timeout | 120 seconds | Addon; inactivity between writes. The lab's native proxy configuration uses 300 seconds. |
-| Varnish backend connect timeout | 3.5 seconds | Observed Varnish default; not explicitly configured by the addon. |
-| Varnish backend first-byte timeout | 60 seconds | Observed default. An origin that sends no response headers within this window can fail even though the Nginx read timeout is longer. |
-| Varnish backend between-bytes timeout | 60 seconds | Observed default; not an overall WordPress execution budget. |
+| Nginx upstream connection timeout | Native Webuzo allowance | Read from the loaded Nginx configuration; 300 seconds on the lab. The former addon 2-second override is removed. |
+| Origin/fallback Nginx read timeout | Native Webuzo allowance | Inactivity between reads; 300 seconds on the lab. The former addon 120-second override is removed. |
+| Nginx upstream send timeout | Native Webuzo allowance | Inactivity between writes; 300 seconds on the lab. No independent addon constant. |
+| Front Nginx read timeout | Derived from upstream phases | `2 × connect + 2 × send + read`; 1,500 seconds on the lab. Allows the intervening Varnish/origin bridge to finish its native connection, sending and response-wait phases. |
+| Varnish backend connect timeout | Native Webuzo connection allowance | 300 seconds on the lab, replacing the inherited 3.5-second default for these backends. |
+| Varnish backend first-byte timeout | `connect + send + read` | 900 seconds on the lab, replacing the inherited 60-second default and allowing the origin bridge's phases. |
+| Varnish backend between-bytes timeout | Native Webuzo read allowance | 300 seconds on the lab; not an overall WordPress execution budget. |
 | Varnish client idle timeout | 5 seconds | Observed default, for an idle connection/receiving request headers. |
-| Varnish idle send timeout | 60 seconds | Observed default. |
-| Varnish send timeout | 600 seconds | Observed default for sending a response to its client, which is the front Nginx in this topology. |
+| Varnish idle send timeout | Native Webuzo read allowance | 300 seconds on the lab, for delivery to the front Nginx. |
+| Varnish total response timeout | At least the front proxy allowance | Raises a shorter engine/session budget; never lowers a larger one. The engine default is 600 seconds; the lab policy raises it to 1,500 seconds. This remains a finite Varnish total-response deadline, not unlimited streaming. |
 | Backend idle connections | 60 seconds | Observed default; unused connection lifetime, not request processing time. |
 | Failed upstream retry | Disabled in Nginx | Addon `proxy_next_upstream off`. Its separate failure route can fall back to Apache for GET/HEAD. Writes are not replayed. |
 
@@ -25,6 +27,21 @@ No tuning values were changed for this audit.
 dashboard, AJAX and write requests therefore remain subject to the proxy and
 Varnish backend timeouts. The current site VCL editor cannot change backend
 timeouts: its writable response fields are TTL, grace, keep and `X-User-*`.
+
+Setup, Refresh sites and successful policy/settings changes inspect `nginx -T`,
+without modifying native files. The addon selects the widest explicitly loaded
+native `proxy_connect_timeout`, `proxy_read_timeout` and `proxy_send_timeout`,
+including longer domain overrides. Its own generated files are excluded, so
+old 2/120-second overrides and derived outer values do not feed back into the
+next calculation. Where no native directive exists, Nginx's documented 60-second
+default is used. Invalid/unreadable configuration aborts before a policy is changed.
+
+The saved allowances are visible in the panel. Existing installations need
+**Refresh sites** once after updating the addon; this reloads the owned VCL and
+proxy snippets without restarting Varnish or purging solely for a timeout change.
+Subsequent native timeout edits are picked up on the next apply/refresh; this
+is not a background watcher. Apache, PHP/FPM, browser and other hosting timeouts
+remain independent. This fix does not promise requests of unlimited duration.
 
 ## Cache lifetime and memory
 
@@ -93,14 +110,14 @@ code, backend changes, imports or access to internal credentials.
 | Private backend IPC input | 1 MiB | Secondary transport guard; normal panel requests hit the smaller PHP limit first. |
 | Private credential payload | 64 KiB | Account provisioning and WordPress connector credential parsing. |
 | Large worker response threshold | 32,000 bytes | Switches to a private response file; does not truncate the result. |
-| Ordinary subprocess timeout | 120 seconds | Addon administrative commands, not public page execution. |
-| APT operations | 600 seconds per command | Addon installation/update commands. A long operation can exceed this limit. |
+| Ordinary subprocess timeout | No addon wall-clock deadline | Waits for the command to finish; native service/tool deadlines can still apply. The former 120-second timeout is removed. |
+| APT operations | No addon wall-clock deadline | The former 600-second kill timer is removed. APT's own connection/retry behavior remains effective. |
 | Signing-key download/GPG | 30 seconds | Dependency setup. |
 | Account credential helper | 15 seconds | Provisioning/removal subprocess. |
 | Varnish readiness wait | 15 seconds | Addon polls the child after start/restart. |
 | Varnish admin CLI | 10 seconds | Addon `varnishadm` operation timeout. |
 | WordPress purge request | 10 seconds | WordPress connector HTTP timeout on the protected local socket. |
-| Error output shown by `native.run` | Last 3,000 characters | Diagnostic truncation; successful command output is not truncated by that helper. |
+| Error output shown by `native.run` | Complete selected diagnostic stream | The former last-3,000-character truncation is removed. |
 
 Automatic dependency setup currently supports Ubuntu 24.04 and pins Varnish to
 the 9.1 patch branch. The downloaded signing key must match the pinned verified
@@ -114,9 +131,9 @@ panel sessions still have their own authentication lifetimes.
 
 ## Follow-up priorities
 
-1. Make backend and proxy timeout policy explicit and configurable, with a
-   separate policy for slow administrative/write requests. Current 60-second
-   first-byte and 120-second proxy settings can be stricter than native hosting.
+1. Retain visibility of inherited hosting allowances and their derived proxy
+   budgets. The engine's finite total response deadline and native PHP/Apache
+   settings still matter for exceptionally long operations or streams.
 2. Expose fallback TTL separately from maximum TTL, and make grace behavior
    clear. A larger maximum alone does not extend headerless page caching.
 3. Provide a capacity view covering cache storage, transient/processing memory,

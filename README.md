@@ -72,6 +72,15 @@ if (bereq.url ~ "^/news/") { set beresp.ttl = 60s; }
 
 ## Webuzo integration
 
+Request timeouts follow the loaded Webuzo/Nginx proxy configuration, including
+longer domain overrides. The addon derives additional time for its intermediate
+proxy layers instead of imposing its former 2/120-second proxy settings and
+60-second backend response wait. After updating an existing installation, click
+**Refresh sites** to apply the timeout policy. This does not restart Varnish or
+clear cached pages solely for a timeout change. The panel shows the saved hosting
+allowances. See [runtime settings](docs/LIMITS.md) for the exact derived values and
+remaining native deadlines.
+
 The plugin adds delimited pointers to Webuzo's documented custom domain/global include files. Its own snippets live under `/etc/varnish-for-webuzo`; private state lives under `/var/lib/varnish-for-webuzo`. Generated vhosts, factory templates and Webuzo source files are not edited. Existing unrelated custom configuration is preserved.
 
 Disabling a domain restores its native routing. **Remove Varnish setup**, or deactivating the plugin, removes its include pointers, site credentials and service unit, stops its Varnish instance, and clears that instance's dedicated cache runtime through systemd. Sites return to native Webuzo handling. Distribution packages and saved administrator preferences remain available for a later setup. Rebuilds and restarts use the same native extension points.

@@ -41,6 +41,10 @@
     byId('server').hidden = !snapshot.installed;
     byId('profiles').hidden = !snapshot.installed;
     byId('memory').value = snapshot.memory_mb;
+    const allowances = snapshot.proxy_timeouts;
+    byId('timeouts').textContent = allowances
+      ? 'Webuzo proxy allowances: connection ' + allowances.connect / 1000 + 's, read inactivity ' + allowances.read / 1000 + 's, send inactivity ' + allowances.send / 1000 + 's. Refresh sites reapplies changes from the hosting configuration.'
+      : 'Refresh sites to apply the hosting configuration\'s request timeouts.';
     byId('usage-result').hidden = true;
     options(byId('default-profile'), snapshot.default_profile);
     options(byId('edit-profile'), editingProfile); profileEditor();
