@@ -1,18 +1,20 @@
 """Actual WooCommerce session isolation on two disposable Webuzo accounts.
 
 Requires WooCommerce and Storefront already active on the first site. Creates
-two guest sessions, one temporary product and an authenticated test-only AJAX
-callback. All temporary fixtures and the original site profile are restored.
+two temporary catalog products. Guest state and errors are produced exclusively
+through WooCommerce's existing public endpoints. No test callback is installed.
 """
 import argparse
 import copy
 import hashlib
+import html
 import http.client
 import http.cookiejar
 import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import sys
@@ -39,11 +41,7 @@ if len({s['uid'] for s in sites}) != 2 or any(not s['enabled'] or s['error'] for
 site, other = sites
 original = copy.deepcopy(site)
 identity = secrets.token_hex(12)
-key = secrets.token_hex(32)
-marker = 'WVW-PRIVATE-NOTICE-' + identity
-hook = 'wvw_session_test_' + identity
-fixtures = []
-product = None
+products = []
 checks = []
 
 
@@ -55,15 +53,6 @@ def wp(code):
     if result.returncode:
         raise RuntimeError('Site-owner WP-CLI failed: ' + result.stderr)
     return json.loads(result.stdout)
-
-
-def write_fixture(owner, path, text):
-    subprocess.run(['python3', '-c',
-        'from pathlib import Path;import sys;'
-        'p=Path(sys.argv[1]);p.parent.mkdir(exist_ok=True);'
-        'f=p.open("x");f.write(sys.argv[2]);f.close()', str(path), text],
-        user=owner['uid'], group=owner['gid'], extra_groups=[], check=True)
-    fixtures.append((owner, path))
 
 
 def call(action, **values):
@@ -102,11 +91,19 @@ def request(owner, jar, path, data=None, headers=None):
     return h, raw.decode('utf-8', 'replace')
 
 
-def session(jar, mode='inspect'):
-    h, body = request(site, jar, '/?wc-ajax=' + hook,
-                      {'mode': mode}, {'X-WVW-Test-Key': key})
-    check(h.get('x-webuzo-varnish') == 'PASS', 'Session fixture bypasses shared cache')
+def ajax(jar, action, **values):
+    h, body = request(site, jar, '/?wc-ajax=' + action, values)
+    check(h.get('x-webuzo-varnish') == 'PASS', 'Public Woo AJAX writes bypass shared cache')
     return json.loads(body)
+
+
+def fragments(value):
+    return ''.join(value.get('fragments', {}).values())
+
+
+def errors(body):
+    return [re.sub(r'\s+', ' ', html.unescape(re.sub('<[^>]*>', ' ', value))).strip()
+            for value in re.findall(r'<ul[^>]*class="woocommerce-error"[^>]*>(.*?)</ul>', body, re.S)]
 
 
 fixed = [Path('/usr/local/apps/nginx/etc/nginx.conf'),
@@ -117,62 +114,61 @@ try:
     metadata = wp("echo wp_json_encode(array('woo'=>defined('WC_VERSION')?WC_VERSION:null,'theme'=>get_stylesheet()));")
     if not metadata['woo'] or metadata['theme'] != 'storefront':
         raise ValueError('Activate WooCommerce and Storefront on the disposable first site')
-    product = wp("$p=new WC_Product_Simple();$p->set_name('Cache session test " + identity + "');"
-                 "$p->set_status('publish');$p->set_regular_price('100');$p->set_virtual(true);$p->save();"
-                 "echo wp_json_encode(array('id'=>$p->get_id(),'url'=>get_permalink($p->get_id())));")
-    callback = """<?php
-add_action('wc_ajax_HOOK', function () {
-    if (!hash_equals('KEY', $_SERVER['HTTP_X_WVW_TEST_KEY'] ?? '')) { status_header(403); exit; }
-    if (!WC()->session || !WC()->cart) { wc_load_cart(); }
-    WC()->session->set('wvw_test_session', true);
-    if (($_POST['mode'] ?? '') === 'notice') { wc_add_notice('MARKER', 'notice'); }
-    WC()->session->set_customer_session_cookie(true);
-    nocache_headers();
-    wp_send_json(array('count'=>WC()->cart->get_cart_contents_count(),'notices'=>wc_notice_count()));
-});
-""".replace('HOOK', hook).replace("'KEY'", "'" + key + "'").replace('MARKER', marker)
-    write_fixture(site, Path(site['path']) / 'wp-content/mu-plugins' / ('wvw-session-' + identity + '.php'), callback)
-    control_path = '/wvw-session-control-' + identity + '.php'
-    write_fixture(other, Path(other['path']) / control_path[1:],
-                  "<?php header('Content-Type: text/html'); header('Cache-Control: public, max-age=300'); echo 'control';")
+    for kind in ('stock', 'target'):
+        code = "$p=new WC_Product_Simple();$p->set_name('Cache session test " + identity + ' ' + kind + "');"
+        code += "$p->set_status('publish');$p->set_regular_price('100');$p->set_virtual(true);"
+        if kind == 'stock':
+            code += "$p->set_manage_stock(true);$p->set_stock_quantity(1);$p->set_backorders('no');"
+        code += "$p->save();echo wp_json_encode(array('id'=>$p->get_id(),'name'=>$p->get_name(),'url'=>get_permalink($p->get_id())));"
+        products.append(wp(code))
+    stock, target = products
     call('configure', id=site['id'], profile='woocommerce', enabled=True,
          ttl=site['ttl'], bypass=site['bypass'])
     call('purge', id=site['id'])
     empty = http.cookiejar.CookieJar()
-    request(other, empty, control_path)
-    h, control = request(other, empty, control_path)
+    request(other, empty, '/')
+    h, control = request(other, empty, '/')
     check(h.get('x-webuzo-varnish') == 'HIT', 'Control account has a warm public object')
     anonymous = http.cookiejar.CookieJar()
-    h, public = request(site, anonymous, product['url'])
-    h, public = request(site, anonymous, product['url'])
+    h, public = request(site, anonymous, target['url'])
+    h, public = request(site, anonymous, target['url'])
     check(h.get('x-webuzo-varnish') == 'HIT', 'Anonymous product gets HIT without another WordPress integration')
     alice, bob = http.cookiejar.CookieJar(), http.cookiejar.CookieJar()
-    session(alice); session(bob)
-    h, _ = request(site, alice, product['url'])
-    check(h.get('x-webuzo-varnish') == 'PASS', 'Persistent Woo session bypasses a warm public object')
-    h, _ = request(site, alice, product['url'], {'add-to-cart': product['id'], 'quantity': 1})
-    check(h.get('x-webuzo-varnish') == 'PASS', 'Actual add-to-cart POST bypasses cache')
-    check(session(alice)['count'] == 1 and session(bob)['count'] == 0, 'Actual Woo carts are independent')
+    added = ajax(alice, 'add_to_cart', product_id=stock['id'], quantity=1)
+    check(not added.get('error') and stock['name'] in fragments(added), 'Guest adds a real product through public AJAX')
+    key_match = re.search(r'[?&]remove_item=([0-9a-f]+)', html.unescape(fragments(added)))
+    if not key_match:
+        raise AssertionError('Ordinary mini-cart response did not supply its removal key')
+    item_key = key_match[1]
+    check(any(c.name == 'woocommerce_items_in_cart' for c in alice), 'WooCommerce creates real cart marker cookies')
+    h, _ = request(site, alice, target['url'])
+    check(h.get('x-webuzo-varnish') == 'PASS', 'Cart bypasses an existing warm public product')
+    check(stock['name'] not in fragments(ajax(bob, 'get_refreshed_fragments')), 'Second guest has an independent empty cart')
+    failed = ajax(alice, 'add_to_cart', product_id=stock['id'], quantity=1)
+    check(failed.get('error') is True, 'Public AJAX rejects adding more than the available stock')
+    removed = ajax(alice, 'remove_from_cart', cart_item_key=item_key)
+    check(stock['name'] not in fragments(removed), 'Public AJAX removes the last cart item')
+    check(not any(c.name in ('woocommerce_items_in_cart', 'woocommerce_cart_hash') for c in alice),
+          'Ordinary removal clears cart marker cookies')
+    check(any(c.name.startswith('wp_woocommerce_session_') for c in alice), 'Persistent session survives ordinary cart removal')
+    call('purge', id=site['id'])
+    h, personal = request(site, alice, target['url'])
+    personal_errors = errors(personal)
+    check(h.get('x-webuzo-varnish') == 'PASS' and bool(personal_errors), 'Real stock error is rendered in an uncached origin response')
+    h, second = request(site, bob, target['url'])
+    h, second = request(site, bob, target['url'])
+    check(h.get('x-webuzo-varnish') == 'HIT' and not errors(second), 'Other guest gets public HIT without the first guest stock error')
+    ajax(alice, 'add_to_cart', product_id=stock['id'], quantity=1)
     for cookie in list(alice):
         if cookie.name in ('woocommerce_items_in_cart', 'woocommerce_cart_hash'):
             alice.clear(cookie.domain, cookie.path, cookie.name)
-    h, _ = request(site, alice, product['url'])
-    check(h.get('x-webuzo-varnish') == 'PASS' and session(alice)['count'] == 1,
+    h, _ = request(site, alice, target['url'])
+    check(h.get('x-webuzo-varnish') == 'PASS' and stock['name'] in fragments(ajax(alice, 'get_refreshed_fragments')),
           'Persistent cart survives lost cart markers without getting cached empty HTML')
     check(any(c.name == 'woocommerce_items_in_cart' for c in alice), 'Origin restores missing cart markers')
-    notice = http.cookiejar.CookieJar()
-    session(notice, 'notice')
-    check(not any(c.name in ('woocommerce_items_in_cart', 'woocommerce_cart_hash') for c in notice),
-          'Real Woo notice exists without cart marker cookies')
-    call('purge', id=site['id'])
-    h, personal = request(site, notice, product['url'])
-    check(h.get('x-webuzo-varnish') == 'PASS' and marker in personal, 'Notice is rendered only in an uncached origin response')
-    h, second = request(site, bob, product['url'])
-    check(h.get('x-webuzo-varnish') == 'PASS' and marker not in second, 'Another guest cannot receive the first guest notice')
-    h, final_public = request(site, anonymous, product['url'])
-    h, final_public = request(site, anonymous, product['url'])
-    check(h.get('x-webuzo-varnish') == 'HIT' and marker not in final_public, 'Personal notice did not enter anonymous shared cache')
-    h, body = request(other, empty, control_path)
+    h, final_public = request(site, anonymous, target['url'])
+    check(h.get('x-webuzo-varnish') == 'HIT' and not errors(final_public), 'Stock error did not enter anonymous shared cache')
+    h, body = request(other, empty, '/')
     check(h.get('x-webuzo-varnish') == 'HIT' and body == control, 'Other account cache remains unchanged')
     check(hashes == {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in fixed}, 'Native factory configuration files unchanged')
 finally:
@@ -180,10 +176,7 @@ finally:
         call('configure', id=original['id'], profile=original['profile'], enabled=original['enabled'],
              ttl=original['ttl'], bypass=original['bypass'])
     finally:
-        for owner, path in reversed(fixtures):
-            subprocess.run(['python3', '-c', 'from pathlib import Path;import sys;Path(sys.argv[1]).unlink(missing_ok=True)', str(path)],
-                           user=owner['uid'], group=owner['gid'], extra_groups=[], check=True)
-        if product:
+        for product in products:
             wp('wp_delete_post(' + str(int(product['id'])) + ',true);echo "{}";')
         call('purge', id=site['id'])
         call('purge', id=other['id'])

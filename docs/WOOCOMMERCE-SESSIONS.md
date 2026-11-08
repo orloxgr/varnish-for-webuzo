@@ -32,6 +32,38 @@ site and native Webuzo/Nginx caching enabled: guest A received MISS, guest B
 received HIT containing A's unique notice. This describes the tested lab
 configuration; it is not a finding about every Webuzo installation.
 
+## Reproduction through ordinary guest endpoints
+
+A subsequent test reproduced a cross-visitor error using only WooCommerce's
+existing public HTTP endpoints. No MU-plugin, custom callback, direct session
+write or direct `wc_add_notice()` call was used. Setup created two ordinary
+catalog products: a stock-managed product with one unit and a separate target
+product with a new, cold URL.
+
+The unauthenticated guest A sent this sequence with its own cookie jar:
+
+1. `POST /?wc-ajax=add_to_cart`, with `product_id=STOCK_ID` and `quantity=1`.
+2. Repeat the same request. WooCommerce rejected the addition because the only
+   available unit was already in A's cart. The JSON response reported an error
+   and a product URL; the stock notice remained pending in A's session.
+3. `POST /?wc-ajax=remove_from_cart`, using the item key supplied by A's normal
+   mini-cart response. WooCommerce removed the last product and deleted the two
+   cart marker cookies. The persistent session and pending notice survived.
+4. `GET TARGET_PRODUCT_URL` as A, before another request consumed the notice.
+5. `GET TARGET_PRODUCT_URL` as a completely new guest B, with no cookies.
+
+With native Webuzo/Nginx caching on the lab site, step 4 returned MISS and step
+5 returned HIT with identical HTML. Both contained the stock error saying that
+the shopper already had one unit in their cart, although B had never added any
+product. Neither product response set cookies or declared private cache control.
+
+The requests were sequenced by an HTTP client. A browser's front-end error
+handler may immediately follow the returned product URL and consume the notice
+before step 3, so the result is not a claim that the same sequence of ordinary
+mouse clicks works on every theme. It demonstrates a visitor-controlled request
+sequence without installing or changing application code. This sequence has
+not been run against a production customer site.
+
 ## Policy decision
 
 The candidate relaxation was withdrawn. Cart marker cookies and the persistent
@@ -56,13 +88,12 @@ mini-cart fragments, before it can replace the session bypass.
 `tests/test_profiles.py` exercises the actual VCL with distinct guest cookies,
 cart markers, a warm anonymous object and unmarked personal origin HTML.
 
-`tests/woocommerce_runtime.py` uses real WooCommerce sessions, a temporary
-product, Storefront notice rendering, an actual add-to-cart POST, lost cart
-marker cookies and an independent second hosting account. Its temporary
-callback only initializes or inspects the synthetic guest sessions and creates
-the notice through WooCommerce. It does not replace the product template or
-its output. The runner removes its product and callback and restores the
-original site profile.
+`tests/woocommerce_runtime.py` uses the guest-only stock-error sequence above,
+two temporary products, Storefront notice rendering, lost cart marker cookies
+and an independent second hosting account. It installs no callback and writes
+no PHP fixture into either site. The runner removes its catalog products and
+restores the original site profile. With the retained session bypass, A's real
+error stays in an uncached response and B receives clean public HTML.
 
 On a disposable server with WooCommerce and Storefront already active on the
 first site, and two enabled addon sites on different accounts:
@@ -74,6 +105,4 @@ python3 tests/woocommerce_runtime.py --disposable \
   --php /path/to/site/php --wp /path/to/wp-cli
 ```
 
-The fixture creates an exclusively named temporary file in the first site's
-real `wp-content/mu-plugins` directory. Existing plugins are left in place.
 No factory Webuzo, Nginx, Apache or PHP/FPM settings are modified by the runner.
