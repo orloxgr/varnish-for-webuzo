@@ -23,7 +23,7 @@ sub wvw_http_control {
             return (synth(200, "Cache control capabilities"));
         }
         if (req.http.X-UltraCache-Operation == "exact-purge") {
-            return (purge);
+            call wvw_exact_http_purge;
         }
         if (req.http.X-UltraCache-Operation == "soft-purge") {
             set req.http.X-WV-Soft-Purge = "1";
@@ -60,7 +60,7 @@ sub wvw_http_control {
         }
     }
     if (!req.http.X-WV-Control && req.method == "PURGE") {
-        return (purge);
+        call wvw_exact_http_purge;
     }
 
     # Portable UltraCache expressions contain literal, unquoted HTTP operands.
@@ -107,6 +107,18 @@ sub wvw_http_control {
         }
     }
     return (synth(200, "Ban added"));
+}
+
+# Exact URL invalidation covers all HTTP/HTTPS and Vary representations of this
+# site's URL, regardless of the selected caching profile. Reject operand
+# delimiters and control characters before constructing the scoped ban.
+sub wvw_exact_http_purge {
+    if (req.url ~ {"[[:space:]"\\]"}) { return (synth(400, "Invalid purge URL")); }
+    if (!std.ban("obj.http.X-WV-Site == " + req.http.X-WV-Site +
+        " && obj.http.X-Cache-Object-URL == " + req.url)) {
+        return (synth(400, "Invalid purge URL"));
+    }
+    return (synth(200, "URL cache purged"));
 }
 
 sub vcl_synth {

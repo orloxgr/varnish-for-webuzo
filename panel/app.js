@@ -41,6 +41,7 @@
     byId('server').hidden = !snapshot.installed;
     byId('profiles').hidden = !snapshot.installed;
     byId('memory').value = snapshot.memory_mb;
+    byId('control-port').value = snapshot.control_port || 82;
     const allowances = snapshot.proxy_timeouts;
     byId('timeouts').textContent = allowances
       ? 'Webuzo proxy allowances: connection ' + allowances.connect / 1000 + 's, read inactivity ' + allowances.read / 1000 + 's, send inactivity ' + allowances.send / 1000 + 's. Refresh sites reapplies changes from the hosting configuration.'
@@ -74,18 +75,23 @@
       const section = node('div'); section.className = 'wvw-site-details'; detailCell.append(section); detailRow.append(detailCell); body.append(detailRow);
       const edit = node('button', 'VCL & connection'); edit.type = 'button'; edit.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       edit.setAttribute('aria-expanded', 'false'); actions.append(edit);
-      const connection = node('button', 'Show connection information & purge key'); connection.type = 'button';
+      const connection = node('button', 'Show connection information'); connection.type = 'button';
       const connectionBox = node('div'); connectionBox.hidden = true;
       connection.addEventListener('click', async () => {
-        if (!connectionBox.hidden) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information & purge key'; return; }
+        if (!connectionBox.hidden) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information'; return; }
         const data = await call('connection', {id: site.id});
         if (!data) return;
         const info = data.connection;
-        const table = node('dl');
-        for (const [label, value] of [['Site URL', info.url], ['Aliases', info.names.join(', ')], ['Transport', 'Local Unix socket'], ['Socket', info.socket], ['HTTP method', info.method], ['Authentication header', info.header]]) {
-          table.append(node('dt', label), node('dd', value));
+        const heading = node('h4', 'HTTP cache connection'), fields = node('div');
+        for (const [label, value] of [['Connection type', info.mode], ['HTTP endpoint', info.endpoint], ['Host', info.host], ['Port', info.port || 'Not configured'], ['Site / Host header', info.domain], ['Authentication header', info.header]]) {
+          const field = node('input'), caption = node('label', label); field.type = 'text'; field.readOnly = true; field.value = value; field.className = 'wvw-key'; field.setAttribute('aria-label', label + ' for ' + site.domain);
+          fields.append(caption, field);
+          if (label === 'HTTP endpoint' && value) {
+            const copyEndpoint = node('button', 'Copy endpoint'); copyEndpoint.type = 'button';
+            copyEndpoint.addEventListener('click', async () => { try { await navigator.clipboard.writeText(field.value); copyEndpoint.textContent = 'Copied'; } catch (_) { field.select(); } }); fields.append(copyEndpoint);
+          }
         }
-        const keyLabel = node('label', 'Site purge key'), key = node('input'); key.id = 'wvw-key-' + site.id; keyLabel.htmlFor = key.id; key.type = 'password'; key.readOnly = true; key.value = info.key; key.autocomplete = 'off'; key.setAttribute('aria-label', 'Site purge key for ' + site.domain); key.className = 'wvw-key';
+        const keyLabel = node('label', 'Site purge token'), key = node('input'); key.id = 'wvw-key-' + site.id; keyLabel.htmlFor = key.id; key.type = 'password'; key.readOnly = true; key.value = info.key; key.autocomplete = 'off'; key.setAttribute('aria-label', 'Site purge token for ' + site.domain); key.className = 'wvw-key';
         const show = node('button', 'Reveal key'); show.type = 'button';
         show.addEventListener('click', () => { key.type = key.type === 'password' ? 'text' : 'password'; show.textContent = key.type === 'password' ? 'Reveal key' : 'Hide key'; });
         const copy = node('button', 'Copy key'); copy.type = 'button';
@@ -94,12 +100,13 @@
           catch (_) { key.type = 'text'; show.textContent = 'Hide key'; key.select(); }
         });
         const keyActions = node('div'); keyActions.className = 'wvw-actions'; keyActions.append(show, copy);
-        connectionBox.replaceChildren(table, keyLabel, key, keyActions, node('p', 'This key clears only this site and its aliases. It does not provide panel access. The WordPress connector reads it automatically; install the connector ZIP in WordPress to use its Clear cache button. Remote TCP purges are not enabled.'));
-        connectionBox.hidden = false; connection.textContent = 'Hide connection information & purge key';
+        const notice = !info.ready ? 'Start Varnish if it is stopped, then set up the local HTTP connection using Save connection port above, or click Refresh sites.' : !info.enabled ? 'Enable Varnish for this site and click Save & Apply before using its connection.' : 'Use these server connection values in your application. Requests must send the Site / Host header and the site purge token in the Authentication header shown below.';
+        connectionBox.replaceChildren(heading, node('p', notice), fields, keyLabel, key, keyActions, node('p', 'Available operations: exact URL PURGE, scoped URL/group/HTML/site BAN and soft purge. Prewarm uses normal GET requests to the public site URLs.'), node('p', 'The endpoint is local to this server. This token authorizes cache invalidation only for this site and its aliases. It does not grant Varnish administration access.'));
+        connectionBox.hidden = false; connection.textContent = 'Hide connection information';
       });
       edit.addEventListener('click', () => {
         detailRow.hidden = !detailRow.hidden; edit.setAttribute('aria-expanded', String(!detailRow.hidden));
-        if (detailRow.hidden) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information & purge key'; }
+        if (detailRow.hidden) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information'; }
       });
       const description = node('p'), builtIn = node('details'), source = node('pre'); builtIn.append(node('summary', 'View selected profile VCL'), source);
       function selectedProfile() { const selected = snapshot.profiles.find(p => p.name === profile.value); description.textContent = selected.description; source.textContent = selected.source; }
@@ -119,6 +126,7 @@
     if (window.confirm('Disable Varnish for all sites and remove its service setup? Sites will return to their normal Webuzo routing.')) call('remove');
   });
   byId('refresh').addEventListener('click', () => call(snapshot && snapshot.installed ? 'reconcile' : 'status'));
+  byId('save-connection').addEventListener('click', () => call('connection_setup', {port: Number(byId('control-port').value)}));
   byId('edit-profile').addEventListener('change', () => { editingProfile = byId('edit-profile').value; profileEditor(); });
   byId('save-default').addEventListener('click', () => call('defaults', {profile: byId('default-profile').value}));
   byId('save-profile').addEventListener('click', () => call('profile_rules', {profile: editingProfile, recv_vcl: byId('profile-recv').value, backend_vcl: byId('profile-backend').value}));

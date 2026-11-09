@@ -13,7 +13,7 @@ For WordPress administrators, install the separate WordPress connector ZIP and u
 
 WordPress must run as its hosting account and be able to read that account's private home directory. Credential provisioning refuses a directory located inside any of the account's document roots.
 
-Automatic setup supports Ubuntu 24.04. The supported topology is Webuzo Nginx reverse proxy with Apache on local ports 8081/8082. Nginx, Varnish and the WordPress connector communicate over Unix sockets in protected directories. Hosting accounts cannot replace those sockets even while the service is stopped. The authenticated Varnish administration interface uses local port 6086; setup refuses an occupied port. Nginx remains responsible for certificates; the HTTPS bridge connects to Apache's native HTTPS virtual host.
+Automatic setup supports Ubuntu 24.04. The supported topology is Webuzo Nginx reverse proxy with Apache on local ports 8081/8082. Website traffic and the separate WordPress connector use Unix sockets in protected directories. Applications can also connect through a loopback-only Nginx HTTP listener, which forwards authenticated purge requests to the same Varnish socket. Hosting accounts cannot replace the sockets or bind the privileged HTTP connection port under the required system policy. The authenticated Varnish administration interface uses local port 6086; setup refuses an occupied port. Nginx remains responsible for certificates; the HTTPS bridge connects to Apache's native HTTPS virtual host.
 
 The installer verifies the upstream signing key, scopes it to the official repository with APT Signed-By, and selects the 9.1 LTS package branch. Existing APT sources are preserved. The package and signed update repository remain installed after removing the setup so normal OS package updates can maintain the dependency.
 
@@ -42,7 +42,7 @@ Each site has one profile selected in its own row:
 
 **Central profile VCL templates** shows the four built-in VCL files and lets the administrator add request/response rules to each profile. Central Basic rules apply to every site using Basic, including new sites. Applying central rules validates them with Varnish and invalidates enabled sites using that profile; other profiles keep their cache and site-specific additions.
 
-No profile installs or detects WordPress plugins. Basic, WordPress and WooCommerce use HTTP behavior without a companion application plugin. UltraCache also works as a public-page policy without a plugin; ESI composition needs the origin's ESI handshake. Its advanced invalidation contract is **ultracache-webuzo-v2**, available only through the protected local Unix socket and the site's token. The existing WordPress connector continues to clear the whole selected site's cache with every profile.
+No profile installs WordPress plugins. Basic, WordPress and WooCommerce use HTTP behavior without a companion application plugin. UltraCache also works as a public-page policy without a plugin; ESI composition needs the origin's ESI handshake. Its advanced invalidation contract is **ultracache-webuzo-v2**, available through the local HTTP connection or protected Unix socket using that site's token. The existing WordPress connector continues to clear the whole selected site's cache with every profile.
 
 Add URL prefixes under **Additional bypass paths** for customized checkout/account pages, protected downloads and private application directories. These exclusions also send matching static files through the application. Public static extensions are CSS, JavaScript, common images, fonts, audio and video. Dotfile paths and standard WooCommerce protected upload directories are excluded from direct static serving. Apache-only access rules for other protected asset directories should be represented in the bypass list.
 
@@ -68,7 +68,13 @@ Response example:
 if (bereq.url ~ "^/news/") { set beresp.ttl = 60s; }
 ```
 
-**Show connection information & purge key** displays the site's URL, aliases, local Unix socket, PURGE method and authentication header. The key is masked initially, with reveal/copy controls, and is excluded from the normal status response. It authorizes cache clearing only for that site and its aliases. Remote TCP purges are not enabled. The WordPress connector reads its provisioned credential automatically; no manual copying of the key is required.
+**Show connection information** displays the server's **HTTP endpoint**, **host**, **port**, **site Host header**, **authentication header** and **site purge token**. An application sends the site's host in `Host` and its token in `X-Webuzo-Varnish-Token`. These server connection values are independent of the WordPress plugin and selected cache profile. The application must support the documented authentication and invalidation protocol; merely supporting some Varnish integration does not establish compatibility. No Varnish administration secret is needed.
+
+The endpoint defaults to `http://127.0.0.1:82`. New setup and **Refresh sites** provision it; **Server cache → Local HTTP connection port → Save connection port** allows changing it if another service uses that port. Only loopback is bound. Purge/BAN operations require the selected site's token; a read-only HEAD response identifies the Varnish listener without invalidating objects. The port must be privileged under the existing operating-system bind policy so another hosting user cannot impersonate it while Nginx is stopped. The addon does not change that policy. Port conflicts or a failed listener startup leave the previous configuration in place.
+
+HTTP `PURGE /path?query` invalidates that exact URL across the site's HTTP/HTTPS and Vary representations. `BAN` accepts the scoped host/URL or host/HTML expressions described by the control VCL; arbitrary administration commands are not exposed. `X-Purge: soft` requests soft invalidation of the selected cache key; `X-Forwarded-Proto` selects its public HTTP/HTTPS scheme where the profile hashes by scheme. The existing versioned application contract remains available as an additional protocol. Applications prewarm by making normal GET requests to the public site URLs, subject to the site's normal caching rules.
+
+The key is masked initially, with reveal/copy controls, and is excluded from the normal status response. It authorizes cache clearing only for that site and its aliases. The separate WordPress connector continues to read its provisioned Unix-socket credential automatically.
 
 ## Webuzo integration
 

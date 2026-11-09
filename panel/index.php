@@ -11,6 +11,8 @@
     <p>The cache size is shared by all enabled sites. Changing it restarts Varnish and clears the shared cache. Total service memory also includes processing and connection overhead.</p>
     <div id="wvw-usage-result" role="status" hidden></div>
     <p id="wvw-timeouts"></p>
+    <div class="wvw-toolbar"><label for="wvw-control-port">Local HTTP connection port</label><input type="number" id="wvw-control-port" min="1" max="1023" step="1" value="82"><button type="button" id="wvw-save-connection">Save connection port</button></div>
+    <p>Application purge requests use this loopback-only port and a separate token for each site. Show connection information in the site's row for the endpoint and authentication values.</p>
   </section>
   <section class="wvw-card" id="wvw-profiles" hidden>
     <h3>VCL profiles</h3>

@@ -54,6 +54,17 @@ for the experiment, native Nginx comparison and policy decision.
 | UltraCache local invalidation | Authenticated Unix contract, HTTP/HTTPS exact purge, malformed-expression rejection and cross-account denial verified |
 | Site interface | One site entry with inline profile, VCL and connection controls; no second site list |
 
+On 9 November 2026, the 0.3.2 local HTTP connection changes passed all 89 backend
+tests and eight native panel rejection checks. Native Varnish tests cover exact
+URL invalidation across all four profiles and HTTP/HTTPS, read-only discovery,
+wrong-site token rejection, occupied ports and listener-startup rollback.
+
+An application running as a hosting account also exercised the installed HTTP
+endpoint: targeted PURGE returned 200, the changed page became a MISS with its
+new content, the next public GET was a HIT, and an unrelated URL remained a HIT.
+Using that site's token against another account was rejected. The native panel
+connection fields, masked token and copy/reveal controls were checked in a browser.
+
 ## Reproduce
 
 The timeout regression harness starts isolated Nginx and Varnish processes on

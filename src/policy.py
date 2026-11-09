@@ -79,10 +79,11 @@ sub vcl_recv {
         text.append(' if ('+cond+') {\n set req.http.X-WV-Site = '+quoted(site['id'])+';\n'+
             ' set req.http.X-WV-Profile = '+quoted(profile)+';\n'+
             (' set req.http.X-WV-Disabled = "1";\n' if not site.get('enabled') else '')+
+            ' if (req.method == "HEAD" && req.http.X-WV-Control-Discovery == "1" && local.socket == "public") { return (synth(405, "HTTP cache control endpoint")); }\n'+
             ' if (req.method == "PURGE" || req.method == "BAN") {\n'+
             ' if (req.http.X-WV-Disabled || req.esi_level > 0 || local.socket != "public" || (req.http.X-Webuzo-Varnish-Token != '+quoted(site['token'])+' &&\n'+
-            ' !(req.http.X-WV-Profile == "ultracache" && req.http.X-UltraCache-Token == '+quoted(site['token'])+'))) { return (synth(403)); }\n'+
-            ' if (req.http.X-WV-Profile == "ultracache" && req.http.X-UltraCache-Token == '+quoted(site['token'])+') { call wvw_http_control; }\n'+
+            ' req.http.X-UltraCache-Token != '+quoted(site['token'])+')) { return (synth(403)); }\n'+
+            ' if (req.http.X-UltraCache-Token == '+quoted(site['token'])+') { call wvw_http_control; }\n'+
             ' if (req.method != "PURGE") { return (synth(403)); }\n'+
             ' ban("obj.http.X-WV-Site == '+site['id']+'"); return (synth(200, "Site cache cleared")); }\n }')
     text.append('''
@@ -95,6 +96,7 @@ sub vcl_recv {
  unset req.http.X-WV-Gateway;
  unset req.http.X-Webuzo-Varnish-Token;
  unset req.http.X-UltraCache-Token;
+ unset req.http.X-WV-Control-Discovery;
  unset req.http.X-Ban-Expression;
  unset req.http.X-UltraCache-Contract;
  unset req.http.X-UltraCache-Operation;

@@ -13,6 +13,7 @@ import cache_size
 import fragments
 import profiles
 import timeouts
+import connections
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -31,7 +32,7 @@ def inventory(config):
 def status():
     config=settings();sites=inventory(config)
     return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),memory_mb=config.get('memory_mb',256),
-                default_profile=profiles.default(config),profiles=profiles.catalog(config),proxy_timeouts=timeouts.settings(config) if 'proxy_timeouts' in config else None,
+                default_profile=profiles.default(config),profiles=profiles.catalog(config),proxy_timeouts=timeouts.settings(config) if 'proxy_timeouts' in config else None,control_port=config.get('control_port'),
                 sites=[{k:v for k,v in s.items() if k not in ('token','uid','gid','home','custom_domains','credential_roots')} for s in sites.values()])
 
 def own_file(path,value,mode=0o600):
@@ -41,7 +42,7 @@ def own_file(path,value,mode=0o600):
 def plans(previous,next_config):
     changes=[];manifest={};desired={}
     if next_config.get('installed'):
-        changes.append(own_file(routing.CONFIG/'origins.conf',routing.origins(next_config['origin'],timeouts.settings(next_config))))
+        changes.append(own_file(routing.CONFIG/'origins.conf',routing.origins(next_config['origin'],timeouts.settings(next_config))+connections.render(next_config)))
         changes.append(own_file(routing.CONFIG/'client-ip.conf','<IfModule remoteip_module>\nRemoteIPHeader X-Forwarded-For\nRemoteIPInternalProxy 127.0.0.1\n</IfModule>\n',0o644))
         desired[str(native.GLOBAL)]=routing.CONFIG/'origins.conf'
     for site in next_config['sites'].values():
@@ -105,6 +106,7 @@ def apply(previous,next_config):
                 if site.get('enabled') and changed:service.purge(site)
         for change in changes:routing.replace(change)
         reload_servers()
+        if next_config.get('installed'):connections.wait(next_config)
         if next_config.get('installed'):service.write_vcl(service.ACTIVE,content)
         else:service.stop()
         state.save(SETTINGS,next_config);JOURNAL.unlink()
@@ -127,9 +129,9 @@ def validate_vcl(sites,config,sid=None):
 def action(request):
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
-    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','vcl','defaults','profile_rules'}
+    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules'}
     if operation not in allowed:raise ValueError('Unknown action')
-    fields={'configure':{'id','enabled','ttl','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'}}
+    fields={'configure':{'id','enabled','ttl','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
     with state.locked():
@@ -165,8 +167,9 @@ def action(request):
                 site=sites[sid]
                 if operation=='connection':
                     if sid not in previous.get('sites',{}):raise ValueError('Save the site settings first')
-                    return dict(connection=dict(domain=site['domain'],names=site['names'],enabled=site['enabled'],method='PURGE',
-                        socket='/run/varnish-for-webuzo-cache/frontend.sock',url='http://'+site['domain']+'/',header='X-Webuzo-Varnish-Token',key=site['token']))
+                    details=connections.details(site,previous)
+                    details['ready']=details['ready'] and service.running()
+                    return dict(connection=details)
                 if operation=='vcl':
                     if site['error']:raise ValueError(site['error'])
                     site['profile']=profiles.name(request.get('profile',site['profile']))
@@ -189,9 +192,11 @@ def action(request):
                             source=request.get(field,site[field]);fragments.validate(source,stage);site[field]=source
                         if site['error']:raise ValueError(site['error'])
                         validate_vcl(sites,config,sid)
+        if operation in ('install','reconcile','connection_setup'):
+            connections.prepare(previous,config,request.get('port',config.get('control_port',connections.DEFAULT_PORT)))
         if operation=='configure':credentials.change(site,site['enabled'])
         apply(previous,config)
-        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.'}[operation])
+        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','connection_setup':'Local HTTP connection saved. Show connection information in the site row for the application settings.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.'}[operation])
 
 def remove():
     with state.locked():

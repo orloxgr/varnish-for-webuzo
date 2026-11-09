@@ -24,7 +24,7 @@ def program(profile='basic',config=None):
         source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
     # The disposable varnishtest listener is TCP. Product purges use a protected
     # Unix socket; exercise its authenticated branch with the isolated client.
-    return source.replace('local.socket != "public"','client.ip != "127.0.0.1"')
+    return source.replace('local.socket != "public"','client.ip != "127.0.0.1"').replace('local.socket == "public"','client.ip == "127.0.0.1"')
 
 def origin(path,body,headers=(),expect=(),status=200,cache='public, max-age=120'):
     return '\n'.join(['accept','rxreq','expect req.url == '+json.dumps(path),*expect,
@@ -165,6 +165,19 @@ class NativeProfiles(unittest.TestCase):
              control('/__ultracache-vcl-contract-v2',headers=['X-UltraCache-Contract: 2','X-UltraCache-Operation: capabilities']),
              'expect resp.http.X-UltraCache-VCL-Adapter == "ultracache-webuzo-v2"',
              control('/page'),get('/page','updated',cache='MISS'),get('/page','other',cache='HIT',host='other.test')])
+    def test_http_connection_discovery_is_read_only_and_reports_native_varnish(self):
+        self.run_policy('ultracache',[origin('/page','public')],
+            [get('/page','public',cache='MISS'),
+             get('/page',None,headers=['X-WV-Control-Discovery: 1'],method='HEAD',status=405),
+             'expect resp.http.Server == "Varnish"','expect resp.http.X-Varnish ~ "[0-9]+"',get('/page','public',cache='HIT')])
+    def test_http_exact_invalidation_is_independent_of_profile_and_scheme(self):
+        for profile in profiles.NAMES:
+            with self.subTest(profile=profile):
+                self.run_policy(profile,[origin('/page','http'),origin('/page','https'),origin('/page','new')],
+                    [get('/page','http',['X-Forwarded-Proto: http'],cache='MISS'),
+                     get('/page','https',['X-Forwarded-Proto: https'],cache='MISS'),
+                     control('/page',host='other.test',status=403),control('/page'),
+                     get('/page','new',['X-Forwarded-Proto: https'],cache='MISS')])
     def test_ultracache_exact_and_batch_bans_keep_unselected_urls_warm(self):
         def ban(operation,pattern):
             return control('/__ultracache-vcl-contract-v2',headers=['X-UltraCache-Contract: 2','X-UltraCache-Operation: '+operation,

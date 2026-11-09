@@ -20,6 +20,7 @@ import state
 import transport
 import subprocess
 import repository
+import connections
 import base64
 import hashlib
 import io
@@ -165,6 +166,18 @@ class Boundaries(unittest.TestCase):
         with patch.object(service,'running',return_value=True),patch.object(service,'admin'),patch.object(service,'write_vcl'),patch.object(engine,'reload_servers'):
             engine.recover()
         self.assertEqual(path.read_text(),'previous');self.assertFalse(engine.JOURNAL.exists())
+    def test_http_connection_readiness_failure_restores_previous_configuration(self):
+        previous=dict(installed=True,sites={},gateway='e'*64,origin='f'*64)
+        updated=dict(previous,control_port=82,control_marker='a'*32)
+        service.ACTIVE.write_text('old VCL')
+        with patch.object(engine,'plans',return_value=[]),patch.object(service,'load',return_value=('old','new')),\
+             patch.object(service,'running',return_value=True),patch.object(service,'admin'),\
+             patch.object(service,'write_vcl',side_effect=lambda p,c:p.write_text(c)),patch.object(engine,'reload_servers'),\
+             patch.object(connections,'wait',side_effect=RuntimeError('Listener did not bind')):
+            with self.assertRaisesRegex(RuntimeError,'did not bind'):engine.apply(previous,updated)
+        self.assertEqual(engine.settings(),previous)
+        self.assertEqual(service.ACTIVE.read_text(),'old VCL')
+        self.assertFalse(engine.JOURNAL.exists())
     def test_timeout_refresh_keeps_existing_site_objects_and_persists_allowances(self):
         current=site();previous=dict(installed=True,sites={current['id']:current},manifest={},gateway='e'*64,origin='f'*64)
         desired=copy.deepcopy(previous);service.ACTIVE.write_text('old VCL')
