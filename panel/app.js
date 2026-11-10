@@ -169,6 +169,7 @@
   byId('edit-profile').addEventListener('change', () => { editingProfile = byId('edit-profile').value; profileEditor(); });
   byId('save-default').addEventListener('click', () => call('defaults', {profile: byId('default-profile').value}));
   byId('save-browser').addEventListener('click', () => call('browser_defaults', {settings: defaultBrowserEditor.value()}));
+  byId('restore-browser').addEventListener('click', () => call('browser_restore'));
   byId('save-profile').addEventListener('click', () => call('profile_rules', {profile: editingProfile, recv_vcl: byId('profile-recv').value, backend_vcl: byId('profile-backend').value}));
   byId('resize').addEventListener('click', () => {
     const memory = Number(byId('memory').value);

@@ -19,6 +19,8 @@
     <p>Control how long visitors keep public static files. These defaults apply to enabled sites using the central settings, including newly discovered sites once enabled.</p>
     <div id="wvw-browser-fields"></div>
     <button type="button" id="wvw-save-browser" class="wvw-primary">Save browser cache defaults</button>
+    <button type="button" id="wvw-restore-browser">Restore defaults</button>
+    <p>Restore defaults applies 30 days for ordinary files and one year for versioned files to all enabled sites. It clears custom browser-cache patterns and per-site browser-cache overrides. VCL profiles and other settings are preserved.</p>
     <p>Changing these settings or clearing Varnish does not remove copies already stored in visitors' browsers. HTML and dynamic responses keep their application's cache policy.</p>
   </section>
   <section class="wvw-card" id="wvw-profiles" hidden>

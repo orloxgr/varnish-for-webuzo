@@ -83,6 +83,13 @@ after switching profiles, preservation of custom patterns and central inheritanc
 custom versioned lifetimes, disabled browser headers, and display of the automatic
 pattern without JavaScript errors.
 
+The 0.3.5 Restore defaults button passed all 96 backend tests and eight native
+panel rejection checks. A native browser test seeded a 24-hour central policy
+and custom site overrides, clicked Restore defaults once, and verified immediate
+30-day static headers on both accounts, one-year versioned defaults, removal of
+browser overrides/custom patterns, preservation of profiles/VCL/other settings,
+and persistence after reload. No extra Save or Refresh was used.
+
 ## Reproduce
 
 The timeout regression harness starts isolated Nginx and Varnish processes on

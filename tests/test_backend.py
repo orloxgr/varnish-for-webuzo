@@ -119,6 +119,19 @@ class Boundaries(unittest.TestCase):
         for request in (dict(actor='account',admin=True,action='install'),dict(actor='root',admin=False,action='status'),dict(actor='root',admin=True,action='shell'),dict(actor='root',admin=True,action='status',command='id')):
             with self.subTest(request=request),patch.object(native,'run') as run,self.assertRaises(ValueError):engine.action(request)
             run.assert_not_called()
+    def test_browser_restore_resets_browser_scopes_and_preserves_other_settings(self):
+        first=site();first.update(profile='ultracache',recv_vcl='',backend_vcl='',browser_cache=dict(enabled=False,static_seconds=123,versioned_seconds=456,versioned_paths=['/assets/app-{hash}.js']))
+        second=copy.deepcopy(first);second.update(id='c'*32,domain='other.test',names=['other.test'])
+        previous=dict(installed=True,sites={s['id']:s for s in (first,second)},browser_cache=copy.deepcopy(first['browser_cache']),memory_mb=512,gateway='e'*64,origin='f'*64)
+        state.save(engine.SETTINGS,previous)
+        with patch.object(engine,'inventory',return_value=copy.deepcopy(previous['sites'])),patch.object(engine,'apply',side_effect=lambda old,new:state.save(engine.SETTINGS,new)):
+            engine.action(dict(actor='root',admin=True,action='browser_restore'))
+        updated=engine.settings()
+        self.assertEqual(updated['browser_cache'],dict(enabled=True,static_seconds=2592000,versioned_seconds=31536000,versioned_paths=[]))
+        self.assertEqual(updated['memory_mb'],512)
+        for sid,old in previous['sites'].items():
+            self.assertIsNone(updated['sites'][sid]['browser_cache'])
+            self.assertEqual({k:v for k,v in updated['sites'][sid].items() if k!='browser_cache'},{k:v for k,v in old.items() if k!='browser_cache'})
     def test_package_installation_refuses_unknown_distribution(self):
         with patch.object(repository.platform,'freedesktop_os_release',return_value={'ID':'unsupported'}),patch.object(native,'run') as run:
             with self.assertRaises(ValueError):repository.release()

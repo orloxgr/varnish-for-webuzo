@@ -132,7 +132,7 @@ def validate_vcl(sites,config,sid=None):
 def action(request):
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
-    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site'}
+    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore'}
     if operation not in allowed:raise ValueError('Unknown action')
     fields={'configure':{'id','enabled','ttl','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
@@ -159,6 +159,9 @@ def action(request):
         else:
             if not previous.get('installed'):raise ValueError('Install the Varnish service first')
             if operation=='defaults':config['default_profile']=profiles.name(request.get('profile'))
+            if operation=='browser_restore':
+                config['browser_cache']=browser_cache.defaults({})
+                for site in sites.values():site['browser_cache']=None
             if operation=='browser_defaults':config['browser_cache']=browser_cache.validate(request.get('settings'))
             if operation=='profile_rules':
                 profile=profiles.name(request.get('profile'))
@@ -204,7 +207,7 @@ def action(request):
             connections.prepare(previous,config,request.get('port',config.get('control_port',connections.DEFAULT_PORT)))
         if operation=='configure':credentials.change(site,site['enabled'])
         apply(previous,config)
-        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','connection_setup':'Local HTTP connection saved. Show connection information in the site row for the application settings.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.','browser_defaults':'Browser cache defaults applied to sites using the central settings. Existing browser copies expire under their previous policy.','browser_site':'Browser cache settings saved for this site. Existing browser copies expire under their previous policy.'}[operation])
+        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','connection_setup':'Local HTTP connection saved. Show connection information in the site row for the application settings.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.','browser_defaults':'Browser cache defaults applied to sites using the central settings. Existing browser copies expire under their previous policy.','browser_site':'Browser cache settings saved for this site. Existing browser copies expire under their previous policy.','browser_restore':'Browser cache defaults restored and applied to all enabled sites: 30 days for ordinary assets and one year for versioned assets. Custom browser patterns and site overrides were cleared.'}[operation])
 
 def remove():
     with state.locked():

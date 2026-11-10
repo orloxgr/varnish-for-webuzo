@@ -52,11 +52,16 @@ If Varnish is unavailable, GET/HEAD page requests fall back to the native Apache
 
 ## Static files and browser cache
 
-After upgrading, click **Refresh sites** to apply the current Nginx templates to
-enabled sites. **Browser cache defaults** sets the central browser policy;
+**Browser cache defaults** sets the central browser policy;
 **Browser cache** in a site's row opens its override. Sites use the central
 settings until an explicit override is saved, and can return to inheritance at
 any time. Settings survive refreshes and plugin upgrades.
+
+**Restore defaults** immediately applies the factory browser policy to all enabled
+sites: 30 days for ordinary assets and one year for versioned assets. It clears
+custom browser-cache patterns and per-site browser-cache overrides, so all sites
+use the central defaults. VCL profiles, additional VCL, bypass paths and other
+settings are preserved. No additional Save or Refresh is needed after restoring.
 
 Existing public static files receive one `Cache-Control` field. Ordinary assets
 default to `public, max-age=2592000` (30 days). Declared versioned assets default
