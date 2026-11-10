@@ -35,7 +35,7 @@ def status():
     config=settings();sites=inventory(config)
     return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),memory_mb=config.get('memory_mb',256),
                 default_profile=profiles.default(config),profiles=profiles.catalog(config),proxy_timeouts=timeouts.settings(config) if 'proxy_timeouts' in config else None,control_port=config.get('control_port'),
-                browser_cache=browser_cache.defaults(config),
+                browser_cache=browser_cache.defaults(config),browser_cache_profiles=copy.deepcopy(browser_cache.PROFILE_PATHS),
                 sites=[{k:v for k,v in s.items() if k not in ('token','uid','gid','home','custom_domains','credential_roots')} for s in sites.values()])
 
 def own_file(path,value,mode=0o600):

@@ -68,15 +68,23 @@ and range responses. HTML, private responses, errors and application fallbacks
 do not receive this static policy. Browser policy changes do not restart Varnish
 or clear its cached HTML.
 
-Versioned URL patterns are empty initially. Declare only paths whose filenames
+Custom versioned URL patterns start empty. Declare only paths whose filenames
 change whenever their contents change, for example `/assets/app-{hash}.js`.
 `{hash}` matches 16–128 hexadecimal characters, and `*` matches within one path
 segment. These are literal URL patterns, not Nginx directives or arbitrary regex.
 Neither a `?ver=` query nor an undeclared hexadecimal-looking filename is assumed
-immutable. When using UltraCache's standard uploads directory, an optional pattern
-for its content-versioned main CSS bundles is
+immutable. For UltraCache's standard uploads directory, the preset for its
+content-versioned main CSS bundles is
 `/wp-content/uploads/ultracache/css-bundles/bundle-*-{hash}.css`.
-Other files retain the ordinary lifetime unless declared separately.
+The **UltraCache** VCL profile adds this pattern automatically. It uses the site's
+effective versioned lifetime and respects disabled browser headers, central
+inheritance and site overrides. The automatic pattern is shown in the site's
+browser-cache controls; it does not replace custom patterns or create an override.
+Saving another VCL profile removes only the automatic addition. A manually added
+copy remains a custom rule. Existing UltraCache-profile sites receive the preset
+on **Refresh sites** after an upgrade. The preset assumes the standard uploads
+path; custom uploads paths can be declared manually. Other files retain the
+ordinary lifetime unless declared separately.
 
 The Nginx asset location also supplies MIME mappings for the supported public
 types, including JavaScript modules (`mjs`), AVIF sequences (`avifs`), WebAssembly

@@ -24,6 +24,27 @@ def site(identity='a'):
 
 
 class BrowserPolicies(unittest.TestCase):
+    def test_ultracache_automatic_pattern_preserves_preferences_and_follows_profile(self):
+        first=site();first['profile']='ultracache'
+        choice=browser_cache.defaults({});choice.update(static_seconds=123,versioned_seconds=456,versioned_paths=['/assets/app-{hash}.js'])
+        first['browser_cache']=choice
+        selected=browser_cache.selected(first,{})
+        preset=browser_cache.PROFILE_PATHS['ultracache'][0]
+        self.assertEqual(selected['versioned_paths'],['/assets/app-{hash}.js',preset])
+        self.assertEqual(selected['versioned_seconds'],456)
+        self.assertEqual(choice['versioned_paths'],['/assets/app-{hash}.js'])
+        choice['enabled']=False
+        self.assertFalse(browser_cache.selected(first,{})['enabled'])
+        self.assertNotIn('immutable',browser_cache.maps({first['id']:first},{}))
+        first['profile']='wordpress'
+        self.assertEqual(browser_cache.selected(first,{})['versioned_paths'],['/assets/app-{hash}.js'])
+        first.update(profile='ultracache',browser_cache=None)
+        inherited=browser_cache.selected(first,dict(browser_cache=choice))
+        self.assertEqual(inherited['versioned_paths'],['/assets/app-{hash}.js',preset])
+        self.assertFalse(inherited['enabled'])
+        choice['versioned_paths'].append(preset)
+        self.assertEqual(browser_cache.selected(first,dict(browser_cache=choice))['versioned_paths'].count(preset),1)
+
     def test_defaults_and_site_overrides_do_not_mutate_shared_settings(self):
         config={};first=site();second=site('b')
         self.assertEqual(browser_cache.selected(first,config)['static_seconds'],86400)
@@ -133,6 +154,20 @@ class NativeBrowserHeaders(unittest.TestCase):
                     if dict((k.lower(),v) for k,v in headers).get('cache-control')=='private, no-store':break
                     time.sleep(.05)
                 else:self.fail('Static bypass did not reach the application')
+                # Selecting UltraCache applies its preset to a real existing CSS
+                # bundle without writing a site override or changing lifetimes.
+                path='/wp-content/uploads/ultracache/css-bundles/bundle-aggressive-'+('b'*32)+'.css'
+                asset=root/path[1:];asset.parent.mkdir(parents=True);asset.write_text('body {color:blue}')
+                for profile,expected in [('ultracache',immutable),('wordpress',ordinary)]:
+                    first['profile']=profile;configure(choice)
+                    subprocess.run([str(native.NGINX),'-p',str(root),'-c',str(root/'nginx.conf'),'-s','reload'],check=True,capture_output=True)
+                    for _ in range(100):
+                        status,headers,_=request(path)
+                        values=[v for k,v in headers if k.lower()=='cache-control']
+                        if values==[expected]:break
+                        time.sleep(.05)
+                    else:self.fail('Automatic preset did not follow profile '+profile)
+                    self.assertEqual(status,200)
             finally:
                 process.terminate();process.wait(timeout=10);log.close();origin.shutdown();origin.server_close();worker.join()
 

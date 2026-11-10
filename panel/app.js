@@ -37,8 +37,16 @@
     const pathsLabel = node('label', 'Versioned asset URL patterns — one per line'); pathsLabel.append(paths); fields.append(pathsLabel); inputs.push(paths);
     fields.append(node('p', 'Declare only files whose URL changes when their content changes. {hash} matches 16–128 hexadecimal characters; * matches within one path segment. Query strings such as ?ver= are not classified automatically. Versioned files receive immutable; zero seconds requires revalidation.'));
     const update = () => { fields.hidden = site && inherited.checked; for (const input of inputs) input.dataset.unavailable = String(!snapshot.installed || (site && inherited.checked) ? 1 : 0); controls(); };
-    inherited.addEventListener('change', update); parent.append(fields); update();
-    return {value: () => site && inherited.checked ? null : {enabled: enabled.checked, static_seconds: Number(ordinary.value), versioned_seconds: Number(versioned.value), versioned_paths: paths.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean)}};
+    const automatic = node('p'); automatic.hidden = true;
+    inherited.addEventListener('change', update); parent.append(fields, automatic); update();
+    return {
+      value: () => site && inherited.checked ? null : {enabled: enabled.checked, static_seconds: Number(ordinary.value), versioned_seconds: Number(versioned.value), versioned_paths: paths.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean)},
+      profile: name => {
+        const patterns = snapshot.browser_cache_profiles[name] || [];
+        automatic.textContent = 'Automatic versioned asset patterns from the selected VCL profile: ' + patterns.join(', ') + '. These use the effective versioned lifetime and apply when browser cache headers are enabled. Custom patterns above are preserved. Save & Apply commits a profile change.';
+        automatic.hidden = patterns.length === 0;
+      }
+    };
   }
   async function call(action, values = {}) {
     if (busy) return;
@@ -140,7 +148,7 @@
         if (detailRow.hidden) { connectionBox.replaceChildren(); connectionBox.hidden = true; connection.textContent = 'Show connection information'; }
       });
       const description = node('p'), builtIn = node('details'), source = node('pre'); builtIn.append(node('summary', 'View selected profile VCL'), source);
-      function selectedProfile() { const selected = snapshot.profiles.find(p => p.name === profile.value); description.textContent = selected.description; source.textContent = selected.source; }
+      function selectedProfile() { const selected = snapshot.profiles.find(p => p.name === profile.value); description.textContent = selected.description; source.textContent = selected.source; siteBrowserEditor.profile(profile.value); }
       profile.addEventListener('change', selectedProfile); selectedProfile();
       section.append(description, builtIn, connection, connectionBox);
       const requestLabel = node('label', 'Additional site request VCL (vcl_recv)'), recv = node('textarea'); recv.value = site.recv_vcl; recv.className = 'wvw-vcl'; recv.setAttribute('aria-label', 'Request VCL for ' + site.domain); recv.placeholder = 'if (req.url ~ "^/members/") { return (pass); }';
