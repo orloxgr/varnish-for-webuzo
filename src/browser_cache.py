@@ -3,7 +3,7 @@ import copy
 import json
 import re
 
-DEFAULTS=dict(enabled=True,static_seconds=86400,versioned_seconds=31536000,versioned_paths=[])
+DEFAULTS=dict(enabled=True,static_seconds=2592000,versioned_seconds=31536000,versioned_paths=[])
 PROFILE_PATHS={'ultracache':['/wp-content/uploads/ultracache/css-bundles/bundle-*-{hash}.css']}
 TYPES={
     'text/css':'css', 'application/javascript':'js mjs',

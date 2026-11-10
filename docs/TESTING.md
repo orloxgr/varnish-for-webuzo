@@ -76,7 +76,7 @@ HTML objects, the Varnish manager PID and Webuzo factory-file hashes were preser
 Browser tests saved central settings and a site override through the native panel,
 verified persistence after reload and restored inheritance without JavaScript errors.
 
-The 0.3.4 automatic UltraCache browser preset passed all 95 backend tests and
+The 0.3.4 automatic UltraCache browser preset and 30-day ordinary asset default passed all 95 backend tests and
 eight native panel rejection checks. Real Nginx responses and a native panel run
 verified automatic CSS-bundle immutable headers on UltraCache, ordinary headers
 after switching profiles, preservation of custom patterns and central inheritance,

@@ -47,10 +47,10 @@ class BrowserPolicies(unittest.TestCase):
 
     def test_defaults_and_site_overrides_do_not_mutate_shared_settings(self):
         config={};first=site();second=site('b')
-        self.assertEqual(browser_cache.selected(first,config)['static_seconds'],86400)
+        self.assertEqual(browser_cache.selected(first,config)['static_seconds'],2592000)
         own=browser_cache.defaults(config);own['static_seconds']=123;first['browser_cache']=own
         self.assertEqual(browser_cache.selected(first,config)['static_seconds'],123)
-        self.assertEqual(browser_cache.selected(second,config)['static_seconds'],86400)
+        self.assertEqual(browser_cache.selected(second,config)['static_seconds'],2592000)
         central=browser_cache.defaults(config);central['static_seconds']=456;config['browser_cache']=central
         self.assertEqual(browser_cache.selected(first,config)['static_seconds'],123)
         self.assertEqual(browser_cache.selected(second,config)['static_seconds'],456)
@@ -131,7 +131,7 @@ class NativeBrowserHeaders(unittest.TestCase):
                     status,headers,body=request(path,**args)
                     values=[v for k,v in headers if k.lower()=='cache-control']
                     self.assertEqual(values,[expected],(path,status,headers));return status,dict((k.lower(),v) for k,v in headers),body
-                ordinary='public, max-age=86400';immutable='public, max-age=31536000, immutable'
+                ordinary='public, max-age=2592000';immutable='public, max-age=31536000, immutable'
                 status,headers,_=cache('/plain.css',ordinary);self.assertEqual(status,200)
                 self.assertEqual(cache('/plain.css',ordinary,headers={'If-None-Match':headers['etag']})[0],304)
                 self.assertEqual(cache('/plain.css',ordinary,headers={'If-Modified-Since':headers['last-modified']})[0],304)

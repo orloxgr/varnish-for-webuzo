@@ -59,7 +59,7 @@ settings until an explicit override is saved, and can return to inheritance at
 any time. Settings survive refreshes and plugin upgrades.
 
 Existing public static files receive one `Cache-Control` field. Ordinary assets
-default to `public, max-age=86400` (24 hours). Declared versioned assets default
+default to `public, max-age=2592000` (30 days). Declared versioned assets default
 to `public, max-age=31536000, immutable` (one year). Both lifetimes are configurable
 in seconds; zero produces `no-cache` so a stored copy must be revalidated. Disabling
 browser cache headers stops the addon's `Cache-Control` field for that scope.
