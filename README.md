@@ -50,6 +50,43 @@ Direct static serving rejects symbolic links whose owner differs from the target
 
 If Varnish is unavailable, GET/HEAD page requests fall back to the native Apache backend without a second Nginx page cache. Write requests are not automatically replayed after an upstream failure.
 
+## Static files and browser cache
+
+After upgrading, click **Refresh sites** to apply the current Nginx templates to
+enabled sites. **Browser cache defaults** sets the central browser policy;
+**Browser cache** in a site's row opens its override. Sites use the central
+settings until an explicit override is saved, and can return to inheritance at
+any time. Settings survive refreshes and plugin upgrades.
+
+Existing public static files receive one `Cache-Control` field. Ordinary assets
+default to `public, max-age=86400` (24 hours). Declared versioned assets default
+to `public, max-age=31536000, immutable` (one year). Both lifetimes are configurable
+in seconds; zero produces `no-cache` so a stored copy must be revalidated. Disabling
+browser cache headers stops the addon's `Cache-Control` field for that scope.
+Native `ETag` and `Last-Modified` validators remain available, including on 304
+and range responses. HTML, private responses, errors and application fallbacks
+do not receive this static policy. Browser policy changes do not restart Varnish
+or clear its cached HTML.
+
+Versioned URL patterns are empty initially. Declare only paths whose filenames
+change whenever their contents change, for example `/assets/app-{hash}.js`.
+`{hash}` matches 16–128 hexadecimal characters, and `*` matches within one path
+segment. These are literal URL patterns, not Nginx directives or arbitrary regex.
+Neither a `?ver=` query nor an undeclared hexadecimal-looking filename is assumed
+immutable. When using UltraCache's standard uploads directory, an optional pattern
+for its content-versioned main CSS bundles is
+`/wp-content/uploads/ultracache/css-bundles/bundle-*-{hash}.css`.
+Other files retain the ordinary lifetime unless declared separately.
+
+The Nginx asset location also supplies MIME mappings for the supported public
+types, including JavaScript modules (`mjs`), AVIF sequences (`avifs`), WebAssembly
+(`wasm`) and web manifests. No global MIME table or Webuzo factory file is changed.
+The Apache HTML cache rewrites and application response policies remain in the
+native backend; Nginx does not interpret `.htaccess` files.
+
+Changing the policy or purging Varnish cannot remove copies already stored in
+visitors' browsers. Replacing a versioned file requires a new URL.
+
 ## Site VCL and connection details
 
 Open **VCL & connection** in the site's own row to view its selected profile VCL, edit additional site rules and access its connection details. **Save & Apply** checks the profile and additions with the native Varnish compiler before activating them. A successful site change invalidates only that site's cache; a rejected policy leaves the previous rules active.

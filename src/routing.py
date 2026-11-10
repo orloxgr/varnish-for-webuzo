@@ -5,6 +5,7 @@ import native
 import state
 import policy
 import timeouts
+import browser_cache
 from urllib.parse import unquote
 
 CONFIG=Path('/etc/varnish-for-webuzo')
@@ -47,7 +48,7 @@ def domain(site,gateway,allowances=None):
     exclusions=[]
     for path in policy.paths(site.get('bypass',[])):
         exclusions.append('if ($uri ~* '+policy.quoted('^'+policy.literal_bytes(unquote(path)))+') { return 419; }')
-    return (TEMPLATES/'domain.conf').read_text().replace('@@STATIC_BYPASS@@','\n'.join(exclusions)).replace('@@HOSTS@@',hosts).replace('@@VARNISH_PROXY@@',proxy('http://unix:/run/varnish-for-webuzo-cache/frontend.sock:',gateway,allowances=timeouts.frontend(allowances))).replace('@@NATIVE_PROXY@@',proxy('$wv_native_origin',allowances=allowances))
+    return (TEMPLATES/'domain.conf').read_text().replace('@@STATIC_BYPASS@@','\n'.join(exclusions)).replace('@@ASSET_EXTENSIONS@@',browser_cache.EXTENSIONS).replace('@@BROWSER_CACHE@@',browser_cache.directives(site)).replace('@@HOSTS@@',hosts).replace('@@VARNISH_PROXY@@',proxy('http://unix:/run/varnish-for-webuzo-cache/frontend.sock:',gateway,allowances=timeouts.frontend(allowances))).replace('@@NATIVE_PROXY@@',proxy('$wv_native_origin',allowances=allowances))
 
 def origins(secret,allowances=None):
     text=[]

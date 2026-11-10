@@ -65,6 +65,17 @@ new content, the next public GET was a HIT, and an unrelated URL remained a HIT.
 Using that site's token against another account was rejected. The native panel
 connection fields, masked token and copy/reveal controls were checked in a browser.
 
+On 10 November 2026, the 0.3.3 browser-cache changes passed all 94 backend tests
+and eight native panel rejection checks. The generated Nginx configuration was
+exercised with successful GET/HEAD, 304 validators, range responses, fingerprinted
+and ordinary assets, query versions, MIME types, failed requests and application
+fallbacks. A second integration run on two native Webuzo accounts passed 39
+checks over HTTP/HTTPS, including per-site overrides, inheritance, disable/zero
+lifetimes, persistence after refresh and rejection of malformed settings. Warm
+HTML objects, the Varnish manager PID and Webuzo factory-file hashes were preserved.
+Browser tests saved central settings and a site override through the native panel,
+verified persistence after reload and restored inheritance without JavaScript errors.
+
 ## Reproduce
 
 The timeout regression harness starts isolated Nginx and Varnish processes on
@@ -86,6 +97,15 @@ Backend checks on a disposable Linux server:
 ```sh
 python3 -m unittest discover -s tests -v
 /usr/local/emps/bin/php tests/test_panel.php
+```
+
+The browser-policy integration runner uses two enabled disposable sites. It
+creates assets as their hosting users, applies central settings and site overrides,
+checks actual native responses, and restores the original browser settings:
+
+```sh
+python3 tests/browser_cache_runtime.py --disposable --self-signed \
+  --address TEST_SERVER_IP --sites first.example.test second.example.test
 ```
 
 The runtime harness needs two enabled disposable WordPress domains on separate accounts, with HTTP and HTTPS available. It creates temporary fixtures as the hosting users, stops/restarts the plugin's Varnish instance, invokes a native vhost rebuild and restores the selected sites' original settings. Replace the address and domain placeholders below. `--self-signed` applies only to the test client's certificate checks.

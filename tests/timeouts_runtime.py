@@ -95,6 +95,8 @@ try:
         varnish_log=(root/'varnish.log').open('w+')
         varnish=subprocess.Popen(command,stdout=varnish_log,stderr=subprocess.STDOUT,start_new_session=True);processes.append(varnish)
         ready(varnish_port,varnish)
+        import browser_cache
+        bridges += browser_cache.maps({site['id']:site},{})
         front=routing.domain(site,'e'*64,baseline)
         front=front.replace('http://127.0.0.1:8081','http://127.0.0.1:'+str(origin.server_port)).replace('http://unix:/run/varnish-for-webuzo-cache/frontend.sock:','http://127.0.0.1:'+str(varnish_port))
         config='worker_processes 1;\nuser root;\npid '+str(root/'nginx.pid')+';\nerror_log '+str(root/'nginx.log')+';\nevents { worker_connections 128; }\nhttp { access_log off;\n'+bridges+'\nserver { listen 127.0.0.1:'+str(front_port)+'; server_name example.test; root '+str(root)+';\n'+front+'\n}\n}\n'

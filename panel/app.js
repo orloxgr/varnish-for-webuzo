@@ -2,7 +2,7 @@
   'use strict';
   const root = document.getElementById('wvw'), byId = id => document.getElementById('wvw-' + id);
   document.title = 'Varnish Cache';
-  let busy = false, snapshot, editingProfile = 'basic';
+  let busy = false, snapshot, editingProfile = 'basic', defaultBrowserEditor;
   const node = (tag, text) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; return el; };
   function controls() { root.querySelectorAll('button,input,textarea,select').forEach(el => { el.disabled = busy || el.dataset.unavailable === '1'; }); }
   function options(select, value) {
@@ -18,6 +18,27 @@
     byId('profile-backend').value = profile.backend_vcl;
     const count = snapshot.sites.filter(s => s.enabled && s.profile === editingProfile).length;
     byId('profile-targets').textContent = 'Applying these central rules clears cache for ' + count + ' enabled site(s) using ' + profile.label + '.';
+  }
+  function browserEditor(parent, value, scope, site = false) {
+    const fields = node('div'), inputs = [], inherited = node('input');
+    inherited.type = 'checkbox'; inherited.checked = site && value === null;
+    inherited.setAttribute('aria-label', 'Use central browser cache settings for ' + scope);
+    if (site) { const label = node('label'); label.append(inherited, document.createTextNode(' Use central browser cache settings')); parent.append(label); }
+    const selected = value || snapshot.browser_cache;
+    const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = selected.enabled;
+    enabled.setAttribute('aria-label', 'Enable browser cache headers for ' + scope);
+    const enabledLabel = node('label'); enabledLabel.append(enabled, document.createTextNode(' Enable browser cache headers')); fields.append(enabledLabel); inputs.push(enabled);
+    const seconds = (label, initial) => {
+      const input = node('input'), caption = node('label', label + ' (seconds)'); input.type = 'number'; input.min = '0'; input.max = '2147483647'; input.step = '1'; input.value = initial;
+      input.setAttribute('aria-label', label + ' for ' + scope); caption.append(input); fields.append(caption); inputs.push(input); return input;
+    };
+    const ordinary = seconds('Ordinary static files', selected.static_seconds), versioned = seconds('Versioned static files', selected.versioned_seconds);
+    const paths = node('textarea'); paths.value = selected.versioned_paths.join('\n'); paths.placeholder = '/assets/app-{hash}.js\n/assets/styles-{hash}.css'; paths.setAttribute('aria-label', 'Versioned asset URL patterns for ' + scope);
+    const pathsLabel = node('label', 'Versioned asset URL patterns — one per line'); pathsLabel.append(paths); fields.append(pathsLabel); inputs.push(paths);
+    fields.append(node('p', 'Declare only files whose URL changes when their content changes. {hash} matches 16–128 hexadecimal characters; * matches within one path segment. Query strings such as ?ver= are not classified automatically. Versioned files receive immutable; zero seconds requires revalidation.'));
+    const update = () => { fields.hidden = site && inherited.checked; for (const input of inputs) input.dataset.unavailable = String(!snapshot.installed || (site && inherited.checked) ? 1 : 0); controls(); };
+    inherited.addEventListener('change', update); parent.append(fields); update();
+    return {value: () => site && inherited.checked ? null : {enabled: enabled.checked, static_seconds: Number(ordinary.value), versioned_seconds: Number(versioned.value), versioned_paths: paths.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean)}};
   }
   async function call(action, values = {}) {
     if (busy) return;
@@ -40,6 +61,9 @@
     byId('remove').hidden = !snapshot.installed;
     byId('server').hidden = !snapshot.installed;
     byId('profiles').hidden = !snapshot.installed;
+    byId('browser').hidden = !snapshot.installed;
+    byId('browser-fields').replaceChildren();
+    defaultBrowserEditor = browserEditor(byId('browser-fields'), snapshot.browser_cache, 'central defaults');
     byId('memory').value = snapshot.memory_mb;
     byId('control-port').value = snapshot.control_port || 82;
     const allowances = snapshot.proxy_timeouts;
@@ -73,6 +97,13 @@
       const detailRow = node('tr'); detailRow.hidden = true; detailRow.dataset.detailsFor = site.id;
       const detailCell = node('td'); detailCell.colSpan = 6;
       const section = node('div'); section.className = 'wvw-site-details'; detailCell.append(section); detailRow.append(detailCell); body.append(detailRow);
+      const browserBox = node('details'); browserBox.append(node('summary', 'Browser cache for ' + site.domain));
+      const siteBrowserEditor = browserEditor(browserBox, site.browser_cache, site.domain, true);
+      const saveBrowser = node('button', 'Save site browser cache'); saveBrowser.type = 'button'; saveBrowser.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      saveBrowser.addEventListener('click', () => call('browser_site', {id: site.id, settings: siteBrowserEditor.value()})); browserBox.append(saveBrowser);
+      section.append(browserBox);
+      const browserButton = node('button', 'Browser cache'); browserButton.type = 'button'; browserButton.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      browserButton.addEventListener('click', () => { detailRow.hidden = false; browserBox.open = !browserBox.open; edit.setAttribute('aria-expanded', 'true'); }); actions.append(browserButton);
       const edit = node('button', 'VCL & connection'); edit.type = 'button'; edit.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       edit.setAttribute('aria-expanded', 'false'); actions.append(edit);
       const connection = node('button', 'Show connection information'); connection.type = 'button';
@@ -129,6 +160,7 @@
   byId('save-connection').addEventListener('click', () => call('connection_setup', {port: Number(byId('control-port').value)}));
   byId('edit-profile').addEventListener('change', () => { editingProfile = byId('edit-profile').value; profileEditor(); });
   byId('save-default').addEventListener('click', () => call('defaults', {profile: byId('default-profile').value}));
+  byId('save-browser').addEventListener('click', () => call('browser_defaults', {settings: defaultBrowserEditor.value()}));
   byId('save-profile').addEventListener('click', () => call('profile_rules', {profile: editingProfile, recv_vcl: byId('profile-recv').value, backend_vcl: byId('profile-backend').value}));
   byId('resize').addEventListener('click', () => {
     const memory = Number(byId('memory').value);

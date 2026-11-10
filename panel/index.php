@@ -14,6 +14,13 @@
     <div class="wvw-toolbar"><label for="wvw-control-port">Local HTTP connection port</label><input type="number" id="wvw-control-port" min="1" max="1023" step="1" value="82"><button type="button" id="wvw-save-connection">Save connection port</button></div>
     <p>Application purge requests use this loopback-only port and a separate token for each site. Show connection information in the site's row for the endpoint and authentication values.</p>
   </section>
+  <section class="wvw-card" id="wvw-browser" hidden>
+    <h3>Browser cache defaults</h3>
+    <p>Control how long visitors keep public static files. These defaults apply to enabled sites using the central settings, including newly discovered sites once enabled.</p>
+    <div id="wvw-browser-fields"></div>
+    <button type="button" id="wvw-save-browser" class="wvw-primary">Save browser cache defaults</button>
+    <p>Changing these settings or clearing Varnish does not remove copies already stored in visitors' browsers. HTML and dynamic responses keep their application's cache policy.</p>
+  </section>
   <section class="wvw-card" id="wvw-profiles" hidden>
     <h3>VCL profiles</h3>
     <div class="wvw-toolbar"><label for="wvw-default-profile">Default for new sites</label><select id="wvw-default-profile"></select><button type="button" id="wvw-save-default">Save default</button></div>
