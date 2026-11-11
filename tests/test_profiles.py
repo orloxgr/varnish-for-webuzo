@@ -17,8 +17,9 @@ import profiles
 def site(identity='a',domain='example.test',profile='basic',token='b'):
     return dict(id=identity*32,domain=domain,names=[domain],enabled=True,error='',token=token*64,ttl=300,bypass=[],recv_vcl='',backend_vcl='',profile=profile)
 
-def program(profile='basic',config=None):
+def program(profile='basic',config=None,ttl=300):
     first=site(profile=profile);second=site('c','other.test',profile,'d')
+    first['ttl']=ttl
     source=policy.render({first['id']:first,second['id']:second},'e'*64,'f'*64,config)
     for scheme in ('http','https'):
         source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
@@ -41,6 +42,14 @@ def control(path='/',host='example.test',token='b',headers=(),method='PURGE',sta
         ' '.join('-hdr {'+h+'}' for h in headers),'rxresp','expect resp.status == '+str(status)])
 
 class ProfileChoices(unittest.TestCase):
+    def test_new_ultracache_sites_use_origin_policy_without_rewriting_saved_caps(self):
+        old=site(profile='ultracache');new=site('c','new.test',token='d')
+        config=dict(default_profile='ultracache',sites={old['id']:old})
+        with patch.object(native,'collect',return_value={old['id']:dict(old),new['id']:dict(new)}):found=engine.inventory(config)
+        self.assertEqual(found[old['id']]['ttl'],300)
+        self.assertEqual(found[new['id']]['profile'],'ultracache')
+        self.assertEqual(found[new['id']]['ttl'],0)
+        self.assertNotIn('beresp.ttl > 0s',program('ultracache',ttl=0))
     def test_four_real_profiles_and_central_basic_default(self):
         self.assertEqual(profiles.NAMES,('basic','wordpress','woocommerce','ultracache'))
         self.assertEqual(profiles.default({}),'basic')
@@ -62,12 +71,58 @@ class ProfileChoices(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('varnishtest'),'Native varnishtest is required')
 class NativeProfiles(unittest.TestCase):
-    def run_policy(self,profile,responses,requests,config=None):
-        source='varnishtest "Webuzo '+profile+' profile"\nserver s1 {\n'+'\n'.join(responses).removeprefix('accept\n')+'\n} -start\nvarnish v1 -vcl {\n'+program(profile,config)+'\n} -start\nclient c1 {\n'+'\n'.join(requests)+'\n} -run\nserver s1 -wait\n'
+    def run_policy(self,profile,responses,requests,config=None,ttl=300,observe_ttl=False):
+        compiled=program(profile,config,ttl)
+        if observe_ttl:
+            compiled=compiled.replace(' return (deliver);\n}\nsub vcl_deliver',
+                ' set beresp.http.X-Test-Final-TTL = beresp.ttl; return (deliver);\n}\nsub vcl_deliver')
+        source='varnishtest "Webuzo '+profile+' profile"\nserver s1 {\n'+'\n'.join(responses).removeprefix('accept\n')+'\n} -start\nvarnish v1 -vcl {\n'+compiled+'\n} -start\nclient c1 {\n'+'\n'.join(requests)+'\n} -run\nserver s1 -wait\n'
         with tempfile.TemporaryDirectory(prefix='wvw-profiles-') as folder:
             path=Path(folder)/'profile.vtc';path.write_text(source)
             result=subprocess.run(['varnishtest','-t','20',str(path)],capture_output=True,text=True,timeout=30)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+    def test_origin_lifetime_and_explicit_maximum_are_distinct(self):
+        for cap,seconds in ((0,86400),(300,300)):
+            with self.subTest(cap=cap):self.run_policy('ultracache',
+                [origin('/page','public',cache='public, max-age=0, s-maxage=86400, stale-while-revalidate=86400')],
+                [get('/page','public',cache='MISS'),'expect resp.http.X-Test-Final-TTL == "'+str(seconds)+'.000"',
+                 get('/page','public',cache='HIT')],ttl=cap,observe_ttl=True)
+        self.run_policy('ultracache',[origin('/short','short',cache='public, s-maxage=60')],
+            [get('/short','short',cache='MISS'),'expect resp.http.X-Test-Final-TTL == "60.000"'],ttl=300,observe_ttl=True)
+    def test_cookie_free_warmup_reuses_public_html_with_tracking_and_consent_cookies(self):
+        self.run_policy('ultracache',[origin('/page','shared',headers=['Vary: Accept-Encoding'],expect=['expect req.http.Cookie == <undef>'])],
+            [get('/page','shared',cache='MISS'),get('/page','shared',['Cookie: _ga=first; consent=yes'],cache='HIT'),
+             get('/page','shared',['Cookie: _ga=second; consent=no'],cache='HIT')],ttl=0)
+    def test_real_cookie_vary_still_separates_origin_responses(self):
+        self.run_policy('ultracache',[origin('/page','A',['Vary: Cookie']),origin('/page','B',['Vary: Cookie'])],
+            [get('/page','A',['Cookie: audience=A'],cache='MISS'),get('/page','B',['Cookie: audience=B'],cache='MISS'),
+             get('/page','A',['Cookie: audience=A'],cache='HIT')],ttl=0)
+    def test_accept_variants_and_exact_purge_preserve_other_urls_and_accounts(self):
+        accepts=(None,'text/html','application/xhtml+xml,text/html;q=0.9','application/json','application/xml','text/html;q=0,application/json')
+        headers=lambda a:[] if a is None else ['Accept: '+a]
+        responses=[origin('/page','variant-'+str(i),['Vary: Accept'],expect=['expect req.http.Accept == '+('<undef>' if a is None else json.dumps(a))]) for i,a in enumerate(accepts)]
+        responses += [origin('/control','control'),origin('/page','other')]
+        responses += [origin('/page','refreshed-'+str(i),['Vary: Accept']) for i in range(len(accepts))]
+        requests=[get('/page','variant-'+str(i),headers(a),cache='MISS') for i,a in enumerate(accepts)]
+        requests += [get('/page','variant-'+str(i),headers(a),cache='HIT') for i,a in enumerate(accepts)]
+        requests += [get('/control','control'),get('/page','other',host='other.test'),
+            control('/page',headers=['X-UltraCache-Contract: 2','X-UltraCache-Operation: exact-purge']),
+            get('/control','control',cache='HIT'),get('/page','other',host='other.test',cache='HIT')]
+        requests += [get('/page','refreshed-'+str(i),headers(a),cache='MISS') for i,a in enumerate(accepts)]
+        self.run_policy('ultracache',responses,requests,ttl=0)
+    def test_gzip_q_zero_gets_identity_from_the_same_compressed_object(self):
+        compressed=origin('/page','identity',['Vary: Accept-Encoding','Content-Encoding: gzip'],expect=['expect req.http.Accept-Encoding == "gzip"']).replace('-body {identity}','-gzipbody {identity}')
+        self.run_policy('ultracache',[compressed],
+            [get('/page',None,['Accept-Encoding: gzip'],cache='MISS'),'expect resp.http.Content-Encoding == "gzip"',
+             get('/page','identity',['Accept-Encoding: gzip;q=0, br'],cache='HIT'),'expect resp.http.Content-Encoding == <undef>',
+             get('/page','identity',cache='HIT')],ttl=0)
+    def test_json_and_xml_origin_responses_are_not_cached_as_html(self):
+        responses=[];requests=[]
+        for mime in ('application/json','application/xml'):
+            for body in ('first','second'):
+                responses.append(origin('/data',body,['Vary: Accept']).replace('Content-Type: text/html','Content-Type: '+mime))
+                requests.append(get('/data',body,['Accept: '+mime],cache='PASS'))
+        self.run_policy('ultracache',responses,requests,ttl=0)
     def test_plain_html_works_with_every_profile_without_a_wordpress_plugin(self):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public')],[get('/page','public',cache='MISS'),get('/page','public',cache='HIT')])

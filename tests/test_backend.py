@@ -69,7 +69,7 @@ class Boundaries(unittest.TestCase):
     def test_encoded_and_unicode_bypass_share_a_canonical_path(self):
         self.assertEqual(policy.paths(['/ιδιωτικό/','/%CE%B9%CE%B4%CE%B9%CF%89%CF%84%CE%B9%CE%BA%CF%8C/']),['/%CE%B9%CE%B4%CE%B9%CF%89%CF%84%CE%B9%CE%BA%CF%8C/'])
     def test_invalid_tokens_and_ttl_rejected(self):
-        for key,value in (('id','../x'),('token','short'),('ttl',True),('ttl',0),('ttl',2147483648)):
+        for key,value in (('id','../x'),('token','short'),('ttl',True),('ttl',-1),('ttl',2147483648)):
             a=site();a[key]=value
             with self.subTest(key=key,value=value),self.assertRaises(ValueError):policy.render({'a':a},'e'*64,'f'*64)
     def test_purge_scope_does_not_use_caller_expression(self):

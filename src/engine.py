@@ -25,9 +25,9 @@ def inventory(config):
     sites=native.collect()
     for sid,site in sites.items():
         previous=config.get('sites',{}).get(sid,{})
-        site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),ttl=previous.get('ttl',300),bypass=previous.get('bypass',[]))
-        site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
         site['profile']=profiles.name(previous.get('profile','basic' if sid in config.get('sites',{}) else profiles.default(config)))
+        site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),ttl=previous.get('ttl',0 if site['profile']=='ultracache' else 300),bypass=previous.get('bypass',[]))
+        site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
         site['browser_cache']=browser_cache.validate(previous['browser_cache']) if previous.get('browser_cache') is not None else None
     return sites
 
@@ -194,7 +194,7 @@ def action(request):
                     service.purge(site);return dict(message='Site cache cleared')
                 if operation=='configure':
                     if type(request.get('enabled')) is not bool:raise ValueError('Invalid enabled value')
-                    if type(request.get('ttl')) is not int or not 1<=request['ttl']<=2147483647:raise ValueError('Use a positive cache lifetime within the supported integer range')
+                    if type(request.get('ttl')) is not int or not 0<=request['ttl']<=2147483647:raise ValueError('Use zero for the origin cache policy or a positive maximum cache lifetime within the supported integer range')
                     if site['error'] and request['enabled']:raise ValueError(site['error'])
                     site.update(enabled=request['enabled'],ttl=request['ttl'],bypass=policy.paths(request.get('bypass',[])))
                     site['profile']=profiles.name(request.get('profile',site['profile']))

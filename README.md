@@ -25,7 +25,7 @@ Both Varnish manager and cache worker run as the dedicated `webuzo-varnish` syst
 
 **Show memory usage** reads an on-demand snapshot from the native counters of this Varnish instance: cache bytes used/free, configured budget, hits, misses and passes. Total service memory is shown separately because it includes connection and processing overhead in addition to stored objects.
 
-Only successful public HTML responses are eligible for caching. Authorization, write requests and private sessions bypass shared cache. Responses containing cookies, private/no-store/no-cache instructions, or errors are not cached. The per-site lifetime is an upper limit; shorter origin lifetimes remain effective unless an additional response VCL rule sets a different lifetime within that limit.
+Only successful public HTML responses are eligible for caching. Authorization, write requests and private sessions bypass shared cache. Responses containing cookies, private/no-store/no-cache instructions, or errors are not cached. **Use origin cache policy** keeps the site's response cache lifetime without an additional panel cap. New sites assigned the UltraCache profile use this mode by default. Alternatively, set a per-site maximum lifetime; shorter origin lifetimes remain effective unless an additional response VCL rule changes them within that limit. Existing saved lifetime settings remain unchanged.
 
 ## VCL profiles and new sites
 

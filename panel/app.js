@@ -91,17 +91,23 @@
       const profileCell = node('td'); profileCell.append(profile); row.append(profileCell);
       const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = site.enabled; enabled.setAttribute('aria-label', 'Enable Varnish for ' + site.domain);
       const enabledCell = node('td'); enabledCell.append(enabled); row.append(enabledCell);
-      const ttl = node('input'); ttl.type = 'number'; ttl.min = '1'; ttl.max = '2147483647'; ttl.value = site.ttl; ttl.setAttribute('aria-label', 'Maximum cache lifetime for ' + site.domain);
-      const ttlCell = node('td'); ttlCell.append(ttl, node('small', 'seconds')); row.append(ttlCell);
+      const originTtl = node('input'); originTtl.type = 'checkbox'; originTtl.checked = site.ttl === 0;
+      const originLabel = node('label', 'Use origin cache policy'); originLabel.prepend(originTtl);
+      const ttl = node('input'); ttl.type = 'number'; ttl.min = '1'; ttl.max = '2147483647'; ttl.value = site.ttl || 300; ttl.setAttribute('aria-label', 'Maximum cache lifetime for ' + site.domain);
+      const ttlLimit = node('div'); ttlLimit.append(ttl, node('small', 'Maximum seconds; shorter origin lifetimes still apply.'));
+      const ttlHint = node('small', 'Uses the site’s response cache lifetime without an additional panel cap. Private/no-store responses remain excluded.');
+      function ttlMode() { ttlLimit.hidden = originTtl.checked; ttlHint.hidden = !originTtl.checked; }
+      originTtl.addEventListener('change', ttlMode); ttlMode();
+      const ttlCell = node('td'); ttlCell.append(originLabel, ttlHint, ttlLimit); row.append(ttlCell);
       const bypass = node('textarea'); bypass.value = site.bypass.join('\n'); bypass.placeholder = '/private-area/\n/custom-checkout/'; bypass.setAttribute('aria-label', 'Additional bypass paths for ' + site.domain);
       const bypassCell = node('td'); bypassCell.append(bypass, node('small', 'URL prefixes, one per line.')); row.append(bypassCell);
       const cell = node('td'), actions = node('div'); actions.className = 'wvw-actions';
       const save = node('button', 'Save & Apply'); save.type = 'button'; save.className = 'wvw-primary';
-      save.addEventListener('click', () => call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, ttl: Number(ttl.value), bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value}));
+      save.addEventListener('click', () => call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, ttl: originTtl.checked ? 0 : Number(ttl.value), bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value}));
       const purge = node('button', 'Clear cache'); purge.type = 'button'; purge.dataset.unavailable = String(!snapshot.installed || !site.enabled ? 1 : 0);
       purge.addEventListener('click', () => call('purge', {id: site.id}));
       actions.append(save, purge); cell.append(actions); row.append(cell); body.append(row);
-      for (const el of [profile, enabled, ttl, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      for (const el of [profile, enabled, originTtl, ttl, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       const detailRow = node('tr'); detailRow.hidden = true; detailRow.dataset.detailsFor = site.id;
       const detailCell = node('td'); detailCell.colSpan = 6;
       const section = node('div'); section.className = 'wvw-site-details'; detailCell.append(section); detailRow.append(detailCell); body.append(detailRow);

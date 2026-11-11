@@ -69,7 +69,7 @@ sub vcl_recv {
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if site.get('error'):continue
         if not re.fullmatch('[0-9a-f]{32}',site['id']) or not re.fullmatch('[0-9a-f]{64}',site['token']):raise ValueError('Invalid site scope')
-        if type(site['ttl']) is not int or not 1<=site['ttl']<=2147483647:raise ValueError('Use a positive cache lifetime within the supported integer range')
+        if type(site['ttl']) is not int or not 0<=site['ttl']<=2147483647:raise ValueError('Use zero for the origin cache policy or a positive maximum cache lifetime within the supported integer range')
         for name in site['names']:
             native.hostname(name)
             if name in names:raise ValueError('Duplicate hostname scope')
@@ -198,7 +198,7 @@ sub vcl_backend_response {
  }
 ''')
     for site in sites.values():
-        if site.get('enabled') and not site.get('error'):
+        if site.get('enabled') and not site.get('error') and site['ttl']:
             text.append(' if (bereq.http.X-WV-Site == '+quoted(site['id'])+' && beresp.ttl > '+str(site['ttl'])+'s) { set beresp.ttl = '+str(site['ttl'])+'s; }')
     text.append(''' return (deliver);
 }

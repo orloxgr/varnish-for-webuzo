@@ -38,7 +38,7 @@
     </details>
   </section>
   <p>Choose a profile and enable Varnish for each site below. Open VCL &amp; connection in that site's row to view its profile rules, add site-specific rules or show its connection information.</p>
-  <div class="wvw-scroll"><table><thead><tr><th>Site / Account</th><th>Profile</th><th>Varnish</th><th>Maximum cache lifetime</th><th>Additional bypass paths</th><th>Actions</th></tr></thead><tbody id="wvw-sites"></tbody></table></div>
+  <div class="wvw-scroll"><table><thead><tr><th>Site / Account</th><th>Profile</th><th>Varnish</th><th>Cache lifetime</th><th>Additional bypass paths</th><th>Actions</th></tr></thead><tbody id="wvw-sites"></tbody></table></div>
   <p><button type="button" id="wvw-remove" hidden>Remove Varnish setup</button></p>
 </section>
 <script><?php require __DIR__ . '/app.js'; ?></script>
