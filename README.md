@@ -104,7 +104,7 @@ visitors' browsers. Replacing a versioned file requires a new URL.
 
 Open **VCL & connection** in the site's own row to view its selected profile VCL, edit additional site rules and access its connection details. **Save & Apply** checks the profile and additions with the native Varnish compiler before activating them. A successful site change invalidates only that site's cache; a rejected policy leaves the previous rules active.
 
-The site editor supports `if`/`else`, request `return (pass)`, `X-User-*` headers, response `ttl`/`grace`/`keep`, and `regsub`/`regsuball`. The rules run inside that site's scope. Imports, includes, inline C, backend selection, internal credentials and site identity are outside the editing scope. Private/cookie response checks and the site's maximum lifetime remain effective.
+The site editor supports `if`/`else`, request `return (pass)`, `X-User-*` headers, response `ttl`/`grace`/`keep`, and `regsub`/`regsuball`. The rules run inside that site's scope. Imports, includes, inline C, backend selection, internal credentials and site identity are outside the editing scope. Private/cookie response checks and any configured maximum lifetime remain effective.
 
 Request example:
 
