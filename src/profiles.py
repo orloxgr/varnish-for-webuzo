@@ -9,7 +9,7 @@ DESCRIPTIONS={
     'basic':'Conservative public HTML cache. All cookies and query strings bypass cache, along with common WordPress and shop private paths.',
     'wordpress':'WordPress public pages with login, dashboard, API, preview and session exclusions. Unrelated cookies do not bypass public pages.',
     'woocommerce':'WordPress rules plus cart, checkout, customer-account and WooCommerce action exclusions. Cart and session cookies bypass cache.',
-    'ultracache':'WordPress/WooCommerce policy with marketing-parameter normalization and origin-approved ESI. Private cart fragments require the request and response handshake; without approval they bypass cache.'}
+    'ultracache':'WordPress/WooCommerce policy with marketing-parameter normalization and origin-approved ESI or warmed async-cart parents. Private cart requests require opt-in and an approved shared object; cold misses remain uncached unless the ESI response handshake approves them.'}
 
 def name(value):
     if not isinstance(value,str) or value not in NAMES:raise ValueError('Choose Basic, WordPress, WooCommerce or UltraCache')

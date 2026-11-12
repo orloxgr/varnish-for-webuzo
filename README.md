@@ -36,7 +36,7 @@ Each site has one profile selected in its own row:
 | **Basic** | Conservative default: all cookies and query strings bypass cache, together with common WordPress and shop private paths. This retains the behavior of sites configured before named profiles were introduced. |
 | **WordPress** | Excludes login, dashboard, APIs, editors, previews and private/session cookies. Unrelated cookies can share public pages and remain available to the origin on a miss. |
 | **WooCommerce** | WordPress policy plus cart, checkout, customer-account and WooCommerce action exclusions. Cart/session cookies bypass cache. |
-| **UltraCache** | WordPress/WooCommerce policy with marketing-parameter normalization, origin-approved ESI and authenticated exact/batch/HTML/host/soft invalidation. A cart request can share an ESI parent only after the explicit request opt-in and origin response approval; its private fragments execute separately for each visitor. |
+| **UltraCache** | WordPress/WooCommerce policy with marketing-parameter normalization, origin-approved ESI and authenticated exact/batch/HTML/host/soft invalidation. With explicit request opt-in, cart/session requests may reuse an already cached, origin-approved async-cart parent; the browser fetches its private cart separately. Private cold misses remain uncached unless approved through the existing ESI handshake, which composes private fragments separately for each visitor. |
 
 **VCL profiles → Default for new sites** selects the profile assigned when a new site is first saved from the panel inventory. It starts as **Basic**. Changing this default does not change the profiles already assigned to existing sites or enable new sites automatically.
 

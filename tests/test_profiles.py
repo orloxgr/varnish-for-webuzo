@@ -192,6 +192,45 @@ class NativeProfiles(unittest.TestCase):
     def test_ultracache_without_origin_approval_does_not_share_cart_parent(self):
         self.run_policy('ultracache',[origin('/parent',body) for body in ('A','B')],
             [get('/parent',body,['Cookie: woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='PASS') for body in ('A','B')])
+    def test_warmed_async_parent_is_shared_but_private_cart_endpoints_stay_private(self):
+        cart='/?wc-ajax=get_refreshed_fragments'
+        self.run_policy('ultracache',
+            [origin('/parent','shared-async',['X-UltraCache-Woo-Async-Parent: 1']),
+             origin(cart,'cart-A'),origin(cart,'cart-B')],
+            [get('/parent','shared-async',cache='MISS'),
+             *[get('/parent','shared-async',['Cookie: wp_woocommerce_session_demo='+visitor+'; woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='HIT') for visitor in ('A','B')],
+             *[get(cart,'cart-'+visitor,['Cookie: wp_woocommerce_session_demo='+visitor+'; ultracache_esi_optin=1'],cache='PASS') for visitor in ('A','B')]],ttl=0)
+    def test_async_parent_marker_does_not_approve_a_private_cold_miss(self):
+        # Even a response marker cannot replace the private-miss ESI handshake.
+        self.run_policy('ultracache',
+            [origin('/parent',visitor,['X-UltraCache-Woo-Async-Parent: 1'],
+                    expect=['expect req.http.X-UltraCache-ESI-Candidate == "1"']) for visitor in ('A','B')],
+            [get('/parent',visitor,['Cookie: wp_woocommerce_session_demo='+visitor+'; ultracache_esi_optin=1'],cache='PASS') for visitor in ('A','B')],ttl=0)
+    def test_async_warmup_does_not_relax_login_no_optin_or_unapproved_object_guards(self):
+        cookie='wp_woocommerce_session_demo=A; ultracache_esi_optin=1'
+        self.run_policy('ultracache',
+            [origin('/parent','approved',['X-UltraCache-Woo-Async-Parent: 1']),
+             origin('/parent','logged-in'),origin('/parent','no-optin'),origin('/parent','postpass'),
+             origin('/unapproved','anonymous'),origin('/unapproved','private')],
+            [get('/parent','approved',cache='MISS'),
+             get('/parent','logged-in',['Cookie: '+cookie+'; wordpress_logged_in_demo=admin'],cache='PASS'),
+             get('/parent','no-optin',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),
+             get('/parent','postpass',['Cookie: '+cookie+'; wp-postpass_demo=secret'],cache='PASS'),
+             get('/parent','approved',['Cookie: '+cookie],cache='HIT'),
+             get('/unapproved','anonymous',cache='MISS'),
+             get('/unapproved','private',['Cookie: '+cookie,'X-UltraCache-Woo-Async-Parent: 1'],cache='PASS')],ttl=0)
+    def test_async_approval_never_overrides_origin_privacy_or_cookie_variation(self):
+        for extra,cache in [(['Set-Cookie: PHPSESSID=private'],'public, max-age=120'),
+                            ([], 'private, no-store'),(['Surrogate-Control: no-store'],'public, max-age=120')]:
+            with self.subTest(extra=extra,cache=cache):self.run_policy('ultracache',
+                [origin('/parent','anonymous',['X-UltraCache-Woo-Async-Parent: 1',*extra],cache=cache),
+                 origin('/parent','private',extra,cache=cache)],
+                [get('/parent','anonymous',cache='PASS'),
+                 get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')],ttl=0)
+        self.run_policy('ultracache',
+            [origin('/parent','anonymous',['X-UltraCache-Woo-Async-Parent: 1','Vary: Cookie']),origin('/parent','private')],
+            [get('/parent','anonymous',cache='MISS'),
+             get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')],ttl=0)
     def test_no_store_parent_cannot_be_approved_for_shared_esi(self):
         self.run_policy('ultracache',[origin('/parent',body,['Surrogate-Control: ESI/1.0, no-store','X-UltraCache-ESI-Shared-Parent: 1']) for body in ('A','B')],
             [get('/parent',body,['Cookie: woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='PASS') for body in ('A','B')])
