@@ -2,7 +2,7 @@
 <style><?php require __DIR__ . '/style.css'; ?></style>
 <section id="wvw" data-token="<?= $escape($csrf) ?>">
   <h2>Varnish Cache</h2>
-  <p>Serve images, styles and scripts with Nginx. Cache public pages with Varnish and send private requests to WordPress.</p>
+  <p>Serve existing images, styles and scripts with Nginx. Cache public responses with Varnish and send private requests to the application.</p>
   <div id="wvw-error" role="alert" hidden></div><div id="wvw-notice" role="status" hidden></div>
   <div class="wvw-toolbar"><strong id="wvw-status">Checking service…</strong><button type="button" id="wvw-install" hidden>Install &amp; set up Varnish</button><button type="button" id="wvw-start" hidden>Start Varnish</button><button type="button" id="wvw-refresh">Refresh sites</button></div>
   <section class="wvw-card" id="wvw-server" hidden>

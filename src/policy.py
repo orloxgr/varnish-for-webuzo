@@ -1,4 +1,4 @@
-"""Conservative HTML policy adapted from varnish-for-hestia's site boundaries."""
+"""Public HTTP cache policy with immutable account and private-state boundaries."""
 import json
 import re
 from urllib.parse import quote,unquote
@@ -151,7 +151,7 @@ sub wvw_cart_cookie_recv {
  }
 }
 sub vcl_hash {
- hash_data("webuzo-html-policy-v1");
+ hash_data("webuzo-http-policy-v1");
  if (req.http.X-WV-Profile != "basic") { hash_data(req.http.X-WV-Profile); }
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
  if (req.http.X-WV-Profile != "ultracache") { hash_data(req.http.X-Forwarded-Proto); }
@@ -190,7 +190,9 @@ sub vcl_backend_response {
  std.collect(beresp.http.Surrogate-Control);
  if (beresp.http.Surrogate-Control ~ "(?i)no-store") { call wvw_mark_uncacheable; }
  if (bereq.http.X-WV-Profile == "ultracache") { call wvw_ultracache_backend_response; }
- if (beresp.uncacheable || beresp.status != 200 || beresp.http.Content-Type !~ "(?i)^text/html(?:;|$)" ||
+ # Store complete public responses, not errors or standalone partial/304 bodies.
+ # Native conditional revalidation and range delivery from full objects still apply.
+ if (beresp.uncacheable || beresp.status < 200 || beresp.status >= 400 || beresp.status == 206 || beresp.status == 304 ||
      beresp.http.Set-Cookie || beresp.http.Vary == "*" || beresp.ttl <= 0s ||
      beresp.http.Cache-Control ~ "(?i)(private|no-store|no-cache)" || beresp.http.Pragma ~ "(?i)no-cache" ||
      beresp.http.Surrogate-Control ~ "(?i)no-store") {

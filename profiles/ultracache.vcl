@@ -271,7 +271,7 @@ unset bereq.http.X-UltraCache-ESI-Shared-Parent;
 sub wvw_ultracache_backend_response {
 # Use protocol as a secondary Vary key so normal exact PURGE still
 # removes every scheme/Accept/encoding variant in the same object head.
-if (beresp.http.Content-Type ~ "(?i)^text/html" && beresp.http.Vary != "*") {
+if (beresp.http.Vary != "*") {
     if (!beresp.http.Vary) {
         set beresp.http.Vary = "X-Forwarded-Proto";
     } else if (beresp.http.Vary !~ "(?i)(^|,)[[:blank:]]*X-Forwarded-Proto[[:blank:]]*(,|$)") {

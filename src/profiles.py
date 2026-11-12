@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]/'profiles'
 NAMES=('basic','wordpress','woocommerce','ultracache')
 LABELS={'basic':'Basic','wordpress':'WordPress','woocommerce':'WooCommerce','ultracache':'UltraCache'}
 DESCRIPTIONS={
-    'basic':'Conservative public HTML cache. All cookies and query strings bypass cache, along with common WordPress and shop private paths.',
+    'basic':'General public HTTP cache. Unknown cookies reach the origin and query strings remain in the cache key. Authentication, private sessions and origin privacy instructions bypass shared caching.',
     'wordpress':'WordPress public pages with login, dashboard, API, preview and session exclusions. Unrelated cookies do not bypass public pages.',
     'woocommerce':'WordPress rules plus cart, checkout, customer-account and WooCommerce action exclusions. Cart and session cookies bypass cache.',
     'ultracache':'WordPress/WooCommerce policy with marketing-parameter normalization and origin-approved ESI or warmed async-cart parents. Private cart requests require opt-in and an approved shared object; cold misses remain uncached unless the ESI response handshake approves them.'}

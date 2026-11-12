@@ -1,6 +1,6 @@
 # Varnish for Webuzo
 
-Cache public WordPress pages with Varnish while Nginx handles HTTPS and serves public images, styles, scripts and fonts directly. Cache misses and private requests go to the site's native Apache/PHP backend.
+Cache public HTTP responses with Varnish while Nginx handles HTTPS and serves existing public images, styles, scripts and fonts directly. Application profiles add WordPress and WooCommerce integration. Cache misses and private requests go to the site's native Apache/PHP backend.
 
 ## Installation
 
@@ -25,7 +25,7 @@ Both Varnish manager and cache worker run as the dedicated `webuzo-varnish` syst
 
 **Show memory usage** reads an on-demand snapshot from the native counters of this Varnish instance: cache bytes used/free, configured budget, hits, misses and passes. Total service memory is shown separately because it includes connection and processing overhead in addition to stored objects.
 
-Only successful public HTML responses are eligible for caching. Authorization, write requests and private sessions bypass shared cache. Responses containing cookies, private/no-store/no-cache instructions, or errors are not cached. **Use origin cache policy** keeps the site's response cache lifetime without an additional panel cap. New sites assigned the UltraCache profile use this mode by default. Alternatively, set a per-site maximum lifetime; shorter origin lifetimes remain effective unless an additional response VCL rule changes them within that limit. Existing saved lifetime settings remain unchanged.
+Public responses with a positive cache lifetime are eligible regardless of content type, including HTML, CSS, JavaScript, JSON and redirects. Unknown request cookies reach the origin; functional query strings remain in the cache key and declared `Vary` fields keep representations separate. Authorization, write requests and known private sessions bypass shared cache. Responses with `Set-Cookie`, private/no-store/no-cache instructions, errors or standalone partial/304 bodies are not stored; normal conditional and range delivery from complete cached objects remain available. **Use origin cache policy** keeps the site's response cache lifetime without an additional panel cap. New sites assigned the UltraCache profile use this mode by default. Alternatively, set a per-site maximum lifetime; shorter origin lifetimes remain effective unless an additional response VCL rule changes them within that limit. Existing saved lifetime settings remain unchanged.
 
 ## VCL profiles and new sites
 
@@ -33,7 +33,7 @@ Each site has one profile selected in its own row:
 
 | Profile | Behavior |
 | --- | --- |
-| **Basic** | Conservative default: all cookies and query strings bypass cache, together with common WordPress and shop private paths. This retains the behavior of sites configured before named profiles were introduced. |
+| **Basic** | General public HTTP cache without application-specific route assumptions. Unknown cookies and query strings do not cause bypasses. Authentication, known private sessions and origin privacy instructions remain protected. |
 | **WordPress** | Excludes login, dashboard, APIs, editors, previews and private/session cookies. Unrelated cookies can share public pages and remain available to the origin on a miss. |
 | **WooCommerce** | WordPress policy plus cart, checkout, customer-account and WooCommerce action exclusions. Cart/session cookies bypass cache. |
 | **UltraCache** | WordPress/WooCommerce policy with marketing-parameter normalization, origin-approved ESI and authenticated exact/batch/HTML/host/soft invalidation. With explicit request opt-in, cart/session requests may reuse an already cached, origin-approved async-cart parent; the browser fetches its private cart separately. Private cold misses remain uncached unless approved through the existing ESI handshake, which composes private fragments separately for each visitor. |

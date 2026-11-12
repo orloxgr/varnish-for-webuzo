@@ -27,9 +27,9 @@ def program(profile='basic',config=None,ttl=300):
     # Unix socket; exercise its authenticated branch with the isolated client.
     return source.replace('local.socket != "public"','client.ip != "127.0.0.1"').replace('local.socket == "public"','client.ip == "127.0.0.1"')
 
-def origin(path,body,headers=(),expect=(),status=200,cache='public, max-age=120'):
+def origin(path,body,headers=(),expect=(),status=200,cache='public, max-age=120',mime='text/html'):
     return '\n'.join(['accept','rxreq','expect req.url == '+json.dumps(path),*expect,
-        'txresp -status '+str(status)+' -hdr "Connection: close" -hdr "Content-Type: text/html" -hdr '+json.dumps('Cache-Control: '+cache)+' '+
+        'txresp -status '+str(status)+' -hdr "Connection: close" -hdr '+json.dumps('Content-Type: '+mime)+' -hdr '+json.dumps('Cache-Control: '+cache)+' '+
         ' '.join('-hdr {'+h+'}' for h in headers)+' -body {'+body+'}'])
 
 def get(path,body,headers=(),cache=None,host='example.test',method='GET',status=200):
@@ -116,23 +116,85 @@ class NativeProfiles(unittest.TestCase):
             [get('/page',None,['Accept-Encoding: gzip'],cache='MISS'),'expect resp.http.Content-Encoding == "gzip"',
              get('/page','identity',['Accept-Encoding: gzip;q=0, br'],cache='HIT'),'expect resp.http.Content-Encoding == <undef>',
              get('/page','identity',cache='HIT')],ttl=0)
-    def test_json_and_xml_origin_responses_are_not_cached_as_html(self):
+    def test_json_and_xml_origin_responses_keep_their_own_cacheable_representations(self):
         responses=[];requests=[]
         for mime in ('application/json','application/xml'):
-            for body in ('first','second'):
-                responses.append(origin('/data',body,['Vary: Accept']).replace('Content-Type: text/html','Content-Type: '+mime))
-                requests.append(get('/data',body,['Accept: '+mime],cache='PASS'))
+            body='public-'+mime
+            responses.append(origin('/data',body,['Vary: Accept'],mime=mime))
+            requests.extend([get('/data',body,['Accept: '+mime],cache='MISS'),get('/data',body,['Accept: '+mime],cache='HIT')])
         self.run_policy('ultracache',responses,requests,ttl=0)
     def test_plain_html_works_with_every_profile_without_a_wordpress_plugin(self):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public')],[get('/page','public',cache='MISS'),get('/page','public',cache='HIT')])
-    def test_basic_preserves_conservative_cookie_and_query_bypass(self):
-        self.run_policy('basic',[origin('/page','A'),origin('/page','B'),origin('/page?q=1','C'),origin('/page?q=1','D')],
-            [get('/page','A',['Cookie: unknown_vendor=A'],cache='PASS'),get('/page','B',['Cookie: unknown_vendor=B'],cache='PASS'),get('/page?q=1','C',cache='PASS'),get('/page?q=1','D',cache='PASS')])
+    def test_basic_preserves_functional_queries_and_does_not_assume_cart_is_a_shop(self):
+        responses=[];requests=[]
+        for path,body in [('/page?q=1','first-result'),('/page?q=2','second-result'),('/cart/','generic-directory')]:
+            responses.append(origin(path,body,expect=['expect req.http.Cookie == "unknown_vendor=A"']))
+            requests.extend([get(path,body,['Cookie: unknown_vendor=A'],cache='MISS'),get(path,body,['Cookie: unknown_vendor=B'],cache='HIT')])
+        self.run_policy('basic',responses,requests)
     def test_wordpress_and_shop_profiles_keep_tracking_cookies_but_share_public_html(self):
-        for profile in ('wordpress','woocommerce','ultracache'):
+        for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public',expect=['expect req.http.Cookie == "unknown_vendor=A"'])],
                 [get('/page','public',['Cookie: unknown_vendor=A'],cache='MISS'),get('/page','public',['Cookie: unknown_vendor=B'],cache='HIT')])
+    def test_public_content_types_are_cacheable_with_unknown_cookies_and_queries(self):
+        for profile in profiles.NAMES:
+            responses=[];requests=[]
+            for kind,mime in [('css','text/css'),('js','application/javascript'),('json','application/json'),('xml','application/xml'),('binary','application/octet-stream')]:
+                path='/public?format='+kind;body='public-'+kind
+                responses.append(origin(path,body,mime=mime,expect=['expect req.http.Cookie == "unknown_vendor=A"']))
+                requests.extend([get(path,body,['Cookie: unknown_vendor=A'],cache='MISS'),
+                                 get(path,body,['Cookie: unknown_vendor=B'],cache='HIT')])
+            with self.subTest(profile=profile):self.run_policy(profile,responses,requests)
+    def test_basic_keeps_genuine_cookie_variation_and_authenticated_requests_private(self):
+        self.run_policy('basic',
+            [origin('/data','A',['Vary: Cookie'],mime='application/json'),
+             origin('/data','B',['Vary: Cookie'],mime='application/json'),
+             origin('/data','authenticated',mime='application/json')],
+            [get('/data','A',['Cookie: audience=A'],cache='MISS'),
+             get('/data','B',['Cookie: audience=B'],cache='MISS'),
+             get('/data','authenticated',['Cookie: audience=A','Authorization: Bearer fixture'],cache='PASS'),
+             get('/data','A',['Cookie: audience=A'],cache='HIT')])
+    def test_public_redirects_and_other_success_responses_can_hit(self):
+        responses=[];requests=[]
+        for status in (203,204,300,301,302,307):
+            path='/status-'+str(status);body='' if status==204 else 'public-'+str(status)
+            headers=['Location: /public-target'] if status>=300 else []
+            responses.append(origin(path,body,headers,status=status))
+            requests.extend([get(path,body,cache='MISS',status=status),get(path,body,cache='HIT',status=status)])
+        self.run_policy('basic',responses,requests)
+    def test_non_html_privacy_errors_and_response_cookies_are_not_shared(self):
+        cases=[('/private',[],200,'private, no-store'),('/nocache',[],200,'public, no-cache'),
+               ('/cookie',['Set-Cookie: PHPSESSID=private'],200,'public, max-age=120'),
+               ('/vary-star',['Vary: *'],200,'public, max-age=120'),
+               ('/missing',[],404,'public, max-age=120'),('/error',[],500,'public, max-age=120'),
+               # Native Varnish does not assign a TTL to 308, even with max-age.
+               ('/native-308',['Location: /public-target'],308,'public, max-age=120')]
+        responses=[];requests=[]
+        for path,headers,status,cache in cases:
+            for visitor in ('A','B'):
+                responses.append(origin(path,visitor,headers,status=status,cache=cache,mime='application/json'))
+                requests.append(get(path,visitor,['Cookie: unknown_vendor='+visitor],cache='PASS',status=status))
+        self.run_policy('basic',responses,requests)
+    def test_unexpected_origin_partial_does_not_poison_full_range_or_conditional_delivery(self):
+        self.run_policy('basic',
+            [origin('/file','part',['Content-Range: bytes 0-3/8'],status=206,mime='application/octet-stream'),
+             origin('/file','complete',['ETag: "public-file"'],mime='application/octet-stream')],
+            # A 206 Content-Range without an origin Range request is rejected
+            # by native Varnish. It must never become the stored full response.
+            [get('/file',None,cache='PASS',status=503),get('/file','complete',cache='MISS'),
+             get('/file','comp',['Range: bytes=0-3'],cache='HIT',status=206),
+             get('/file',None,['If-None-Match: "public-file"'],cache='HIT',status=304),
+             get('/file','complete',cache='HIT')])
+    def test_non_html_scheme_variants_are_purged_without_clearing_other_urls(self):
+        self.run_policy('ultracache',
+            [origin('/data','plain',mime='application/json'),origin('/data','secure',mime='application/json'),
+             origin('/control','control',mime='application/json'),origin('/data','new',mime='application/json')],
+            [get('/data','plain',['X-Forwarded-Proto: http'],cache='MISS'),
+             get('/data','secure',['X-Forwarded-Proto: https'],cache='MISS'),
+             get('/data','plain',['X-Forwarded-Proto: http'],cache='HIT'),
+             get('/data','secure',['X-Forwarded-Proto: https'],cache='HIT'),get('/control','control'),
+             control('/data'),get('/control','control',cache='HIT'),
+             get('/data','new',['X-Forwarded-Proto: https'],cache='MISS')])
     def test_private_sessions_and_duplicate_cookie_headers_never_reuse_public_objects(self):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public'),origin('/page','A'),origin('/page','B')],
