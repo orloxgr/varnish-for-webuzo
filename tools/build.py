@@ -7,6 +7,12 @@ import re
 from pathlib import Path
 import zipfile
 ROOT=Path(__file__).resolve().parents[1]
+def source_bytes(path):
+    raw=path.read_bytes()
+    if path.suffix.lower() in ('.py','.php','.js','.css','.vcl','.md','.json','.txt','.conf') or path.name in ('LICENSE','UPSTREAM'):
+        return raw.replace(b'\r\n',b'\n')
+    return raw
+
 def package_version():
     version=json.loads((ROOT/'info.json').read_text(encoding='utf-8'))['version']
     header=(ROOT/'varnish-for-webuzo.php').read_text(encoding='utf-8').split('*/',1)[0]
@@ -27,7 +33,7 @@ def build():
         for path in sorted(paths):
             if path.is_symlink():raise ValueError('Source links cannot be distributed')
             item=zipfile.ZipInfo('varnish-for-webuzo/'+path.relative_to(ROOT).as_posix(),stamp)
-            item.external_attr=0o100644<<16;item.compress_type=zipfile.ZIP_DEFLATED;archive.writestr(item,path.read_bytes())
+            item.external_attr=0o100644<<16;item.compress_type=zipfile.ZIP_DEFLATED;archive.writestr(item,source_bytes(path))
     digest=hashlib.sha256(target.read_bytes()).hexdigest()
     (target.parent/'SHA256SUMS').write_text(digest+'  '+target.name+'\n')
     print(target.name,digest)
