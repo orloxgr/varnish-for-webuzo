@@ -34,7 +34,7 @@ def check(value,label):
     if not value:raise AssertionError(label)
     report.append(label)
 def assign(site,profile):
-    return call('configure',id=site['id'],profile=profile,enabled=site['enabled'],ttl=site['ttl'],bypass=site['bypass'])
+    return call('configure',id=site['id'],profile=profile,enabled=site['enabled'],bypass=site['bypass'])
 def request(site,suffix,headers=None,method='GET'):
     conn=http.client.HTTPConnection(args.address,timeout=20)
     conn.request(method,prefix+suffix+'.php',headers={'Host':site['domain'],**(headers or {})})
@@ -68,7 +68,7 @@ try:
         assign(first,profile);call('purge',id=first['id'])
         a,b=request(first,'public',{'Cookie':'unknown_vendor=A'}),request(first,'public',{'Cookie':'unknown_vendor=B'})
         check(a[0]==b[0]==200 and b[1].get('x-webuzo-varnish-profile')==profile,'Selected native profile '+profile)
-        check((a[2]!=b[2] and b[1].get('x-webuzo-varnish')=='PASS') if profile=='basic' else (a[2]==b[2] and b[1].get('x-webuzo-varnish')=='HIT'),'Cookie behavior '+profile)
+        check(a[2]==b[2] and b[1].get('x-webuzo-varnish')=='HIT','Cookie behavior '+profile)
         a,b=request(first,'public',{'Cookie':'PHPSESSID=A'}),request(first,'public',{'Cookie':'PHPSESSID=B'})
         check(a[2]!=b[2] and b[1].get('x-webuzo-varnish')=='PASS','Private session bypass '+profile)
         other=request(second,'public');check(other[1].get('x-webuzo-varnish')=='HIT' and other[2]==second_before,'Profile change preserves other account '+profile)
@@ -78,9 +78,9 @@ try:
     assign(second,'ultracache')
     check(capability(first,second['domain'])[0]==403,'UltraCache token cannot control another account')
     check(request(first,'public',{'X-UltraCache-Token':first['token']},method='PURGE')[0]==403,'Nginx rejects public token-based control')
-    assign(first,'basic');assign(second,'wordpress');first_before=warm(first,'public')[2];second_before=warm(second,'public')[2]
-    call('defaults',profile='woocommerce')
-    current=engine.settings();check(current['sites'][first['id']]['profile']=='basic' and current['sites'][second['id']]['profile']=='wordpress','Changing default preserves existing site profiles')
+    assign(first,'basic');assign(second,'ultracache');first_before=warm(first,'public')[2];second_before=warm(second,'public')[2]
+    call('defaults',profile='ultracache')
+    current=engine.settings();check(current['sites'][first['id']]['profile']=='basic' and current['sites'][second['id']]['profile']=='ultracache','Changing default preserves existing site profiles')
     check(request(first,'public')[2]==first_before and request(second,'public')[2]==second_before,'Changing default preserves warm existing sites')
     call('profile_rules',profile='basic',recv_vcl='',backend_vcl='set beresp.http.X-User-Central = "basic-template";')
     a=request(first,'public');check(a[1].get('x-webuzo-varnish')=='MISS' and a[1].get('x-user-central')=='basic-template','Central Basic template applied to its sites')

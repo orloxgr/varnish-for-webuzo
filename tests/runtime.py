@@ -14,7 +14,7 @@ import engine,service
 config=engine.settings()
 sites=[next(s for s in config['sites'].values() if s['domain']==name) for name in args.sites]
 if len({s['uid'] for s in sites})!=2 or any(not s['enabled'] or s['error'] for s in sites):parser.error('Select two enabled, separate hosting accounts')
-original={s['id']:dict(enabled=s['enabled'],ttl=s['ttl'],bypass=list(s['bypass'])) for s in sites}
+original={s['id']:dict(enabled=s['enabled'],bypass=list(s['bypass'])) for s in sites}
 nonce=secrets.token_hex(8);prefix='wvw-'+nonce
 expected_source=[None]
 report={};created=[]
@@ -80,7 +80,7 @@ try:
   check(a[1].get('x-webuzo-varnish')=='MISS' and a[2]!=before[first['id']][port],'purge clears scheme '+str(port))
   check(request(second,'/'+prefix+'-public.php',port=port)[2]==before[second['id']][port],'purge preserves other account '+str(port))
  # Administrator bypasses must apply to static assets as well as HTML.
- engine.action(dict(actor='root',admin=True,action='configure',id=first['id'],enabled=True,ttl=300,bypass=['/'+prefix+'-protected']))
+ engine.action(dict(actor='root',admin=True,action='configure',id=first['id'],enabled=True,bypass=['/'+prefix+'-protected']))
  time.sleep(.2)
  check(request(first,'/'+prefix+'-protected.css')[1].get('x-webuzo-varnish')=='PASS','configured static bypass reaches application')
  # Service failure: static assets stay native; GET/HEAD fall back; writes are not replayed.

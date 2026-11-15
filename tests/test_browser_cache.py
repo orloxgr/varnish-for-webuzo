@@ -36,7 +36,7 @@ class BrowserPolicies(unittest.TestCase):
         choice['enabled']=False
         self.assertFalse(browser_cache.selected(first,{})['enabled'])
         self.assertNotIn('immutable',browser_cache.maps({first['id']:first},{}))
-        first['profile']='wordpress'
+        first['profile']='basic'
         self.assertEqual(browser_cache.selected(first,{})['versioned_paths'],['/assets/app-{hash}.js'])
         first.update(profile='ultracache',browser_cache=None)
         inherited=browser_cache.selected(first,dict(browser_cache=choice))
@@ -158,7 +158,7 @@ class NativeBrowserHeaders(unittest.TestCase):
                 # bundle without writing a site override or changing lifetimes.
                 path='/wp-content/uploads/ultracache/css-bundles/bundle-aggressive-'+('b'*32)+'.css'
                 asset=root/path[1:];asset.parent.mkdir(parents=True);asset.write_text('body {color:blue}')
-                for profile,expected in [('ultracache',immutable),('wordpress',ordinary)]:
+                for profile,expected in [('ultracache',immutable),('basic',ordinary)]:
                     first['profile']=profile;configure(choice)
                     subprocess.run([str(native.NGINX),'-p',str(root),'-c',str(root/'nginx.conf'),'-s','reload'],check=True,capture_output=True)
                     for _ in range(100):

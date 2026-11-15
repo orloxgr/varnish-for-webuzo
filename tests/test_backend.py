@@ -25,7 +25,7 @@ import base64
 import hashlib
 import io
 
-def site():return dict(id='a'*32,domain='example.test',names=['example.test','www.example.test'],enabled=True,error='',token='b'*64,ttl=300,bypass=[])
+def site():return dict(id='a'*32,domain='example.test',names=['example.test','www.example.test'],enabled=True,error='',token='b'*64,bypass=[])
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Disposable Linux/root tests')
 class Boundaries(unittest.TestCase):
@@ -39,7 +39,8 @@ class Boundaries(unittest.TestCase):
             patch.object(native,'APACHE_CUSTOM',self.base/'apache'),patch.object(service,'ACTIVE',self.config/'active.vcl')]
         self.patches += [patch.object(repository,'RECORD',self.root/'repository.json'),patch.object(repository,'KEY',self.config/'repo.gpg'),
             patch.object(repository,'SOURCE',self.config/'repo.list'),patch.object(repository,'PIN',self.config/'repo.pin')]
-        self.patches += [patch.object(native,'proxy_timeouts',return_value=dict(connect=300000,read=300000,send=300000))]
+        self.patches += [patch.object(native,'proxy_timeouts',return_value=dict(connect=300000,read=300000,send=300000)),
+            patch.object(repository,'architecture',return_value='amd64'),patch.object(repository,'verify_release')]
         for p in self.patches:p.start()
     def tearDown(self):
         for p in reversed(self.patches):p.stop()
@@ -68,8 +69,8 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(policy.paths(['/x.*','/x";return(synth(200));']),['/x.%2A','/x%22%3Breturn%28synth%28200%29%29%3B'])
     def test_encoded_and_unicode_bypass_share_a_canonical_path(self):
         self.assertEqual(policy.paths(['/ιδιωτικό/','/%CE%B9%CE%B4%CE%B9%CF%89%CF%84%CE%B9%CE%BA%CF%8C/']),['/%CE%B9%CE%B4%CE%B9%CF%89%CF%84%CE%B9%CE%BA%CF%8C/'])
-    def test_invalid_tokens_and_ttl_rejected(self):
-        for key,value in (('id','../x'),('token','short'),('ttl',True),('ttl',-1),('ttl',2147483648)):
+    def test_invalid_scope_tokens_rejected(self):
+        for key,value in (('id','../x'),('token','short')):
             a=site();a[key]=value
             with self.subTest(key=key,value=value),self.assertRaises(ValueError):policy.render({'a':a},'e'*64,'f'*64)
     def test_purge_scope_does_not_use_caller_expression(self):
@@ -158,7 +159,7 @@ class Boundaries(unittest.TestCase):
         key=self.repository_record();repository.SOURCE.write_text('# independent source\n')
         with patch.object(repository,'release',return_value='noble'),patch.object(repository.urllib.request,'urlopen') as download:repository.setup()
         download.assert_not_called();self.assertEqual(repository.KEY.read_bytes(),key)
-        self.assertEqual(repository.SOURCE.read_text(),'# independent source\n');self.assertEqual(repository.PIN.read_text(),repository.PIN_TEXT)
+        self.assertEqual(repository.SOURCE.read_text(),'# independent source\n');self.assertFalse(repository.PIN.exists())
     def test_nginx_failure_restores_previous_policy_and_files(self):
         path=self.custom/'global.conf';path.write_text('previous\n');service.ACTIVE.write_text('old VCL')
         previous=dict(installed=True,sites={},manifest={});desired=dict(previous,gateway='e'*64,origin='f'*64)

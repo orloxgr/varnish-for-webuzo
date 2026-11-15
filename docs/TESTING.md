@@ -1,5 +1,95 @@
 # Verification
 
+## 0.4.3 — 15 November 2026
+
+The shared HTTP policy is byte-identical in Webuzo and Hestia. The common
+native suite completes all 56 runs in both integrations using the same policy,
+cases and runner. The explicit development comparison verifies identical report
+contents and full case coverage, not only matching source files.
+
+- Shared policy SHA-256: `7cea910fa4e05a4d874fb01f8ca51c28fe1e56d1af503ce219d0bc8d529edefb`.
+- Shared cases SHA-256: `38bb8fd00002b6d81aae491072df3eb12bea93fb5ebd130fca4ec2dde11be797`.
+- Webuzo full suite: 146 tests passed in 154.027 seconds.
+- Hestia full suite: 143 tests passed in 206.169 seconds, reported by that integration and paired with its identical native parity report.
+- Generated isolated Nginx/Varnish/origin chain: both presets passed, including
+  tracking URL/Cookie HIT, complete origin URL/Cookie preservation and real
+  functional Cookie variation. PHP lint and Python compilation passed.
+
+The common suite covers tracking/analytics reuse, functional query and Cookie
+variation, static HTML locale isolation, browser/warmup Accept/q=0, dynamic
+Accept OWS and quoted parameters, absent/empty headers, native processing of a
+large Accept header, exact/soft/batch invalidation with canonical metadata,
+HTTP/HTTPS and host scope, WordPress subdirectories, private login/cart/ESI
+bodies, public ESI fragment reuse and query values containing private path or
+tracking-like text. The large-header case raises native test-instance parsing
+allowances; the installed services' limits are not changed.
+
+Neither the production server nor the installed Webuzo VM plugin was changed.
+The native Webuzo ZIP-upgrade/panel test remains unavailable due to the lab
+license. Runtime/installer operation never requires another repository, report
+or remote policy checksum.
+
+## 0.4.2 — 15 November 2026
+
+All 146 backend/native-Varnish tests pass (145.480 seconds). The isolated
+generated Nginx/Varnish/origin runner passes for both presets, and the panel
+entrypoint passes PHP lint.
+
+Repository selection tests cover release/architecture and candidate origin,
+resumable owned-source changes from noble to resolute, independent source
+preservation, modified-file refusal and unavailable/invalid signed metadata.
+Actual official InRelease signatures were verified with gpgv for noble and
+resolute, for their amd64 and arm64 package indexes. Isolated APT indexes selected
+9.1.0-2~noble and 9.1.0-2~resolute. The noble install simulation required no package
+changes. The installed Varnish compiled the generated policy successfully.
+These checks did not change installed APT sources or packages. They are not
+a completed Ubuntu 24.04-to-26.04 OS upgrade or an ARM service deployment.
+
+Native Varnish tests verify configurable uncacheable_ttl=37, grace=41 and keep=23
+without addon overrides, public 404/410 MISS then HIT, native 500/503 PASS,
+explicit administrator TTLs for public errors, private error isolation, and
+per-visitor Set-Cookie without rewriting ordinary origin Cache-Control.
+
+## 0.4.1 — 15 November 2026
+
+All 126 backend/native-Varnish tests pass. The Chromium panel fixture confirms
+five site columns, no lifetime controls, and no TTL field in Save requests.
+The lifetime-cap regression checks run the generated VCL with obsolete saved
+300-second cap values and confirm that both presets retain an origin s-maxage
+of 86400 seconds and stale-while-revalidate of 60 seconds. A separate real
+Varnish sequence expires a one-second object, delivers the old body immediately
+as HIT within the origin grace window, refreshes it in the background, and
+then delivers the new body as HIT. Inventory reads do not migrate saved state.
+The panel no longer has a lifetime cap input or an origin-policy checkbox.
+
+## 0.4.0 — 15 November 2026
+
+The full backend suite passes 125 tests on Linux with native Varnish 9.1,
+including the two presets, public REST/search/AJAX/referral reuse, campaign-key
+invalidation, Accept negotiation and q=0, real Cookie variations, private
+sessions, two-visitor ESI fragments and scoped purge. Eight PHP panel rejection
+checks also pass. Python 3.9 syntax and panel JavaScript syntax checks pass.
+
+The isolated generated Nginx → Varnish → HTTP-origin runner exercises both
+presets without changing the installed Webuzo services or configuration. It
+verifies warmup/browser Accept reuse, tracking-cookie reuse, authenticated body
+separation and public REST/search/referral AJAX HITs. An actual Chromium run
+starts with a warmed page, hovers to create a tracking cookie, refreshes and
+retains HIT in both presets. Separate browser contexts receive their own
+personal response with PASS. Fixtures are synthetic HTTP application responses.
+
+Native panel ZIP upgrade and native inventory integration remain unverified for
+this version: the disposable Webuzo panel reports an expired license, including
+after its official license refresh. Its installed plugin was not upgraded.
+
+Run the isolated generated chain on a disposable Linux machine:
+
+```sh
+python3 tests/presets_runtime.py --disposable
+```
+
+## Earlier verification
+
 Verified on 7 November 2026 with Ubuntu 24.04, Webuzo 4.9.1, Varnish 9.1 LTS, Apache/PHP-FPM, WordPress and WooCommerce.
 
 On 8 November 2026, the backend suite and actual WooCommerce session regression
@@ -136,7 +226,7 @@ Settings integration checks use the same two disposable sites. They create tempo
 python3 tests/settings_runtime.py --disposable --address TEST_SERVER_IP --sites first.example.test second.example.test
 ```
 
-Profile integration checks exercise all four policies through native Nginx → Varnish → Apache/PHP, including private ESI fragments, central Basic edits, defaults, purge authentication and account isolation. They restore the original profiles/defaults and remove their temporary PHP fixtures:
+Profile integration checks exercise both presets through native Nginx → Varnish → Apache/PHP, including private ESI fragments, central Basic edits, defaults, purge authentication and account isolation. They restore the original profiles/defaults and remove their temporary PHP fixtures:
 
 ```sh
 python3 tests/profiles_runtime.py --disposable --address TEST_SERVER_IP --sites first.example.test second.example.test

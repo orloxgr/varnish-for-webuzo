@@ -1,23 +1,26 @@
-"""Four named, addon-owned policies and central site-template additions."""
+"""Two presets over one application policy and central site-template additions."""
 from pathlib import Path
 import fragments
 
 ROOT=Path(__file__).resolve().parents[1]/'profiles'
-NAMES=('basic','wordpress','woocommerce','ultracache')
-LABELS={'basic':'Basic','wordpress':'WordPress','woocommerce':'WooCommerce','ultracache':'UltraCache'}
+SHARED=ROOT.parent/'shared/cache-policy.vcl'
+NAMES=('basic','ultracache')
+LABELS={'basic':'Basic','ultracache':'UltraCache'}
 DESCRIPTIONS={
-    'basic':'General public HTTP cache. Unknown cookies reach the origin and query strings remain in the cache key. Authentication, private sessions and origin privacy instructions bypass shared caching.',
-    'wordpress':'WordPress public pages with login, dashboard, API, preview and session exclusions. Unrelated cookies do not bypass public pages.',
-    'woocommerce':'WordPress rules plus cart, checkout, customer-account and WooCommerce action exclusions. Cart and session cookies bypass cache.',
-    'ultracache':'WordPress/WooCommerce policy with marketing-parameter normalization and origin-approved ESI or warmed async-cart parents. Private cart requests require opt-in and an approved shared object; cold misses remain uncached unless the ESI response handshake approves them.'}
+    'basic':'WordPress and WooCommerce caching, with best-effort support for other sites. Public pages, searches, REST and AJAX GET responses can be cached. Login, checkout, cart actions and private sessions remain protected.',
+    'ultracache':'The Basic policy plus UltraCache ESI and async-cart integration. Approved shared HTML can be reused while personal fragments are fetched separately.'}
 
 def name(value):
-    if not isinstance(value,str) or value not in NAMES:raise ValueError('Choose Basic, WordPress, WooCommerce or UltraCache')
+    if not isinstance(value,str) or value not in NAMES:raise ValueError('Choose Basic or UltraCache')
     return value
 
-def default(config):return name(config.get('default_profile','basic'))
+def default(config):return selected({'profile':config.get('default_profile')})
 
-def selected(site):return name(site.get('profile','basic'))
+def selected(site):
+    # Missing/unavailable saved choices use Basic without rewriting state.
+    # Submitted administrator input is still validated strictly by name().
+    value=site.get('profile')
+    return value if isinstance(value,str) and value in NAMES else 'basic'
 
 def rules(config,profile):
     name(profile)
@@ -28,6 +31,6 @@ def rules(config,profile):
     return result
 
 def catalog(config):
-    return [dict(name=value,label=LABELS[value],description=DESCRIPTIONS[value],source=(ROOT/(value+'.vcl')).read_text(),**rules(config,value)) for value in NAMES]
+    return [dict(name=value,label=LABELS[value],description=DESCRIPTIONS[value],source=SHARED.read_text(encoding='utf-8'),**rules(config,value)) for value in NAMES]
 
-def program():return '\n'.join((ROOT/(value+'.vcl')).read_text() for value in (*NAMES,'control'))
+def program():return SHARED.read_text(encoding='utf-8')+'\n'+(ROOT/'control.vcl').read_text(encoding='utf-8')

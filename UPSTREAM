@@ -1,6 +1,8 @@
 Cache policy adapted from https://github.com/orloxgr/varnish-for-hestia
 Reference commit: ccf4a85bc9a2a42ae180cd2e174e3245ffdfff65 (GPL-3.0-or-later).
 Site-local VCL parser and cache-budget transaction design adapted from the same reference; Webuzo keeps its separate unprivileged service and Unix transport.
-WordPress/WooCommerce exclusions, private-cookie policy, UltraCache ESI and HTTP invalidation contract adapted from that reference. Basic retains Webuzo's conservative cookie/query defaults. HTTP control is adapted to Webuzo site tokens and the protected Unix listener.
+WordPress/WooCommerce exclusions, private-cookie policy, UltraCache ESI and HTTP invalidation contract adapted from that reference. Basic and UltraCache share WordPress/WooCommerce exclusions and marketing normalization. HTTP control is adapted to Webuzo site tokens and the protected Unix listener.
 Native metadata parser and panel IPC adapted from https://github.com/orloxgr/webuzo-de-noise and https://github.com/orloxgr/Mass-wp-update-webuzo (GPL-3.0-or-later).
 This integration is distributed under GPL-3.0-or-later.
+Native marker/retention and origin error-status policy aligned with Hestia commit a7261d90349b300d767af33e7f2051e01a004a42; Webuzo retains its own installer and routing.
+Shared Basic/UltraCache policy: shared/cache-policy.vcl is distributed unchanged in both panel integrations, with panel-specific host/backend/token adapters. Policy SHA256 7cea910fa4e05a4d874fb01f8ca51c28fe1e56d1af503ce219d0bc8d529edefb; native parity verified by identical 56-case result sets.

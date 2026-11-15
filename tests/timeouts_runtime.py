@@ -79,7 +79,7 @@ try:
         root=Path(folder);root.chmod(0o755)
         baseline=native.proxy_timeouts()
         front_port,varnish_port,admin_port=free_port(),free_port(),free_port()
-        site=dict(id='a'*32,domain='example.test',names=['example.test'],enabled=True,error='',token='b'*64,ttl=300,bypass=[],profile='woocommerce')
+        site=dict(id='a'*32,domain='example.test',names=['example.test'],enabled=True,error='',token='b'*64,bypass=[],profile='basic')
         content=policy.render({site['id']:site},'e'*64,'f'*64,{'proxy_timeouts':baseline})
         bridges=routing.origins('f'*64,baseline)
         for scheme in ('http','https'):

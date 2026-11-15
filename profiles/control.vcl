@@ -9,6 +9,7 @@ sub wvw_http_control {
         }
         if (req.http.X-UltraCache-Contract) { set req.http.X-WV-Control = "2"; }
         set req.http.X-WV-Soft-Purge = "1";
+        call scp_key;
         return (hash);
     }
     if (req.http.X-UltraCache-Contract) {
@@ -27,6 +28,7 @@ sub wvw_http_control {
         }
         if (req.http.X-UltraCache-Operation == "soft-purge") {
             set req.http.X-WV-Soft-Purge = "1";
+            call scp_key;
             return (hash);
         }
         if (req.url != "/__ultracache-vcl-contract-v2") {
@@ -114,8 +116,10 @@ sub wvw_http_control {
 # delimiters and control characters before constructing the scoped ban.
 sub wvw_exact_http_purge {
     if (req.url ~ {"[[:space:]"\\]"}) { return (synth(400, "Invalid purge URL")); }
+    call scp_key;
     if (!std.ban("obj.http.X-WV-Site == " + req.http.X-WV-Site +
-        " && obj.http.X-Cache-Object-URL == " + req.url)) {
+        " && obj.http.X-Cache-Object-Host == " + req.http.host +
+        " && obj.http.X-Cache-Object-URL == " + req.http.X-SCP-Key-URL)) {
         return (synth(400, "Invalid purge URL"));
     }
     return (synth(200, "URL cache purged"));

@@ -122,8 +122,7 @@ try:
         code += "$p->save();echo wp_json_encode(array('id'=>$p->get_id(),'name'=>$p->get_name(),'url'=>get_permalink($p->get_id())));"
         products.append(wp(code))
     stock, target = products
-    call('configure', id=site['id'], profile='woocommerce', enabled=True,
-         ttl=site['ttl'], bypass=site['bypass'])
+    call('configure', id=site['id'], profile='basic', enabled=True, bypass=site['bypass'])
     call('purge', id=site['id'])
     empty = http.cookiejar.CookieJar()
     request(other, empty, '/')
@@ -173,8 +172,7 @@ try:
     check(hashes == {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in fixed}, 'Native factory configuration files unchanged')
 finally:
     try:
-        call('configure', id=original['id'], profile=original['profile'], enabled=original['enabled'],
-             ttl=original['ttl'], bypass=original['bypass'])
+        call('configure', id=original['id'], profile=original['profile'], enabled=original['enabled'], bypass=original['bypass'])
     finally:
         for product in products:
             wp('wp_delete_post(' + str(int(product['id'])) + ',true);echo "{}";')

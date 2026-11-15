@@ -73,14 +73,13 @@ class Settings(unittest.TestCase):
             with self.subTest(value=value),self.assertRaises(ValueError):fragments.validate(value,'recv')
         with self.assertRaises(ValueError):fragments.validate('set beresp.http.Cache-Control = "public";','backend_response')
     def test_supported_vcl_remains_inside_site_scope_and_before_response_checks(self):
-        site=dict(id='a'*32,domain='example.test',names=['example.test'],enabled=True,error='',token='b'*64,ttl=300,bypass=[],
+        site=dict(id='a'*32,domain='example.test',names=['example.test'],enabled=True,error='',token='b'*64,bypass=[],
             recv_vcl='if (req.url ~ "^/private/") { return (pass); }',backend_vcl='set beresp.ttl = 60s;')
         content=policy.render({site['id']:site},'e'*64,'f'*64)
         self.assertIn('if (req.http.X-WV-Site == "'+'a'*32+'") { if',content)
         self.assertIn('set req.http.X-WV-Mode = "PASS"; return ( pass ) ;',content)
         response=content[content.index('sub vcl_backend_response {'):]
-        self.assertLess(response.index('set beresp.ttl = 60s'),response.index('beresp.http.Set-Cookie'))
-        self.assertLess(response.index('beresp.http.Set-Cookie'),response.index('beresp.ttl > 300s'))
+        self.assertLess(response.index('set beresp.ttl = 60s'),response.index('call scp_backend_response;'))
     def test_pass_annotation_does_not_rewrite_a_string_literal(self):
         result=fragments.validate('set req.http.X-User-Note = "return ( pass ) ;"; return (pass);','recv',mark_pass=True)
         self.assertIn('"return ( pass ) ;"',result)
@@ -90,7 +89,7 @@ class Settings(unittest.TestCase):
         with patch.object(engine,'inventory',return_value={site['id']:site}),patch.object(service,'installed',return_value=True),patch.object(service,'running',return_value=True):result=engine.status()
         self.assertNotIn('b'*64,json.dumps(result));self.assertNotIn('home',result['sites'][0])
     def test_adding_empty_vcl_defaults_does_not_purge_another_account(self):
-        first=dict(id='a'*32,domain='first.example.test',names=['first.example.test'],enabled=True,error='',token='b'*64,ttl=300,bypass=[])
+        first=dict(id='a'*32,domain='first.example.test',names=['first.example.test'],enabled=True,error='',token='b'*64,bypass=[])
         second=dict(first,id='c'*32,domain='second.example.test',names=['second.example.test'],token='d'*64)
         previous=dict(installed=True,sites={first['id']:first,second['id']:second},gateway='e'*64,origin='f'*64)
         updated=copy.deepcopy(previous)
@@ -100,8 +99,8 @@ class Settings(unittest.TestCase):
             engine.apply(previous,updated)
         purge.assert_called_once_with(updated['sites'][first['id']])
     def test_central_basic_rules_invalidate_only_sites_assigned_to_basic(self):
-        first=dict(id='a'*32,domain='first.example.test',names=['first.example.test'],enabled=True,error='',token='b'*64,ttl=300,bypass=[],profile='basic')
-        second=dict(first,id='c'*32,domain='second.example.test',names=['second.example.test'],token='d'*64,profile='wordpress')
+        first=dict(id='a'*32,domain='first.example.test',names=['first.example.test'],enabled=True,error='',token='b'*64,bypass=[],profile='basic')
+        second=dict(first,id='c'*32,domain='second.example.test',names=['second.example.test'],token='d'*64,profile='ultracache')
         previous=dict(installed=True,sites={first['id']:first,second['id']:second},gateway='e'*64,origin='f'*64)
         updated=copy.deepcopy(previous);updated['profile_rules']={'basic':{'recv_vcl':'if (req.url == "/members/") { return (pass); }','backend_vcl':''}}
         with patch.object(engine,'JOURNAL',self.root/'transaction.json'),patch.object(engine,'plans',return_value=[]),patch.object(service,'ACTIVE',self.root/'active.vcl'),patch.object(service,'load',return_value=('old','new')),patch.object(service,'admin'),patch.object(service,'write_vcl'),patch.object(service,'prune'),patch.object(engine,'reload_servers'),patch.object(service,'purge') as purge:

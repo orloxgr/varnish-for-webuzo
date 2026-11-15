@@ -5,7 +5,6 @@ from urllib.parse import quote,unquote
 import native
 import fragments
 import profiles
-import cookie_policy
 import timeouts
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
@@ -38,6 +37,7 @@ import purge;
             '.between_bytes_timeout = '+timeouts.seconds(allowances['read'])+'; }')
     text += [profiles.program(),'''
 sub vcl_recv {
+ call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';
  # Never shorten the engine's response budget; allow every upstream phase.
  if (sess.send_timeout < '''+timeouts.seconds(timeouts.frontend(allowances)['read'])+''') {
@@ -46,6 +46,7 @@ sub vcl_recv {
  unset req.http.X-WV-Site;
  unset req.http.X-WV-Profile;
  unset req.http.X-WV-Mode;
+ unset req.http.X-WV-Reason;
  unset req.http.X-WV-Disabled;
  unset req.http.X-WV-Origin;
  unset req.http.X-WV-Control;
@@ -69,7 +70,6 @@ sub vcl_recv {
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if site.get('error'):continue
         if not re.fullmatch('[0-9a-f]{32}',site['id']) or not re.fullmatch('[0-9a-f]{64}',site['token']):raise ValueError('Invalid site scope')
-        if type(site['ttl']) is not int or not 0<=site['ttl']<=2147483647:raise ValueError('Use zero for the origin cache policy or a positive maximum cache lifetime within the supported integer range')
         for name in site['names']:
             native.hostname(name)
             if name in names:raise ValueError('Duplicate hostname scope')
@@ -77,7 +77,7 @@ sub vcl_recv {
         cond=' || '.join('req.http.host == '+quoted(n) for n in site['names'])
         profile=profiles.selected(site)
         text.append(' if ('+cond+') {\n set req.http.X-WV-Site = '+quoted(site['id'])+';\n'+
-            ' set req.http.X-WV-Profile = '+quoted(profile)+';\n'+
+            ' set req.http.X-WV-Profile = '+quoted(profile)+';\n set req.http.X-SCP-Profile = '+quoted(profile)+';\n'+
             (' set req.http.X-WV-Disabled = "1";\n' if not site.get('enabled') else '')+
             ' if (req.method == "HEAD" && req.http.X-WV-Control-Discovery == "1" && local.socket == "public") { return (synth(405, "HTTP cache control endpoint")); }\n'+
             ' if (req.method == "PURGE" || req.method == "BAN") {\n'+
@@ -111,10 +111,7 @@ sub vcl_recv {
  set req.http.X-Forwarded-For = req.http.X-Real-IP;
  set req.http.X-WV-Origin = '''+quoted(origin_secret)+''';
  std.collect(req.http.Cookie, "; ");
- if (req.http.X-WV-Disabled || req.method != "GET" && req.method != "HEAD" || req.http.Authorization || req.http.Upgrade ||
-     req.url ~ "^/[.]well-known/(acme-challenge|pki-validation)/") {
-   set req.http.X-WV-Mode = "PASS"; return (pass);
- }
+ if (req.http.X-WV-Disabled) { set req.http.X-WV-Reason = "site-disabled"; return (pass); }
 ''')
     for profile in profiles.NAMES:
         fragment=fragments.validate(profiles.rules(config,profile)['recv_vcl'],'recv',mark_pass=True)
@@ -125,59 +122,34 @@ sub vcl_recv {
         for path in prefixes:
             # Literal prefix; no caller-supplied VCL or regular expression.
             pattern='(?i)^('+re.escape(path).replace('\\.','[.]')+'|'+literal_bytes(unquote(path))+')'
-            text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+' && req.url ~ '+quoted(pattern)+') { set req.http.X-WV-Mode = "PASS"; return (pass); }')
+            text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+' && req.url ~ '+quoted(pattern)+') { set req.http.X-WV-Reason = "site-bypass-path"; set req.http.X-WV-Mode = "PASS"; return (pass); }')
         fragment=fragments.validate(site.get('recv_vcl',''),'recv',mark_pass=True)
         if fragment:text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+') { '+fragment+' }')
     text.append('''
- if (req.http.X-WV-Profile == "basic") { call wvw_basic_recv; }
- if (req.http.X-WV-Profile == "wordpress") { call wvw_wordpress_recv; }
- if (req.http.X-WV-Profile == "woocommerce") { call wvw_woocommerce_recv; }
- if (req.http.X-WV-Profile == "ultracache") { call wvw_ultracache_recv; }
- call wvw_private_cookie_recv;
- call wvw_cart_cookie_recv;
+ call scp_recv;
  return (hash);
 }
-sub wvw_private_cookie_recv {
- if (req.http.Cookie ~ '''+cookie_policy.vcl_pattern(cookie_policy.PRIVATE)+''') {
-   set req.http.X-WV-Mode = "PASS"; return (pass);
- }
-}
-sub wvw_cart_cookie_recv {
- if (req.http.Cookie ~ '''+cookie_policy.vcl_pattern(cookie_policy.CART)+''' ||
-     req.http.Cookie ~ '''+cookie_policy.vcl_pattern(cookie_policy.SESSION)+''') {
-   if (req.http.X-WV-Profile == "ultracache" && req.http.X-UltraCache-ESI-Opt-In == "1") {
-     set req.http.X-UltraCache-ESI-Candidate = "1";
-   } else { set req.http.X-WV-Mode = "PASS"; return (pass); }
- }
-}
+sub vcl_pass { call scp_pass; }
 sub vcl_hash {
- hash_data("webuzo-http-policy-v1");
- if (req.http.X-WV-Profile != "basic") { hash_data(req.http.X-WV-Profile); }
+ call scp_key;
+ hash_data("webuzo-shared-policy-v1");
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
- if (req.http.X-WV-Profile != "ultracache") { hash_data(req.http.X-Forwarded-Proto); }
- hash_data(req.url);
+ hash_data(req.http.X-SCP-Key-URL);
  return (lookup);
 }
 sub vcl_hit {
  if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; }
- if (req.http.X-WV-Profile == "ultracache") { call wvw_ultracache_hit; }
+ call scp_hit;
 }
 sub vcl_miss { if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; } }
 sub wvw_soft_purge {
  set req.http.X-WV-Soft-Purge = purge.soft(); return (synth(200, "Soft purge completed"));
 }
-sub vcl_backend_fetch {
- if (bereq.http.X-WV-Profile == "ultracache") { call wvw_ultracache_backend_fetch; }
-}
-sub wvw_mark_uncacheable {
- set beresp.uncacheable = true; set beresp.ttl = 120s; set beresp.grace = 0s; set beresp.keep = 0s;
-}
+sub vcl_backend_fetch { call scp_backend_fetch; }
 sub vcl_backend_response {
  set beresp.http.X-WV-Site = bereq.http.X-WV-Site;
  set beresp.http.X-Cache-Object-Host = bereq.http.host;
- set beresp.http.X-Cache-Object-URL = bereq.url;
- if (bereq.http.X-WV-Profile == "ultracache") { set beresp.keep = 5m; }
- else { set beresp.grace = 0s; }
+ set beresp.http.X-Cache-Object-URL = bereq.http.X-SCP-Key-URL;
 ''')
     for profile in profiles.NAMES:
         fragment=fragments.validate(profiles.rules(config,profile)['backend_vcl'],'backend_response')
@@ -187,28 +159,16 @@ sub vcl_backend_response {
         fragment=fragments.validate(site.get('backend_vcl',''),'backend_response')
         if fragment:text.append(' if (bereq.http.X-WV-Site == '+quoted(site['id'])+') { '+fragment+' }')
     text.append('''
- std.collect(beresp.http.Surrogate-Control);
- if (beresp.http.Surrogate-Control ~ "(?i)no-store") { call wvw_mark_uncacheable; }
- if (bereq.http.X-WV-Profile == "ultracache") { call wvw_ultracache_backend_response; }
- # Store complete public responses, not errors or standalone partial/304 bodies.
- # Native conditional revalidation and range delivery from full objects still apply.
- if (beresp.uncacheable || beresp.status < 200 || beresp.status >= 400 || beresp.status == 206 || beresp.status == 304 ||
-     beresp.http.Set-Cookie || beresp.http.Vary == "*" || beresp.ttl <= 0s ||
-     beresp.http.Cache-Control ~ "(?i)(private|no-store|no-cache)" || beresp.http.Pragma ~ "(?i)no-cache" ||
-     beresp.http.Surrogate-Control ~ "(?i)no-store") {
-   call wvw_mark_uncacheable; return (deliver);
- }
-''')
-    for site in sites.values():
-        if site.get('enabled') and not site.get('error') and site['ttl']:
-            text.append(' if (bereq.http.X-WV-Site == '+quoted(site['id'])+' && beresp.ttl > '+str(site['ttl'])+'s) { set beresp.ttl = '+str(site['ttl'])+'s; }')
-    text.append(''' return (deliver);
+ call scp_backend_response;
+ return (deliver);
 }
 sub vcl_deliver {
- if (req.http.X-WV-Profile == "ultracache") { call wvw_ultracache_deliver; }
- if (req.http.X-WV-Mode == "PASS" || obj.uncacheable) { set resp.http.X-Webuzo-Varnish = "PASS"; }
- else if (obj.hits > 0) { set resp.http.X-Webuzo-Varnish = "HIT"; }
- else { set resp.http.X-Webuzo-Varnish = "MISS"; }
+ call scp_deliver;
+ set resp.http.X-Webuzo-Varnish = resp.http.X-SCP-Result;
+ if (req.http.X-WV-Reason) { set resp.http.X-Webuzo-Varnish-Reason = req.http.X-WV-Reason; }
+ else { set resp.http.X-Webuzo-Varnish-Reason = resp.http.X-SCP-Result-Reason; }
+ unset resp.http.X-SCP-Result;
+ unset resp.http.X-SCP-Result-Reason;
  unset resp.http.X-WV-Site;
  unset resp.http.X-Cache-Object-Host;
  unset resp.http.X-Cache-Object-URL;

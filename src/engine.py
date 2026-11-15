@@ -15,6 +15,7 @@ import profiles
 import timeouts
 import connections
 import browser_cache
+import repository
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -25,8 +26,8 @@ def inventory(config):
     sites=native.collect()
     for sid,site in sites.items():
         previous=config.get('sites',{}).get(sid,{})
-        site['profile']=profiles.name(previous.get('profile','basic' if sid in config.get('sites',{}) else profiles.default(config)))
-        site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),ttl=previous.get('ttl',0 if site['profile']=='ultracache' else 300),bypass=previous.get('bypass',[]))
+        site['profile']=profiles.selected(previous) if sid in config.get('sites',{}) else profiles.default(config)
+        site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),bypass=previous.get('bypass',[]))
         site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
         site['browser_cache']=browser_cache.validate(previous['browser_cache']) if previous.get('browser_cache') is not None else None
     return sites
@@ -104,7 +105,7 @@ def apply(previous,next_config):
                 service.wait()
             for sid,site in next_config['sites'].items():
                 old=previous.get('sites',{}).get(sid,{})
-                changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','ttl','bypass','names','recv_vcl','backend_vcl'))
+                changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','bypass','names','recv_vcl','backend_vcl'))
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
                 if site.get('enabled') and changed:service.purge(site)
         for change in changes:routing.replace(change)
@@ -134,13 +135,14 @@ def action(request):
     operation=request.get('action')
     allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore'}
     if operation not in allowed:raise ValueError('Unknown action')
-    fields={'configure':{'id','enabled','ttl','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
+    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
     with state.locked():
         recover()
         if operation=='status':return status()
         previous=settings();sites=inventory(previous)
+        if operation=='reconcile' and previous.get('installed'):repository.reconcile_owned()
         if operation in ('usage','resize','connection','vcl') and not previous.get('installed'):raise ValueError('Install the Varnish service first')
         if operation=='usage':return dict(usage=service.usage(previous))
         if operation=='resize':
@@ -194,9 +196,8 @@ def action(request):
                     service.purge(site);return dict(message='Site cache cleared')
                 if operation=='configure':
                     if type(request.get('enabled')) is not bool:raise ValueError('Invalid enabled value')
-                    if type(request.get('ttl')) is not int or not 0<=request['ttl']<=2147483647:raise ValueError('Use zero for the origin cache policy or a positive maximum cache lifetime within the supported integer range')
                     if site['error'] and request['enabled']:raise ValueError(site['error'])
-                    site.update(enabled=request['enabled'],ttl=request['ttl'],bypass=policy.paths(request.get('bypass',[])))
+                    site.update(enabled=request['enabled'],bypass=policy.paths(request.get('bypass',[])))
                     site['profile']=profiles.name(request.get('profile',site['profile']))
                     if any(field in request for field in ('recv_vcl','backend_vcl')):
                         for field,stage in (('recv_vcl','recv'),('backend_vcl','backend_response')):

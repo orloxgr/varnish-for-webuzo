@@ -1,4 +1,4 @@
-"""Exercise all four product VCL profiles with native Varnish HTTP origins."""
+"""Exercise both product VCL profiles with native Varnish HTTP origins."""
 import copy
 import json
 from pathlib import Path
@@ -15,11 +15,10 @@ import policy
 import profiles
 
 def site(identity='a',domain='example.test',profile='basic',token='b'):
-    return dict(id=identity*32,domain=domain,names=[domain],enabled=True,error='',token=token*64,ttl=300,bypass=[],recv_vcl='',backend_vcl='',profile=profile)
+    return dict(id=identity*32,domain=domain,names=[domain],enabled=True,error='',token=token*64,bypass=[],recv_vcl='',backend_vcl='',profile=profile)
 
-def program(profile='basic',config=None,ttl=300):
+def program(profile='basic',config=None):
     first=site(profile=profile);second=site('c','other.test',profile,'d')
-    first['ttl']=ttl
     source=policy.render({first['id']:first,second['id']:second},'e'*64,'f'*64,config)
     for scheme in ('http','https'):
         source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
@@ -42,28 +41,34 @@ def control(path='/',host='example.test',token='b',headers=(),method='PURGE',sta
         ' '.join('-hdr {'+h+'}' for h in headers),'rxresp','expect resp.status == '+str(status)])
 
 class ProfileChoices(unittest.TestCase):
-    def test_new_ultracache_sites_use_origin_policy_without_rewriting_saved_caps(self):
-        old=site(profile='ultracache');new=site('c','new.test',token='d')
-        config=dict(default_profile='ultracache',sites={old['id']:old})
+    def test_inventory_has_no_lifetime_override_or_settings_migration(self):
+        old=site(profile='basic');new=site('c','new.test',token='d')
+        config=dict(default_profile='ultracache',sites={old['id']:dict(old,ttl=300)})
+        before=json.dumps(config,sort_keys=True)
         with patch.object(native,'collect',return_value={old['id']:dict(old),new['id']:dict(new)}):found=engine.inventory(config)
-        self.assertEqual(found[old['id']]['ttl'],300)
         self.assertEqual(found[new['id']]['profile'],'ultracache')
-        self.assertEqual(found[new['id']]['ttl'],0)
-        self.assertNotIn('beresp.ttl > 0s',program('ultracache',ttl=0))
-    def test_four_real_profiles_and_central_basic_default(self):
-        self.assertEqual(profiles.NAMES,('basic','wordpress','woocommerce','ultracache'))
+        self.assertTrue(all('ttl' not in row for row in found.values()))
+        self.assertEqual(json.dumps(config,sort_keys=True),before)
+    def test_two_real_profiles_and_central_basic_default(self):
+        self.assertEqual(profiles.NAMES,('basic','ultracache'))
         self.assertEqual(profiles.default({}),'basic')
-        catalog=profiles.catalog({});self.assertEqual(len({p['source'] for p in catalog}),4)
+        catalog=profiles.catalog({});self.assertEqual(len({p['source'] for p in catalog}),1)
         self.assertTrue(all(p['source'] and p['description'] for p in catalog))
     def test_new_sites_inherit_default_and_existing_profiles_remain_assigned(self):
-        first,second=site(),site('c','other.test','woocommerce','d')
+        first,second=site(),site('c','other.test','ultracache','d')
         observed={s['id']:dict(s) for s in (first,second)}
-        config=dict(default_profile='wordpress',sites={first['id']:{},second['id']:dict(second)})
+        config=dict(default_profile='ultracache',sites={first['id']:{},second['id']:dict(second)})
         third=site('f','new.test','basic','0');observed[third['id']]=third
         with patch.object(native,'collect',return_value=observed):found=engine.inventory(config)
         self.assertEqual(found[first['id']]['profile'],'basic')
-        self.assertEqual(found[second['id']]['profile'],'woocommerce')
-        self.assertEqual(found[third['id']]['profile'],'wordpress');self.assertFalse(found[third['id']]['enabled'])
+        self.assertEqual(found[second['id']]['profile'],'ultracache')
+        self.assertEqual(found[third['id']]['profile'],'ultracache');self.assertFalse(found[third['id']]['enabled'])
+    def test_unavailable_saved_choices_use_basic_without_rewriting_preferences(self):
+        config={'default_profile':'unavailable','sites':{}}
+        self.assertEqual(profiles.default(config),'basic')
+        self.assertEqual(profiles.selected({'profile':'unavailable'}),'basic')
+        self.assertEqual(config,{'default_profile':'unavailable','sites':{}})
+        with self.assertRaises(ValueError):profiles.name('unavailable')
     def test_invalid_profile_or_central_code_never_enters_policy(self):
         for value in ('general','../wordpress','basic;return(pass);',None,{}):
             with self.subTest(value=value),self.assertRaises(ValueError):profiles.name(value)
@@ -71,32 +76,41 @@ class ProfileChoices(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('varnishtest'),'Native varnishtest is required')
 class NativeProfiles(unittest.TestCase):
-    def run_policy(self,profile,responses,requests,config=None,ttl=300,observe_ttl=False):
-        compiled=program(profile,config,ttl)
+    def run_policy(self,profile,responses,requests,config=None,observe_ttl=False,varnish_args='',tail=''):
+        compiled=program(profile,config)
         if observe_ttl:
             compiled=compiled.replace(' return (deliver);\n}\nsub vcl_deliver',
-                ' set beresp.http.X-Test-Final-TTL = beresp.ttl; return (deliver);\n}\nsub vcl_deliver')
-        source='varnishtest "Webuzo '+profile+' profile"\nserver s1 {\n'+'\n'.join(responses).removeprefix('accept\n')+'\n} -start\nvarnish v1 -vcl {\n'+compiled+'\n} -start\nclient c1 {\n'+'\n'.join(requests)+'\n} -run\nserver s1 -wait\n'
+                ' set beresp.http.X-Test-Final-TTL = beresp.ttl; set beresp.http.X-Test-Final-Grace = beresp.grace; return (deliver);\n}\nsub vcl_deliver')
+        source='varnishtest "Webuzo '+profile+' profile"\nserver s1 {\n'+'\n'.join(responses).removeprefix('accept\n')+'\n} -start\nvarnish v1 '+varnish_args+' -vcl {\n'+compiled+'\n} -start\nclient c1 {\n'+'\n'.join(requests)+'\n} -run\nserver s1 -wait\n'+tail+'\n'
         with tempfile.TemporaryDirectory(prefix='wvw-profiles-') as folder:
             path=Path(folder)/'profile.vtc';path.write_text(source)
             result=subprocess.run(['varnishtest','-t','20',str(path)],capture_output=True,text=True,timeout=30)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-    def test_origin_lifetime_and_explicit_maximum_are_distinct(self):
-        for cap,seconds in ((0,86400),(300,300)):
-            with self.subTest(cap=cap):self.run_policy('ultracache',
-                [origin('/page','public',cache='public, max-age=0, s-maxage=86400, stale-while-revalidate=86400')],
-                [get('/page','public',cache='MISS'),'expect resp.http.X-Test-Final-TTL == "'+str(seconds)+'.000"',
-                 get('/page','public',cache='HIT')],ttl=cap,observe_ttl=True)
-        self.run_policy('ultracache',[origin('/short','short',cache='public, s-maxage=60')],
-            [get('/short','short',cache='MISS'),'expect resp.http.X-Test-Final-TTL == "60.000"'],ttl=300,observe_ttl=True)
+    def test_origin_lifetimes_and_saved_obsolete_caps_are_not_shortened(self):
+        original_site=site
+        for profile in profiles.NAMES:
+            with self.subTest(profile=profile),patch(__name__+'.site',side_effect=lambda *a,**kw:dict(original_site(*a,**kw),ttl=300)):
+                self.run_policy(profile,
+                    [origin('/page','public',cache='public, max-age=0, s-maxage=86400, stale-while-revalidate=60')],
+                    [get('/page','public',cache='MISS'),'expect resp.http.X-Test-Final-TTL == "86400.000"',
+                     'expect resp.http.X-Test-Final-Grace == "60.000"',get('/page','public',cache='HIT')],observe_ttl=True)
+        self.run_policy('basic',[origin('/short','short',cache='public, s-maxage=60')],
+            [get('/short','short',cache='MISS'),'expect resp.http.X-Test-Final-TTL == "60.000"'],observe_ttl=True)
+
+    def test_both_presets_deliver_stale_while_refreshing_when_origin_allows_it(self):
+        for profile in profiles.NAMES:
+            with self.subTest(profile=profile):self.run_policy(profile,
+                [origin('/refresh','old',cache='public, max-age=1, stale-while-revalidate=60'),origin('/refresh','new')],
+                [get('/refresh','old',cache='MISS'),'delay 1.2',get('/refresh','old',cache='HIT'),
+                 'delay 0.3',get('/refresh','new',cache='HIT')])
     def test_cookie_free_warmup_reuses_public_html_with_tracking_and_consent_cookies(self):
         self.run_policy('ultracache',[origin('/page','shared',headers=['Vary: Accept-Encoding'],expect=['expect req.http.Cookie == <undef>'])],
             [get('/page','shared',cache='MISS'),get('/page','shared',['Cookie: _ga=first; consent=yes'],cache='HIT'),
-             get('/page','shared',['Cookie: _ga=second; consent=no'],cache='HIT')],ttl=0)
+             get('/page','shared',['Cookie: _ga=second; consent=no'],cache='HIT')])
     def test_real_cookie_vary_still_separates_origin_responses(self):
         self.run_policy('ultracache',[origin('/page','A',['Vary: Cookie']),origin('/page','B',['Vary: Cookie'])],
             [get('/page','A',['Cookie: audience=A'],cache='MISS'),get('/page','B',['Cookie: audience=B'],cache='MISS'),
-             get('/page','A',['Cookie: audience=A'],cache='HIT')],ttl=0)
+             get('/page','A',['Cookie: audience=A'],cache='HIT')])
     def test_accept_variants_and_exact_purge_preserve_other_urls_and_accounts(self):
         accepts=(None,'text/html','application/xhtml+xml,text/html;q=0.9','application/json','application/xml','text/html;q=0,application/json')
         headers=lambda a:[] if a is None else ['Accept: '+a]
@@ -109,26 +123,26 @@ class NativeProfiles(unittest.TestCase):
             control('/page',headers=['X-UltraCache-Contract: 2','X-UltraCache-Operation: exact-purge']),
             get('/control','control',cache='HIT'),get('/page','other',host='other.test',cache='HIT')]
         requests += [get('/page','refreshed-'+str(i),headers(a),cache='MISS') for i,a in enumerate(accepts)]
-        self.run_policy('ultracache',responses,requests,ttl=0)
+        self.run_policy('ultracache',responses,requests)
     def test_gzip_q_zero_gets_identity_from_the_same_compressed_object(self):
         compressed=origin('/page','identity',['Vary: Accept-Encoding','Content-Encoding: gzip'],expect=['expect req.http.Accept-Encoding == "gzip"']).replace('-body {identity}','-gzipbody {identity}')
         self.run_policy('ultracache',[compressed],
             [get('/page',None,['Accept-Encoding: gzip'],cache='MISS'),'expect resp.http.Content-Encoding == "gzip"',
              get('/page','identity',['Accept-Encoding: gzip;q=0, br'],cache='HIT'),'expect resp.http.Content-Encoding == <undef>',
-             get('/page','identity',cache='HIT')],ttl=0)
+             get('/page','identity',cache='HIT')])
     def test_json_and_xml_origin_responses_keep_their_own_cacheable_representations(self):
         responses=[];requests=[]
         for mime in ('application/json','application/xml'):
             body='public-'+mime
             responses.append(origin('/data',body,['Vary: Accept'],mime=mime))
             requests.extend([get('/data',body,['Accept: '+mime],cache='MISS'),get('/data',body,['Accept: '+mime],cache='HIT')])
-        self.run_policy('ultracache',responses,requests,ttl=0)
+        self.run_policy('ultracache',responses,requests)
     def test_plain_html_works_with_every_profile_without_a_wordpress_plugin(self):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public')],[get('/page','public',cache='MISS'),get('/page','public',cache='HIT')])
-    def test_basic_preserves_functional_queries_and_does_not_assume_cart_is_a_shop(self):
+    def test_basic_preserves_functional_queries(self):
         responses=[];requests=[]
-        for path,body in [('/page?q=1','first-result'),('/page?q=2','second-result'),('/cart/','generic-directory')]:
+        for path,body in [('/page?q=1','first-result'),('/page?q=2','second-result'),('/catalog/','generic-directory')]:
             responses.append(origin(path,body,expect=['expect req.http.Cookie == "unknown_vendor=A"']))
             requests.extend([get(path,body,['Cookie: unknown_vendor=A'],cache='MISS'),get(path,body,['Cookie: unknown_vendor=B'],cache='HIT')])
         self.run_policy('basic',responses,requests)
@@ -166,7 +180,7 @@ class NativeProfiles(unittest.TestCase):
         cases=[('/private',[],200,'private, no-store'),('/nocache',[],200,'public, no-cache'),
                ('/cookie',['Set-Cookie: PHPSESSID=private'],200,'public, max-age=120'),
                ('/vary-star',['Vary: *'],200,'public, max-age=120'),
-               ('/missing',[],404,'public, max-age=120'),('/error',[],500,'public, max-age=120'),
+               ('/missing',[],404,'private, no-store'),('/error',[],500,'public, max-age=120'),
                # Native Varnish does not assign a TTL to 308, even with max-age.
                ('/native-308',['Location: /public-target'],308,'public, max-age=120')]
         responses=[];requests=[]
@@ -200,7 +214,7 @@ class NativeProfiles(unittest.TestCase):
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public'),origin('/page','A'),origin('/page','B')],
                 [get('/page','public',cache='MISS'),get('/page','A',['Cookie: tracking=1','Cookie: wordpress_logged_in_a=A'],cache='PASS'),get('/page','B',['Cookie: PHPSESSID=B'],cache='PASS'),get('/page','public',cache='HIT')])
     def test_shop_session_alone_cannot_share_unmarked_personal_html(self):
-        self.run_policy('woocommerce',
+        self.run_policy('basic',
             [origin('/product/example/','public'),origin('/product/example/','notice-A'),origin('/product/example/','visitor-B')],
             [get('/product/example/','public',cache='MISS'),
              get('/product/example/','notice-A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),
@@ -208,14 +222,14 @@ class NativeProfiles(unittest.TestCase):
              get('/product/example/','public',cache='HIT')])
     def test_cart_markers_still_bypass_an_existing_public_object(self):
         for marker in ('woocommerce_items_in_cart=1','woocommerce_cart_hash=nonempty'):
-            with self.subTest(marker=marker):self.run_policy('woocommerce',
+            with self.subTest(marker=marker):self.run_policy('basic',
                 [origin('/product/example/','public'),origin('/product/example/','cart-A'),origin('/product/example/','cart-B')],
                 [get('/product/example/','public',cache='MISS'),
                  get('/product/example/','cart-A',['Cookie: wp_woocommerce_session_demo=A; '+marker],cache='PASS'),
                  get('/product/example/','cart-B',['Cookie: wp_woocommerce_session_demo=B; '+marker],cache='PASS'),
                  get('/product/example/','public',cache='HIT')])
     def test_session_only_does_not_relax_other_profiles(self):
-        for profile in ('basic','wordpress','ultracache'):
+        for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','A'),origin('/page','B')],
                 [get('/page','A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),get('/page','B',['Cookie: wp_woocommerce_session_demo=B'],cache='PASS')])
     def test_shop_session_does_not_override_origin_cookie_or_privacy_headers(self):
@@ -224,7 +238,7 @@ class NativeProfiles(unittest.TestCase):
             for visitor in ('A','B'):
                 responses.append(origin(path,visitor,headers,cache=cache))
                 requests.append(get(path,visitor,['Cookie: wp_woocommerce_session_demo='+visitor],cache='PASS'))
-        self.run_policy('woocommerce',responses,requests)
+        self.run_policy('basic',responses,requests)
     def test_spoofed_esi_transport_headers_are_not_forwarded_by_any_profile(self):
         headers=['X-ESI-Private-Request: 1','X-ESI-Request-Level: 1','X-ESI-Original-Cookie: private_session=forged','X-UltraCache-ESI-Candidate: 1']
         expected=['expect req.http.X-ESI-Private-Request == <undef>','expect req.http.X-ESI-Request-Level == <undef>','expect req.http.X-ESI-Original-Cookie == <undef>','expect req.http.X-UltraCache-ESI-Candidate == <undef>']
@@ -238,13 +252,13 @@ class NativeProfiles(unittest.TestCase):
                     responses.append(origin(path,body,headers,status=status,cache=cache));requests.append(get(path,body,cache='PASS',status=status))
             with self.subTest(profile=profile):self.run_policy(profile,responses,requests)
     def test_wordpress_routes_and_woocommerce_actions_have_distinct_exclusions(self):
-        for profile,paths in [('wordpress',['/wp-admin/','/wp-json/users','/?preview=1']),('woocommerce',['/wp-admin/','/cart/','/checkout/','/my-account/','/?wc-ajax=add_to_cart'])]:
+        for profile,paths in [(p,['/wp-admin/','/shop/wp-admin/','/?preview=1','/cart/','/checkout/','/my-account/','/?wc-ajax=add_to_cart','/wp-json/wc/store/v1/cart','/?rest_route=%2Fwc%2Fstore%2Fv1%2Fcart']) for p in profiles.NAMES]:
             responses,requests=[],[]
             for path in paths:
                 for body in ('A','B'):responses.append(origin(path,body));requests.append(get(path,body,cache='PASS'))
             with self.subTest(profile=profile):self.run_policy(profile,responses,requests)
     def test_ultracache_normalizes_marketing_parameters(self):
-        self.run_policy('ultracache',[origin('/page','public')],[get('/page?utm_source=first','public',cache='MISS'),get('/page?utm_source=second','public',cache='HIT')])
+        self.run_policy('ultracache',[origin('/page?utm_source=first','public')],[get('/page?utm_source=first','public',cache='MISS'),get('/page?utm_source=second','public',cache='HIT')])
     def test_ultracache_approved_esi_parent_keeps_private_fragments_per_visitor(self):
         fragment='/?ultracache_esi=cart&esi_scope=private'
         parent='<html><esi:include src="/?ultracache_esi=cart&amp;esi_scope=private"/></html>'
@@ -261,13 +275,13 @@ class NativeProfiles(unittest.TestCase):
              origin(cart,'cart-A'),origin(cart,'cart-B')],
             [get('/parent','shared-async',cache='MISS'),
              *[get('/parent','shared-async',['Cookie: wp_woocommerce_session_demo='+visitor+'; woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='HIT') for visitor in ('A','B')],
-             *[get(cart,'cart-'+visitor,['Cookie: wp_woocommerce_session_demo='+visitor+'; ultracache_esi_optin=1'],cache='PASS') for visitor in ('A','B')]],ttl=0)
+             *[get(cart,'cart-'+visitor,['Cookie: wp_woocommerce_session_demo='+visitor+'; ultracache_esi_optin=1'],cache='PASS') for visitor in ('A','B')]])
     def test_async_parent_marker_does_not_approve_a_private_cold_miss(self):
         # Even a response marker cannot replace the private-miss ESI handshake.
         self.run_policy('ultracache',
             [origin('/parent',visitor,['X-UltraCache-Woo-Async-Parent: 1'],
                     expect=['expect req.http.X-UltraCache-ESI-Candidate == "1"']) for visitor in ('A','B')],
-            [get('/parent',visitor,['Cookie: wp_woocommerce_session_demo='+visitor+'; ultracache_esi_optin=1'],cache='PASS') for visitor in ('A','B')],ttl=0)
+            [get('/parent',visitor,['Cookie: wp_woocommerce_session_demo='+visitor+'; ultracache_esi_optin=1'],cache='PASS') for visitor in ('A','B')])
     def test_async_warmup_does_not_relax_login_no_optin_or_unapproved_object_guards(self):
         cookie='wp_woocommerce_session_demo=A; ultracache_esi_optin=1'
         self.run_policy('ultracache',
@@ -280,7 +294,7 @@ class NativeProfiles(unittest.TestCase):
              get('/parent','postpass',['Cookie: '+cookie+'; wp-postpass_demo=secret'],cache='PASS'),
              get('/parent','approved',['Cookie: '+cookie],cache='HIT'),
              get('/unapproved','anonymous',cache='MISS'),
-             get('/unapproved','private',['Cookie: '+cookie,'X-UltraCache-Woo-Async-Parent: 1'],cache='PASS')],ttl=0)
+             get('/unapproved','private',['Cookie: '+cookie,'X-UltraCache-Woo-Async-Parent: 1'],cache='PASS')])
     def test_async_approval_never_overrides_origin_privacy_or_cookie_variation(self):
         for extra,cache in [(['Set-Cookie: PHPSESSID=private'],'public, max-age=120'),
                             ([], 'private, no-store'),(['Surrogate-Control: no-store'],'public, max-age=120')]:
@@ -288,11 +302,11 @@ class NativeProfiles(unittest.TestCase):
                 [origin('/parent','anonymous',['X-UltraCache-Woo-Async-Parent: 1',*extra],cache=cache),
                  origin('/parent','private',extra,cache=cache)],
                 [get('/parent','anonymous',cache='PASS'),
-                 get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')],ttl=0)
+                 get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')])
         self.run_policy('ultracache',
             [origin('/parent','anonymous',['X-UltraCache-Woo-Async-Parent: 1','Vary: Cookie']),origin('/parent','private')],
             [get('/parent','anonymous',cache='MISS'),
-             get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')],ttl=0)
+             get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')])
     def test_no_store_parent_cannot_be_approved_for_shared_esi(self):
         self.run_policy('ultracache',[origin('/parent',body,['Surrogate-Control: ESI/1.0, no-store','X-UltraCache-ESI-Shared-Parent: 1']) for body in ('A','B')],
             [get('/parent',body,['Cookie: woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='PASS') for body in ('A','B')])

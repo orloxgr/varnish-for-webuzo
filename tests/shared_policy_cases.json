@@ -1,0 +1,442 @@
+[
+  {
+    "name": "tracking URLs and analytics cookies share HTML; full origin request survives",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/product?utm_source=facebook&utm_medium=ad&lang=el\"\nexpect req.http.Cookie == \"_ga=first; lang=el; consent=yes\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {public-el}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/product?utm_source=facebook&utm_medium=ad&lang=el\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=first; lang=el; consent=yes\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public-el}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/product?lang=el&utm_source=google&gclid=click2\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=second; lang=el; consent=yes; _fbp=another\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public-el}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "consecutive tracking parameters and functional queries",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/search?utm_source=A&utm_medium=B&utm_campaign=C&s=shoes&currency=EUR\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {shoes}",
+      "accept\nrxreq\nexpect req.url == \"/search?s=shirts&currency=EUR&utm_source=C\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {shirts}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/search?utm_source=A&utm_medium=B&utm_campaign=C&s=shoes&currency=EUR\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {shoes}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/search?s=shoes&currency=EUR&utm_source=Z\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {shoes}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/search?s=shirts&currency=EUR&utm_source=C\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {shirts}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/search?s=shirts&currency=EUR\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {shirts}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "functional ref language and currency values remain separate",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/product?ref=A&lang=el&currency=EUR\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/product?ref=B&lang=el&currency=EUR\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/product?ref=A&lang=en&currency=EUR\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {en}",
+      "accept\nrxreq\nexpect req.url == \"/product?ref=A&lang=el&currency=USD\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {USD}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/product?ref=A&lang=el&currency=EUR\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/product?ref=B&lang=el&currency=EUR\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/product?ref=A&lang=en&currency=EUR\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/product?ref=A&lang=el&currency=USD\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {USD}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/product?ref=A&lang=el&currency=EUR&utm_source=x\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "language cookies select real Vary representations",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: lang=A; _ga=one\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: lang=B; _ga=two\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: lang=A; _ga=three\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "unknown cookies select real Vary representations",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: custom_audience=A; _ga=one\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: custom_audience=B; _ga=two\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: custom_audience=A; _ga=three\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "consent cookies select real Vary representations",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: consent=A; _ga=one\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: consent=B; _ga=two\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: consent=A; _ga=three\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "ordinary unknown cookies do not impose PASS without origin Vary",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\nexpect req.http.Cookie == \"unknown=A; _ga=first\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {public}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: unknown=A; _ga=first\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: unknown=B; _ga=second\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "canonical exact purge removes tracking variants and preserves language and site",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/purge?utm_source=A&lang=el\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {el}",
+      "accept\nrxreq\nexpect req.url == \"/purge?lang=en\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {en}",
+      "accept\nrxreq\nexpect req.url == \"/purge?lang=el\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {other}",
+      "accept\nrxreq\nexpect req.url == \"/purge?lang=el&utm_source=after\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {new-el}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/purge?utm_source=A&lang=el\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {el}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/purge?lang=en\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/purge?lang=el\" -hdr \"Host: other.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {other}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/purge?lang=el&utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {el}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req PURGE -url \"/purge?utm_source=C&utm_medium=D&lang=el\" -hdr \"Host: example.test\" @@PURGE_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/purge?lang=el&utm_source=after\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {new-el}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/purge?lang=en\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/purge?lang=el\" -hdr \"Host: other.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {other}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "soft purge uses canonical tracking key",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/soft?utm_source=A&lang=el\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {old}",
+      "accept\nrxreq\nexpect req.url == \"/soft?lang=el&utm_source=C\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {new}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/soft?utm_source=A&lang=el\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {old}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req PURGE -url \"/soft?lang=el&utm_source=B\" -hdr \"Host: example.test\" @@PURGE_HEADERS@@ -hdr \"X-UltraCache-Soft-Purge: 1\"\nrxresp\nexpect resp.status == 200\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/soft?lang=el&utm_source=C\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {old}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ],
+    "tail": "varnish v1 -expect MAIN.s_bgfetch == 1"
+  },
+  {
+    "name": "batch BAN selects canonical lookup metadata",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/ban?utm_source=A&lang=el\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {old}",
+      "accept\nrxreq\nexpect req.url == \"/ban?lang=en\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {en}",
+      "accept\nrxreq\nexpect req.url == \"/ban?lang=el\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {new}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/ban?utm_source=A&lang=el\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {old}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/ban?lang=en\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req PURGE -url \"/__ultracache-vcl-contract-v2\" -hdr \"Host: example.test\" @@PURGE_HEADERS@@ -hdr \"X-UltraCache-Contract: 2\" -hdr \"X-UltraCache-Operation: batch-ban\" -hdr \"X-UltraCache-Object-Expression: obj.http.X-Cache-Object-Host == \\\"example.test\\\" && obj.http.X-Cache-Object-URL ~ \\\"^/ban[?]lang=el$\\\"\"\nrxresp\nexpect resp.status == 200\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/ban?lang=el\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {new}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/ban?lang=en\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "protocol variants remain separate and one exact purge removes both",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/scheme?utm_source=A\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {http}",
+      "accept\nrxreq\nexpect req.url == \"/scheme?utm_source=B\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {https}",
+      "accept\nrxreq\nexpect req.url == \"/scheme\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {http-new}",
+      "accept\nrxreq\nexpect req.url == \"/scheme\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {https-new}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/scheme?utm_source=A\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-Forwarded-Proto: http\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {http}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/scheme?utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-Forwarded-Proto: https\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {https}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/scheme\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-Forwarded-Proto: http\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {http}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/scheme\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-Forwarded-Proto: https\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {https}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req PURGE -url \"/scheme?utm_source=C\" -hdr \"Host: example.test\" @@PURGE_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/scheme\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-Forwarded-Proto: http\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {http-new}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/scheme\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-Forwarded-Proto: https\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {https-new}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "warmup browser reuse and codec refusal with attested static HTML",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\nexpect req.http.Accept == \"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache-Source: apache-static\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept, Cookie, Accept-Language\" -body {avif}",
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache-Source: apache-static\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: webp\" -hdr \"Vary: Accept, Cookie, Accept-Language\" -body {webp}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\" -hdr \"Cookie: _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {avif}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\" -hdr \"Cookie: _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {avif}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,image/avif;q=0,image/webp\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {webp}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,image/avif;q=0,image/webp\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {webp}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "dynamic Accept negotiation is not guessed equivalent",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/api\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {json}",
+      "accept\nrxreq\nexpect req.url == \"/api\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {xml}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/api\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {json}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/api\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/xml\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {xml}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/api\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {json}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "authenticated headers cannot reuse warmed public HTML",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {public}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/public\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Authorization: Bearer example\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Authorization: Bearer example\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-WC-Store-API-Nonce: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-WC-Store-API-Nonce: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-WP-Nonce: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-WP-Nonce: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Nonce: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Nonce: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cart-Token: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cart-Token: a\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/public\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "private routes include subdirectory WordPress and WooCommerce actions",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-admin/\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-admin/\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-login.php\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-login.php\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-json/wc/store/v1/order\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-json/wc/store/v1/order\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-json/wp/v2/users/me\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/shop/wp-json/wp/v2/users/me\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/?rest_route=%2Fwc%2Fstore%2Fv1%2Fcheckout\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?rest_route=%2Fwc%2Fstore%2Fv1%2Fcheckout\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/?apply_coupon=SUMMER\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?apply_coupon=SUMMER\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/?consumer_key=secret\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?consumer_key=secret\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/?key=wc_order_example\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?key=wc_order_example\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/shop/wp-admin/\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-admin/\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-login.php\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-login.php\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-json/wc/store/v1/order\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-json/wc/store/v1/order\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-json/wp/v2/users/me\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/shop/wp-json/wp/v2/users/me\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?rest_route=%2Fwc%2Fstore%2Fv1%2Fcheckout\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?rest_route=%2Fwc%2Fstore%2Fv1%2Fcheckout\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?apply_coupon=SUMMER\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?apply_coupon=SUMMER\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?consumer_key=secret\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?consumer_key=secret\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?key=wc_order_example\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/?key=wc_order_example\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "login and cart session bodies remain per visitor",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wordpress_logged_in_demo=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wordpress_logged_in_demo=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wp_woocommerce_session_demo=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wp_woocommerce_session_demo=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: woocommerce_cart_hash=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: woocommerce_cart_hash=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "Set-Cookie tracking responses are not replayed to another visitor",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/landing?utm_source=A\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Set-Cookie: attribution=A\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/landing?utm_source=B\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Set-Cookie: attribution=B\" -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/landing?utm_source=A\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "expect resp.http.Set-Cookie == \"attribution=A\"",
+      "txreq -req GET -url \"/landing?utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "expect resp.http.Set-Cookie == \"attribution=B\""
+    ]
+  },
+  {
+    "name": "origin privacy and surrogate privacy remain effective",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\"  -body {B}",
+      "accept\nrxreq\nexpect req.url == \"/surrogate\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Surrogate-Control: private\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/surrogate\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Surrogate-Control: private\" -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/surrogate\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "expect resp.http.Cache-Control == \"private, no-store\"",
+      "txreq -req GET -url \"/surrogate\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "shared ESI parent still fetches separate personal fragments",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/parent\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -body {<html><esi:include src=\"/?ultracache_esi=cart&amp;esi_scope=private\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=A; woocommerce_items_in_cart=1\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=B; woocommerce_items_in_cart=1\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A; woocommerce_items_in_cart=1; ultracache_esi_optin=1; _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>A</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B; woocommerce_items_in_cart=1; ultracache_esi_optin=1; _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>B</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ],
+    "profiles": [
+      "ultracache"
+    ]
+  },
+  {
+    "name": "forged common metadata cannot grant sharing to a private request",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wordpress_logged_in_demo=A\" -hdr \"X-SCP-Profile: basic\" -hdr \"X-SCP-Pass: 0\" -hdr \"X-SCP-Key-URL: /public\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wordpress_logged_in_demo=B\" -hdr \"X-SCP-Profile: basic\" -hdr \"X-SCP-Pass: 0\" -hdr \"X-SCP-Key-URL: /public\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "dynamic Accept grammar whitespace shares a key without rewriting origin header",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/dynamic\"\nexpect req.http.Accept == \"application/json ; q=1 , text/plain; q=0.5\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {json}"
+    ],
+    "requests": [
+      "txreq -url \"/dynamic\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json ; q=1 , text/plain; q=0.5\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {json}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/dynamic\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json;q=1,text/plain;q=0.5\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {json}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
+  },
+  {
+    "name": "quoted Accept parameters retain actual semantic differences",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/quoted\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/quoted\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {B}"
+    ],
+    "requests": [
+      "txreq -url \"/quoted\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json;profile=\\\"a, b\\\"\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/quoted\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json;profile=\\\"a,b\\\"\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/quoted\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: application/json;profile=\\\"a, b\\\"\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
+  },
+  {
+    "name": "large Accept has no addon length or item optimization cutoff",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/large\"\nexpect req.http.Accept == \"text/html,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa7,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa9,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa10,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa11,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa12,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa13,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa14,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa15,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa16,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa17,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa18,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa19,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa20,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa21,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa22,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa23,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa24,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa25,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa26,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa27,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa28,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa29,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa30,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa31,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa32,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa33,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa34,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa35,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa36,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa37,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa38,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa39,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa40,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa41,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa42,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa43,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa44,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa45,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa46,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa47,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa48,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa49,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa50,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa51,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa52,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa53,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa54,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa55,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa56,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa57,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa58,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa59,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa60,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa61,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa62,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa63,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa64,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa65,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa66,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa67,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa68,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa69,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa70,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa71,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa72,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa73,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa74,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa75,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa76,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa77,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa78,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa79,image/avif,image/webp\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache-Source: apache-static\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept, Cookie\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/large\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa7,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa9,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa10,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa11,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa12,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa13,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa14,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa15,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa16,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa17,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa18,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa19,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa20,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa21,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa22,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa23,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa24,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa25,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa26,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa27,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa28,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa29,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa30,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa31,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa32,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa33,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa34,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa35,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa36,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa37,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa38,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa39,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa40,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa41,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa42,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa43,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa44,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa45,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa46,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa47,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa48,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa49,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa50,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa51,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa52,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa53,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa54,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa55,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa56,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa57,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa58,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa59,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa60,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa61,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa62,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa63,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa64,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa65,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa66,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa67,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa68,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa69,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa70,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa71,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa72,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa73,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa74,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa75,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa76,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa77,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa78,application/x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa79,image/avif,image/webp\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/large\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,image/avif,image/webp\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ],
+    "varnish_args": "-arg \"-p http_req_hdr_len=32768 -p http_req_size=65536 -p workspace_client=262144 -p workspace_backend=262144\""
+  },
+  {
+    "name": "public ESI fragments remain cacheable for cart-session parent visitors",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/parent\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -body {<html><esi:include src=\"/public-fragment\"/><esi:include src=\"/?ultracache_esi=cart&amp;esi_scope=private\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/public-fragment\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {public-}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {anonymous}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=A; woocommerce_items_in_cart=1\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=B; woocommerce_items_in_cart=1\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>public-anonymous</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A; woocommerce_items_in_cart=1; ultracache_esi_optin=1\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>public-A</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B; woocommerce_items_in_cart=1; ultracache_esi_optin=1\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>public-B</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
+  },
+  {
+    "name": "static HTML retains functional locale Cookie variation",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/localized\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache-Source: apache-static\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: orig\" -hdr \"Vary: Accept, Cookie\" -body {el}",
+      "accept\nrxreq\nexpect req.url == \"/localized\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache-Source: apache-static\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: orig\" -hdr \"Vary: Accept, Cookie\" -body {en}"
+    ],
+    "requests": [
+      "txreq -url \"/localized\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html\" -hdr \"Cookie: locale=el; _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {el}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/localized\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html\" -hdr \"Cookie: locale=en; _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/localized\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html\" -hdr \"Cookie: locale=el; _ga=C\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {el}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/localized\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html\" -hdr \"Cookie: locale=en; _ga=D\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {en}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
+  },
+  {
+    "name": "Accept absent and explicitly empty remain native variants",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/presence\"\nexpect req.http.Accept == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {missing}",
+      "accept\nrxreq\nexpect req.url == \"/presence\"\nexpect req.http.Accept == \"\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Accept\" -body {empty}"
+    ],
+    "requests": [
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {missing}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept:\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {empty}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {missing}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept:\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {empty}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Cookie absent and explicitly empty remain native variants",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/presence\"\nexpect req.http.Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {missing}",
+      "accept\nrxreq\nexpect req.url == \"/presence\"\nexpect req.http.Cookie == \"\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Vary: Cookie\" -body {empty}"
+    ],
+    "requests": [
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {missing}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie:\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {empty}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {missing}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/presence\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie:\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {empty}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "query values naming private paths are still public cache candidates",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/public?return=/wp-admin/\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -body {0}",
+      "accept\nrxreq\nexpect req.url == \"/public?next=/cart/\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -body {1}",
+      "accept\nrxreq\nexpect req.url == \"/public?resource=/wp-json/wc/store/v1/cart\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -body {2}",
+      "accept\nrxreq\nexpect req.url == \"/public?return=https://example.test/?consumer_key=not-auth\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -body {3}"
+    ],
+    "requests": [
+      "txreq -url \"/public?return=/wp-admin/\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {0}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/public?return=/wp-admin/\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {0}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/public?next=/cart/\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {1}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/public?next=/cart/\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {1}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/public?resource=/wp-json/wc/store/v1/cart\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {2}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/public?resource=/wp-json/wc/store/v1/cart\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {2}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/public?return=https://example.test/?consumer_key=not-auth\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {3}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/public?return=https://example.test/?consumer_key=not-auth\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {3}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "tracking-like text inside a functional query value is preserved",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/return?next=/page?utm_source=A\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/return?next=/page?utm_source=B\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -body {B}"
+    ],
+    "requests": [
+      "txreq -url \"/return?next=/page?utm_source=A\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/return?next=/page?utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/return?next=/page?utm_source=A&utm_source=outer\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/return?next=/page?utm_source=B&gclid=outer\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  }
+]
