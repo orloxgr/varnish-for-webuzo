@@ -15,7 +15,7 @@ from test_profiles import program
 
 
 @contextlib.contextmanager
-def proxy(profile, respond):
+def proxy(profile, respond, transform=None):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -43,6 +43,8 @@ def proxy(profile, respond):
         with tempfile.TemporaryDirectory(prefix='wvw-cookie-http-') as folder:
             root = Path(folder)
             source = program(profile).replace('${s1_port}', str(origin.server_port))
+            if transform is not None:
+                source = transform(source)
             (root / 'policy.vcl').write_text(source)
             with socket.socket() as reservation:
                 reservation.bind(('127.0.0.1', 0))
@@ -67,12 +69,14 @@ def proxy(profile, respond):
                             raise AssertionError('Isolated Varnish did not start: ' + log.read())
                         time.sleep(.05)
 
-                def get(path, cookie=None):
+                def get(path, cookie=None, extra=None):
                     connection = http.client.HTTPConnection('127.0.0.1', port, timeout=10)
                     try:
                         headers = {'Host': 'example.test', 'X-WV-Gateway': 'e' * 64}
                         if cookie is not None:
                             headers['Cookie'] = cookie
+                        if extra is not None:
+                            headers.update(extra)
                         connection.request('GET', path, headers=headers)
                         response = connection.getresponse()
                         fields = response.getheaders()
@@ -153,6 +157,54 @@ class NativeCookieDelivery(unittest.TestCase):
             self.assertEqual(cookies(fields), parent_cookies)
             self.assertEqual(dict(fields)['X-Webuzo-Varnish'], 'PASS')
             self.assertEqual(calls, ['/parent', '/?ultracache_esi=cart&esi_scope=private'])
+
+
+@unittest.skipUnless(shutil.which('varnishd') and Path('/usr/lib/varnish/vmods/libvmod_header.so').is_file(),
+                     'Official native header VMOD required')
+class NativeHeaderPrimitive(unittest.TestCase):
+    """Test the VMOD transport primitive, not a provider/consent integration."""
+
+    def test_append_and_targeted_removal_preserve_other_cookies_and_deletions(self):
+        kept = ['private_id=origin-session; Path=/account; Secure; HttpOnly; SameSite=Strict',
+                'obsolete=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/']
+
+        def origin(path, headers):
+            return 'public-body', [('Cache-Control', 'public, max-age=120'),
+                ('Set-Cookie', '_fbp=original; Path=/; Secure'),
+                *[('Set-Cookie', value) for value in kept]]
+
+        def transform(source):
+            return source.replace('import purge;', 'import purge;\nimport header;').replace(
+                ' call scp_backend_response;',
+                ' header.remove(beresp.http.Set-Cookie, "^_fbp=");\n call scp_backend_response;').replace(
+                ' call scp_deliver;',
+                ' header.append(resp.http.Set-Cookie, "fixture=independent; Path=/; Secure");\n call scp_deliver;')
+
+        with proxy('basic', origin, transform) as get:
+            status, fields, body = get('/primitive')
+            self.assertEqual((status, body), (200, 'public-body'))
+            self.assertEqual(cookies(fields), kept + ['fixture=independent; Path=/; Secure'])
+            self.assertEqual(dict(fields)['X-Webuzo-Varnish'], 'PASS')
+
+    def test_per_delivery_values_never_enter_the_cached_object(self):
+        calls = []
+
+        def origin(path, headers):
+            calls.append(path)
+            return 'same-public-html', [('Cache-Control', 'public, max-age=120')]
+
+        def transform(source):
+            return source.replace('import purge;', 'import purge;\nimport header;').replace(
+                ' call scp_deliver;',
+                ' header.append(resp.http.Set-Cookie, "fixture=" + req.http.X-Fixture-Visitor + "; Path=/");\n call scp_deliver;')
+
+        with proxy('basic', origin, transform) as get:
+            for visitor, result in (('A', 'MISS'), ('B', 'HIT'), ('C', 'HIT')):
+                status, fields, body = get('/shared', extra={'X-Fixture-Visitor': visitor})
+                self.assertEqual((status, body), (200, 'same-public-html'))
+                self.assertEqual(cookies(fields), ['fixture=' + visitor + '; Path=/'])
+                self.assertEqual(dict(fields)['X-Webuzo-Varnish'], result)
+            self.assertEqual(calls, ['/shared'])
 
 
 if __name__ == '__main__':

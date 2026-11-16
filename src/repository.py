@@ -158,16 +158,51 @@ def reconcile_owned():
     if record.get('source')!=source_text(release(),architecture()) or 'pending_source' in record or PIN.exists():setup()
 
 
-def candidate(codename,arch):
-    policy=native.run('apt-cache','policy','varnish')
+def candidate(codename,arch,package='varnish'):
+    if package not in ('varnish','varnish-modules'):raise ValueError('Unknown Varnish package')
+    policy=native.run('apt-cache','policy',package)
     found=re.search(r'^\s*Candidate:\s*(\S+)\s*$',policy,re.M)
-    if not found or found[1]=='(none)':raise ValueError('APT has no Varnish candidate for Ubuntu '+codename)
+    if not found or found[1]=='(none)':raise ValueError('APT has no '+package+' candidate for Ubuntu '+codename)
     version=found[1]
-    for line in native.run('apt-cache','madison','varnish').splitlines():
+    for line in native.run('apt-cache','madison',package).splitlines():
         parts=[part.strip() for part in line.split('|')]
-        if len(parts)==3 and parts[0]=='varnish' and parts[1]==version and parts[2].split()==[BASE,codename+'/main',arch,'Packages']:
+        if len(parts)==3 and parts[0]==package and parts[1]==version and parts[2].split()==[BASE,codename+'/main',arch,'Packages']:
             return version
-    raise ValueError('The APT Varnish candidate is not from the matching official repository; review the administrator package preferences')
+    raise ValueError('The APT '+package+' candidate is not from the matching official repository; review the administrator package preferences')
+
+
+def cookie_modules_compatible():
+    """Compile the native APIs used to preserve repeated Set-Cookie fields."""
+    with tempfile.TemporaryDirectory(dir=state.ROOT) as folder:
+        candidate=Path(folder)/'cookie-modules.vcl'
+        candidate.write_text('''vcl 4.1;
+import header;
+import cookie;
+backend default { .host = "127.0.0.1"; .port = "9"; }
+sub vcl_backend_response { header.remove(beresp.http.Set-Cookie, "^probe="); }
+sub vcl_deliver { header.append(resp.http.Set-Cookie, "probe=1; Path=/"); }
+''',encoding='utf-8')
+        try:native.run('/usr/sbin/varnishd','-C','-j','none','-f',candidate)
+        except RuntimeError:return False
+    return True
+
+
+def ensure_cookie_modules():
+    """Add the official VMOD package without replacing a running cache engine."""
+    if cookie_modules_compatible():return
+    codename=setup();arch=architecture()
+    native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
+    version=candidate(codename,arch,'varnish-modules')
+    engine_version=native.run('dpkg-query','-W','-f=${Version}','varnish').strip()
+    if not engine_version or any(c.isspace() for c in engine_version):raise ValueError('Cannot determine the installed Varnish package version')
+    packages=('varnish='+engine_version,'varnish-modules='+version)
+    simulation=native.run('apt-get','-s','--no-remove','install',*packages)
+    # Pinning the installed engine version also makes the real APT transaction
+    # refuse an engine upgrade if package metadata changes after the preview.
+    if any(line.startswith('Remv ') or re.match(r'Inst varnish(?::[^ ]+)? ',line) for line in simulation.splitlines()):
+        raise ValueError('The cookie module package would replace Varnish. Install modules matching the existing engine before retrying.')
+    native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','--no-remove',*packages)
+    if not cookie_modules_compatible():raise ValueError('The installed Varnish modules cannot compile the cookie delivery APIs')
 
 
 def ensure_package():

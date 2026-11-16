@@ -46,6 +46,41 @@ class Selection(unittest.TestCase):
         for source in (repo.source_text('noble').replace(repo.BASE,'https://untrusted.test'),repo.source_text('noble')+'# changed\n'):
             with self.assertRaises(ValueError):repo.owned_source(source)
 
+    def test_module_candidate_uses_the_matching_official_repository(self):
+        version='9.1.0-2~noble'
+        calls=[]
+        def run(*args):
+            calls.append(args)
+            return ' Candidate: '+version+'\n' if args[1]=='policy' else 'varnish-modules | '+version+' | '+repo.BASE+' noble/main amd64 Packages\n'
+        with patch.object(native,'run',side_effect=run):self.assertEqual(repo.candidate('noble','amd64','varnish-modules'),version)
+        self.assertEqual(calls,[('apt-cache','policy','varnish-modules'),('apt-cache','madison','varnish-modules')])
+        with self.assertRaises(ValueError):repo.candidate('noble','amd64','unrelated')
+
+    def test_existing_module_support_never_invokes_apt(self):
+        with patch.object(repo,'cookie_modules_compatible',return_value=True),patch.object(repo,'setup') as setup,patch.object(native,'run') as run:
+            repo.ensure_cookie_modules()
+        setup.assert_not_called();run.assert_not_called()
+
+    def test_module_install_pins_existing_engine_and_keeps_services_running(self):
+        calls=[]
+        def run(*args):
+            calls.append(args)
+            return '9.1.0-2~noble' if args[0]=='dpkg-query' else 'Inst varnish-modules (9.1.0-2~noble)\n'
+        with patch.object(repo,'cookie_modules_compatible',side_effect=[False,True]),patch.object(repo,'setup',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'candidate',return_value='9.1.0-2~noble'),patch.object(native,'run',side_effect=run):
+            repo.ensure_cookie_modules()
+        self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','--no-remove','varnish=9.1.0-2~noble','varnish-modules=9.1.0-2~noble'),calls)
+        self.assertFalse(any('systemctl' in call for call in calls))
+
+    def test_module_install_refuses_engine_replacement_or_removals(self):
+        for plan in ('Inst varnish [9.1.0] (10.0.0)\n','Inst varnish:amd64 [9.1.0] (10.0.0)\n','Remv unrelated-service [1.0]\n'):
+            calls=[]
+            def run(*args):
+                calls.append(args)
+                return '9.1.0-2~noble' if args[0]=='dpkg-query' else plan
+            with self.subTest(plan=plan),patch.object(repo,'cookie_modules_compatible',return_value=False),patch.object(repo,'setup',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'candidate',return_value='9.1.0-2~noble'),patch.object(native,'run',side_effect=run),self.assertRaisesRegex(ValueError,'would replace Varnish'):
+                repo.ensure_cookie_modules()
+            self.assertFalse(any(call[0]=='env' for call in calls))
+
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Disposable Linux/root tests')
 class Repository(unittest.TestCase):
