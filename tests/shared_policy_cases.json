@@ -438,5 +438,58 @@
       "txreq -url \"/return?next=/page?utm_source=A&utm_source=outer\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"",
       "txreq -url \"/return?next=/page?utm_source=B&gclid=outer\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"HIT\""
     ]
+  },
+  {
+    "name": "stored PHP page-cache HIT reuses warm HTML across browser Accept headers",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\nexpect req.http.Accept == \"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: HIT\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept, Cookie, Accept-Language\" -body {avif}",
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: HIT\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: webp\" -hdr \"Vary: Accept, Cookie, Accept-Language\" -body {webp}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\" -hdr \"Cookie: _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {avif}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\" -hdr \"Cookie: _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {avif}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,image/avif;q=0,image/webp\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {webp}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
+      "txreq -req GET -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,image/avif;q=0,image/webp\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {webp}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
+    ]
+  },
+  {
+    "name": "stored PHP ESI warm parent serves first browser Accept and separate personal fragments",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/cached-parent\"\nexpect req.http.Accept == \"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: HIT\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -body {<html><esi:include src=\"/?ultracache_esi=cart&amp;esi_scope=private\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {anonymous}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=A; woocommerce_items_in_cart=1\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {visitor-A}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=B; woocommerce_items_in_cart=1\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {visitor-B}"
+    ],
+    "requests": [
+      "txreq -url \"/cached-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>anonymous</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/cached-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\" -hdr \"Cookie: esi_session=A; woocommerce_items_in_cart=1; ultracache_esi_optin=1\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>visitor-A</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/cached-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\" -hdr \"Cookie: esi_session=B; woocommerce_items_in_cart=1; ultracache_esi_optin=1\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>visitor-B</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
+  },
+  {
+    "name": "dynamic public STORE preserves raw browser Accept variation",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/dynamic-store\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: STORE\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept\" -body {warm-render}",
+      "accept\nrxreq\nexpect req.url == \"/dynamic-store\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: STORE\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept\" -body {browser-render}"
+    ],
+    "requests": [
+      "txreq -url \"/dynamic-store\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {warm-render}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/dynamic-store\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {browser-render}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/dynamic-store\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {browser-render}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
+  },
+  {
+    "name": "stored PHP HIT marker cannot override Set-Cookie privacy",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/cookie-hit\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: HIT\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept\" -hdr \"Set-Cookie: PHPSESSID=A\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/cookie-hit\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"X-Ultra-Cache: HIT\" -hdr \"X-UltraCache-Cacheable: 1\" -hdr \"X-UltraCache-Variant: avif\" -hdr \"Vary: Accept\" -hdr \"Set-Cookie: PHPSESSID=B\" -body {B}"
+    ],
+    "requests": [
+      "txreq -url \"/cookie-hit\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/cookie-hit\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\""
+    ]
   }
 ]

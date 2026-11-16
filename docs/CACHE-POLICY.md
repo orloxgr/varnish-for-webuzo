@@ -35,8 +35,9 @@ and functional Cookie variations retain real Vary matching. Unquoted
 grammar-equivalent Accept whitespace is normalized in a separate key. Missing
 and explicitly empty Accept/Cookie headers remain distinct native variants.
 
-For a prebuilt public UltraCache HTML file, the origin contract consists of
-`X-Ultra-Cache-Source: apache-static` (or `X-UltraCache-Source`),
+For stored public UltraCache HTML, including page-cache ESI parents, the origin
+contract consists of `X-Ultra-Cache-Source: apache-static` (or `X-UltraCache-Source`)
+or an actual `X-Ultra-Cache: HIT` from the PHP page-cache reader, together with
 `X-UltraCache-Cacheable: 1`, and `X-UltraCache-Variant: orig|webp|avif`.
 The response must also be a cacheable public HTML 200 without Set-Cookie.
 For HTML navigation requests, this identifies an object whose Accept
@@ -48,7 +49,8 @@ this optimization.
 
 Static and dynamic HTML both use an analytics-only Cookie variant key.
 Functional/unknown cookies, including locale, consent and currency, are retained.
-The static HTML contract does not remove those Cookie differences. Other
+The stored HTML contract does not remove those Cookie differences. A dynamic
+`X-Ultra-Cache: STORE` response keeps its original Accept variation. Other
 dimensions, including Accept-Language, are preserved. The original Vary is restored for
 the browser and downstream caches. Client-supplied internal variant headers
 are never trusted.

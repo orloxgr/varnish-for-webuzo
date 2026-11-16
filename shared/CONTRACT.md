@@ -42,8 +42,11 @@ remove duplicate panel-specific versions of those rules.
 utm_*, gclid/dclid/fbclid/msclkid/gbraid/wbraid/igshid arguments. All functional
 arguments, including search, ref, language, currency, duplicate values and their
 order remain. The Cookie variant ignores only known analytics IDs; unknown,
-referral, language and consent cookies remain. The public static-HTML response
-contract can collapse equivalent HTML image capabilities. Static and dynamic
+referral, language and consent cookies remain. The public stored-HTML response
+contract can collapse equivalent HTML image capabilities. It accepts origin
+Apache-static provenance or an actual `X-Ultra-Cache: HIT`, with the existing
+public/cacheable/variant/no-Set-Cookie checks. This includes stored ESI parents;
+new dynamic `STORE` responses retain raw Accept variation. Static and dynamic
 HTML both retain functional Cookie variation; only analytics IDs are omitted.
 
 For exact URL PURGE, call `scp_key` on the authenticated original purge URL and

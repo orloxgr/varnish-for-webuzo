@@ -414,7 +414,7 @@ sub scp_ultracache_backend_response {
     }
 }
 
-# Keep raw Accept at the origin. Only an identified public static HTML object
+# Keep raw Accept at the origin. Only an identified public stored HTML object
 # can substitute its known image-capability dimensions for the raw header.
 sub scp_representation_recv {
     std.collect(req.http.Accept);
@@ -448,11 +448,12 @@ sub scp_representation_recv {
 
 sub scp_representation_response {
     std.collect(beresp.http.Vary);
-    # This contract identifies the application's prebuilt anonymous HTML files,
-    # not arbitrary dynamic HTML that merely declares itself public/cacheable.
+    # Apache static files and actual page-cache HITs identify stored HTML,
+    # including ESI parents. A new dynamic STORE is not this contract.
     if (bereq.http.X-SCP-HTML-Accept && !beresp.uncacheable &&
         beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html(;|$)" &&
-        (beresp.http.X-Ultra-Cache-Source == "apache-static" || beresp.http.X-UltraCache-Source == "apache-static") &&
+        (beresp.http.X-Ultra-Cache-Source == "apache-static" || beresp.http.X-UltraCache-Source == "apache-static" ||
+         beresp.http.X-Ultra-Cache == "HIT") &&
         beresp.http.X-UltraCache-Cacheable == "1" &&
         beresp.http.X-UltraCache-Variant ~ "^(orig|webp|avif)$" &&
         (beresp.http.X-UltraCache-Variant != "avif" || bereq.http.X-SCP-HTML-Accept ~ ";avif") &&

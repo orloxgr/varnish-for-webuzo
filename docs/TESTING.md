@@ -1,5 +1,25 @@
 # Verification
 
+## 0.4.4 — 16 November 2026
+
+All 147 Webuzo backend tests pass, together with 63 shared native HTTP cases.
+New cases cover stored PHP page-cache HITs, warmed ESI parents with different
+browser Accept headers and separate private fragments, dynamic STORE variation,
+and rejection of a HIT marker when the response sets a session cookie.
+
+An isolated real WordPress/UltraCache test used Apache, PHP-FPM, the Webuzo
+VCL renderer, Varnish and Edge. WordPress Warm filled all three orig/webp/avif
+ESI parent variants. The first different browser Accept, AVIF q=0 and original
+image requests all HIT; two independent browser contexts received the rendered
+ESI fragment on a HIT. Login and cart requests remained PASS. Temporary
+processes, WordPress fixture, database and database user were removed; existing
+service PIDs remained unchanged. No production service was changed.
+
+The installed Webuzo panel ZIP-upgrade test remains unavailable due to the lab
+license. After upgrading the package, **Refresh sites** applies the new VCL to
+an existing installation. The Hestia port is coordinated separately; these
+results describe the Webuzo adapter and renderer.
+
 ## 0.4.3 — 15 November 2026
 
 The shared HTTP policy is byte-identical in Webuzo and Hestia. The common
