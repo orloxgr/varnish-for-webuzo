@@ -83,6 +83,13 @@ class Selection(unittest.TestCase):
         self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','--no-remove','varnish=9.1.0-2~noble','varnish-modules=9.1.0-2~noble'),calls)
         self.assertFalse(any('systemctl' in call for call in calls))
 
+    def test_module_install_reuses_an_administrators_matching_official_source(self):
+        def run(*args):
+            return '9.1.0-2~noble' if args[0]=='dpkg-query' else 'Inst varnish-modules (9.1.0-2~noble)\n'
+        with patch.object(repo,'cookie_modules_compatible',side_effect=[False,True]),patch.object(Path,'exists',return_value=False),patch.object(repo,'release',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'existing_source',return_value=True),patch.object(repo,'candidate',return_value='9.1.0-2~noble'),patch.object(repo,'setup') as setup,patch.object(native,'run',side_effect=run):
+            repo.ensure_cookie_modules()
+        setup.assert_not_called()
+
     def test_module_install_refuses_engine_replacement_or_removals(self):
         for plan in ('Inst varnish [9.1.0] (10.0.0)\n','Inst varnish:amd64 [9.1.0] (10.0.0)\n','Remv unrelated-service [1.0]\n'):
             calls=[]

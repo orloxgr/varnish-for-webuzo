@@ -190,7 +190,10 @@ sub vcl_deliver { header.append(resp.http.Set-Cookie, "probe=1; Path=/"); }
 def ensure_cookie_modules():
     """Add the official VMOD package without replacing a running cache engine."""
     if cookie_modules_compatible():return
-    codename=setup();arch=architecture()
+    codename=release();arch=architecture()
+    # An adopted native engine may already use the official signed source with
+    # an administrator's keyring. Do not add another Signed-By for that source.
+    if RECORD.exists() or not existing_source(codename,arch):codename=setup()
     native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
     version=candidate(codename,arch,'varnish-modules')
     engine_version=native.run('dpkg-query','-W','-f=${Version}','varnish').strip()
