@@ -6,6 +6,7 @@ import native
 import fragments
 import profiles
 import timeouts
+import cookie_policy
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
 
@@ -86,6 +87,8 @@ sub vcl_recv {
             ' if (req.http.X-UltraCache-Token == '+quoted(site['token'])+') { call wvw_http_control; }\n'+
             ' if (req.method != "PURGE") { return (synth(403)); }\n'+
             ' ban("obj.http.X-WV-Site == '+site['id']+'"); return (synth(200, "Site cache cleared")); }\n }')
+        delivery=cookie_policy.delivery_configuration(site,sites)
+        if delivery:text.append(' if ('+cond+') {\n'+delivery+'\n }')
     text.append('''
  if (req.method == "PURGE" || req.method == "BAN") { return (synth(403)); }
  if (!req.http.X-WV-Site) { return (synth(421)); }

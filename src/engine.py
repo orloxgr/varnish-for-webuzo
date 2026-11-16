@@ -16,6 +16,7 @@ import timeouts
 import connections
 import browser_cache
 import repository
+import cookie_policy
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -30,6 +31,7 @@ def inventory(config):
         site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),bypass=previous.get('bypass',[]))
         site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
         site['browser_cache']=browser_cache.validate(previous['browser_cache']) if previous.get('browser_cache') is not None else None
+        site['cookie_delivery']=cookie_policy.delivery_settings(previous.get('cookie_delivery'),site,sites)
     return sites
 
 def status():
@@ -106,6 +108,7 @@ def apply(previous,next_config):
             for sid,site in next_config['sites'].items():
                 old=previous.get('sites',{}).get(sid,{})
                 changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','bypass','names','recv_vcl','backend_vcl'))
+                changed=changed or cookie_policy.delivery_settings(old.get('cookie_delivery'),site,next_config['sites'])!=cookie_policy.delivery_settings(site.get('cookie_delivery'),site,next_config['sites'])
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
                 if site.get('enabled') and changed:service.purge(site)
         for change in changes:routing.replace(change)
@@ -133,9 +136,9 @@ def validate_vcl(sites,config,sid=None):
 def action(request):
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
-    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore'}
+    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore','cookie_delivery'}
     if operation not in allowed:raise ValueError('Unknown action')
-    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
+    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'},'cookie_delivery':{'id','settings'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
     with state.locked():
@@ -173,10 +176,15 @@ def action(request):
                 row={field:request.get(field) for field in ('recv_vcl','backend_vcl')}
                 config.setdefault('profile_rules',{})[profile]=row
                 profiles.rules(config,profile);validate_vcl(sites,config)
-            if operation in ('configure','purge','connection','vcl','browser_site'):
+            if operation in ('configure','purge','connection','vcl','browser_site','cookie_delivery'):
                 sid=state.identity(request.get('id'))
                 if sid not in sites:raise ValueError('Unknown site')
                 site=sites[sid]
+                if operation=='cookie_delivery':
+                    if 'settings' not in request:raise ValueError('Cookie delivery settings are required')
+                    if site['error']:raise ValueError(site['error'])
+                    site['cookie_delivery']=cookie_policy.delivery_settings(request['settings'],site,sites)
+                    validate_vcl(sites,config,sid)
                 if operation=='browser_site':
                     if 'settings' not in request:raise ValueError('Browser cache settings are required')
                     site['browser_cache']=None if request['settings'] is None else browser_cache.validate(request['settings'])
@@ -211,7 +219,7 @@ def action(request):
             connections.prepare(previous,config,request.get('port',config.get('control_port',connections.DEFAULT_PORT)))
         if operation=='configure':credentials.change(site,site['enabled'])
         apply(previous,config)
-        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','connection_setup':'Local HTTP connection saved. Show connection information in the site row for the application settings.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.','browser_defaults':'Browser cache defaults applied to sites using the central settings. Existing browser copies expire under their previous policy.','browser_site':'Browser cache settings saved for this site. Existing browser copies expire under their previous policy.','browser_restore':'Browser cache defaults restored and applied to all enabled sites: 30 days for ordinary assets and one year for versioned assets. Custom browser patterns and site overrides were cleared.'}[operation])
+        return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','connection_setup':'Local HTTP connection saved. Show connection information in the site row for the application settings.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.','browser_defaults':'Browser cache defaults applied to sites using the central settings. Existing browser copies expire under their previous policy.','browser_site':'Browser cache settings saved for this site. Existing browser copies expire under their previous policy.','browser_restore':'Browser cache defaults restored and applied to all enabled sites: 30 days for ordinary assets and one year for versioned assets. Custom browser patterns and site overrides were cleared.','cookie_delivery':'Cookie delivery settings saved for this site.'}[operation])
 
 def remove():
     with state.locked():

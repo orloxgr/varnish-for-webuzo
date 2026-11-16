@@ -48,6 +48,26 @@
       }
     };
   }
+  function cookieDeliveryEditor(parent, site) {
+    const settings = site.cookie_delivery.fbp, box = node('details');
+    box.append(node('summary', 'Independent cookie delivery'));
+    const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = settings.enabled;
+    enabled.setAttribute('aria-label', 'Deliver Meta _fbp independently for ' + site.domain);
+    const enableLabel = node('label'); enableLabel.append(enabled, document.createTextNode(' Deliver Meta _fbp separately from public cached HTML')); box.append(enableLabel);
+    box.append(node('p', 'Use this for a site that already uses Meta tracking. Each visitor keeps their own browser ID while public HTML can be shared. Creating a new cookie requires the consent cookie and accepted value below on that request.'));
+    const field = (label, value, placeholder) => {
+      const caption = node('label', label), input = node('input'); input.type = 'text'; input.value = value; input.placeholder = placeholder; input.autocomplete = 'off';
+      input.setAttribute('aria-label', label + ' for ' + site.domain); caption.append(input); box.append(caption); return input;
+    };
+    const consentCookie = field('Consent cookie name', settings.consent_cookie, 'cmplz_marketing');
+    const consentValue = field('Accepted consent value', settings.consent_value, 'allow');
+    const domain = field('Cookie domain — leave blank for this hostname only', settings.domain, site.domain);
+    box.append(node('p', 'Names and values are case-sensitive. Use the consent signal configured by this site’s consent manager. Existing cookies and cookies sent by the website are preserved. New cookies use path /, a 90-day lifetime, SameSite=Lax and Secure on HTTPS.'));
+    const save = node('button', 'Save cookie delivery'); save.type = 'button';
+    save.addEventListener('click', () => call('cookie_delivery', {id: site.id, settings: {fbp: {enabled: enabled.checked, consent_cookie: consentCookie.value, consent_value: consentValue.value, domain: domain.value}}}));
+    for (const input of [enabled, consentCookie, consentValue, domain, save]) input.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+    box.append(save); parent.append(box);
+  }
   async function call(action, values = {}) {
     if (busy) return;
     busy = true; controls(); byId('error').hidden = true; byId('notice').hidden = true;
@@ -108,6 +128,7 @@
       const saveBrowser = node('button', 'Save site browser cache'); saveBrowser.type = 'button'; saveBrowser.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       saveBrowser.addEventListener('click', () => call('browser_site', {id: site.id, settings: siteBrowserEditor.value()})); browserBox.append(saveBrowser);
       section.append(browserBox);
+      if (site.cookie_delivery) cookieDeliveryEditor(section, site);
       const browserButton = node('button', 'Browser cache'); browserButton.type = 'button'; browserButton.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       browserButton.addEventListener('click', () => { detailRow.hidden = false; browserBox.open = !browserBox.open; edit.setAttribute('aria-expanded', 'true'); }); actions.append(browserButton);
       const edit = node('button', 'VCL & connection'); edit.type = 'button'; edit.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
