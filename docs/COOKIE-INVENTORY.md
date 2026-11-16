@@ -19,9 +19,12 @@ It is an implementation inventory, not a declaration of provider support.
 | Administration | `engine.inventory`, `engine.status`, `configure`, and site details in `panel/app.js` | Per-site provider/consent settings and value-free diagnostics, using existing transaction validation |
 | Diagnostics | `X-Webuzo-Varnish`, profile and reason headers | Add cookie names/policy/delivery decisions without cookie values or identifiers |
 
-`src/cookie_policy.py` also contains private/cart/session name lists. They overlap
-with recognition in the shared VCL and must use the agreed catalogue rather than
-become a second source of executable policy.
+`src/cookie_policy.py` previously also contained private/cart/session name lists.
+Those duplicates are now removed. `shared/cookie-policies.json` provides the
+reviewed roles, and the shared `cookie_catalogue.py` compiler expands the VCL
+patterns when generating a configuration. The panel displays this generated VCL.
+The separate recognition snapshot supplies descriptions only; its categories do
+not grant caching or issuance permission.
 
 The panel currently has no CMP integration or independent provider-cookie issuer.
 The clean-refill/handoff, Apache Static, drop-in and browser fallback mechanisms
@@ -60,5 +63,6 @@ being misreported as an incompatible running cache engine.
 
 The dedicated lab installed the native module package with the existing service
 PIDs unchanged. Both native HTTP field tests and lifecycle/repository/ESI
-regressions passed. Provider/CMP delivery and the final shared catalogue compiler
-remain separate work to verify before publication.
+regressions passed. Provider/CMP delivery remains work to verify before publication. The shared
+catalogue compiler is integrated, and its native parity is checked separately
+from the independent cookie-delivery primitive.

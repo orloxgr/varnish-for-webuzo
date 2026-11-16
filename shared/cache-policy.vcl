@@ -54,13 +54,13 @@ sub scp_recv {
 }
 
 sub scp_private_cookie_recv {
-    if (req.http.Cookie ~ {"(^|;[[:blank:]]*)(wordpress_logged_in_[^=;[:blank:]]*|wordpress_sec_[^=;[:blank:]]*|wp\-postpass_[^=;[:blank:]]*|comment_author_[^=;[:blank:]]*|PHPSESSID|woocommerce_recently_viewed|yith_wcwl_session_[^=;[:blank:]]*|yith_woocompare_[^=;[:blank:]]*)="}) {
+    if (req.http.Cookie ~ {"@@COOKIE_PATTERN_varnishPrivate@@"}) {
         set req.http.X-SCP-Reason = "private-session-cookie"; return (pass);
     }
 }
 
 sub scp_cart_cookie_recv {
-    if (req.http.Cookie ~ {"(^|;[[:blank:]]*)(woocommerce_items_in_cart|woocommerce_cart_hash|wp_woocommerce_session_[^=;[:blank:]]*)="}) {
+    if (req.http.Cookie ~ {"@@COOKIE_PATTERN_varnishCart@@"}) {
         if (req.http.X-SCP-Profile == "ultracache" && req.http.X-UltraCache-ESI-Opt-In == "1") {
             set req.http.X-UltraCache-ESI-Candidate = "1";
         } else { set req.http.X-SCP-Reason = "woocommerce-session-cookie"; return (pass); }
@@ -202,7 +202,7 @@ sub scp_cookie_variation {
     # Unknown/consent/referral/language cookies are retained, never whitelisted.
     unset req.http.X-SCP-Vary-Cookie;
     if (req.http.Cookie) {
-        set req.http.X-SCP-Vary-Cookie = regsuball(req.http.Cookie, {"(^|;[[:blank:]]*)(_ga|_ga_[^=;[:blank:]]*|_gid|_gat|_gat_[^=;[:blank:]]*|_gcl_au|_fbp|_fbc|__utma|__utmb|__utmc|__utmt|__utmv|__utmz|sbjs_migrations|sbjs_current|sbjs_current_add|sbjs_first|sbjs_first_add|sbjs_udata|sbjs_session)=[^;]*"}, "");
+        set req.http.X-SCP-Vary-Cookie = regsuball(req.http.Cookie, {"@@COOKIE_PATTERN_varnishTrackingIgnore@@[^;]*"}, "");
         set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
         set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, ";[[:blank:]]*", "; ");
         if (req.http.Cookie != "" && req.http.X-SCP-Vary-Cookie == "") { unset req.http.X-SCP-Vary-Cookie; }

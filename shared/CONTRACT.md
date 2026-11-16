@@ -1,9 +1,31 @@
 # Shared cache policy contract
 
-`cache-policy.vcl` is included byte-for-byte in each distribution. It contains
+`cache-policy.vcl` is shipped byte-for-byte in each distribution. It contains
 Basic/UltraCache request, privacy, ESI, representation and key policy. It imports
 nothing from another checkout or network resource. The adapter imports `std`
 and `purge` in the complete VCL and defines host/backend/token isolation.
+
+## Local cookie catalogue
+
+The shared `cookie-policies.json` is the reviewed execution catalogue, schema 1.
+`cookie_catalogue.py` validates it and expands `@@COOKIE_PATTERN_<consumer>@@`
+markers when the adapter generates a complete standalone VCL. The three current
+consumers are `varnishPrivate`, `varnishCart`, and `varnishTrackingIgnore`.
+Exact and prefix cookie names are case-sensitive and escaped as literal PCRE.
+No recognition category grants an executable policy or a cookie issuer.
+
+The catalogue distinguishes HTML effect, key role, issuer, independent-delivery
+support, consent, and cookie attributes. An unsupported independent issuer does
+not disable an existing cookie's request policy. Unknown cookies keep existing
+HTTP behavior. Removing tracking variation never removes those cookies from
+the origin request and never grants permission to replay personal Set-Cookie.
+
+`cookie-recognition/recognition.json` is an attributed, revision-pinned Open
+Cookie Database snapshot for recognition only. Its Apache-2.0 license is shipped
+alongside it. It is not read by the VCL compiler or during an HTTP request. Do
+not replace executable rules with a category-derived allowlist. All distributed
+copies of the reviewed catalogue and compiler must agree at release time;
+installed servers neither import another checkout nor contact a lookup service.
 
 ## Calls and trusted inputs
 

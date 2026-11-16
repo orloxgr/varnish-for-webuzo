@@ -6,3 +6,5 @@ Native metadata parser and panel IPC adapted from https://github.com/orloxgr/web
 This integration is distributed under GPL-3.0-or-later.
 Native marker/retention and origin error-status policy aligned with Hestia commit a7261d90349b300d767af33e7f2051e01a004a42; Webuzo retains its own installer and routing.
 Shared Basic/UltraCache policy: shared/cache-policy.vcl is distributed unchanged in both panel integrations, with panel-specific host/backend/token adapters. Policy SHA256 7cea910fa4e05a4d874fb01f8ca51c28fe1e56d1af503ce219d0bc8d529edefb; native parity verified by identical 56-case result sets.
+
+Reviewed cookie policies: shared/cookie-policies.json schema 1, version 2026.11.16.1, copied unchanged from the UltraCache application catalogue. Shared compiler and VCL template are distributed unchanged with the Hestia integration. Open Cookie Database recognition metadata is bundled separately with its Apache-2.0 license and pinned source revision; recognition categories do not grant executable caching or issuance policy.

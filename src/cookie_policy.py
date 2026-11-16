@@ -1,13 +1,12 @@
-"""Application cookie exclusions; additional owner rules can only add bypasses."""
+"""Owner cookie exclusions; built-in HTTP policy lives in the shared VCL."""
 import re
+from pathlib import Path
+import sys
 
-# WordPress private state, PHP sessions and common personalized Woo extensions.
-# A persistent session may hold notices/customer data without browser-session
-# cart markers. Both groups bypass shared HTML unless UltraCache approves ESI.
-PRIVATE = ('wordpress_logged_in_*', 'wordpress_sec_*', 'wp-postpass_*', 'comment_author_*',
-           'PHPSESSID', 'woocommerce_recently_viewed', 'yith_wcwl_session_*', 'yith_woocompare_*')
-CART = ('woocommerce_items_in_cart', 'woocommerce_cart_hash')
-SESSION = ('wp_woocommerce_session_*',)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
+from cookie_catalogue import load_catalogue, render_policy
+
+# Built-in roles come from the shared reviewed catalogue, not recognition categories.
 RULE = re.compile(r"[!#$%&'+.^_`|~0-9A-Za-z-]+\*?")
 
 
@@ -46,3 +45,8 @@ def vcl_pattern(rules):
     # Native long strings preserve PCRE escapes. Cookie names cannot contain
     # quotes/braces, so they cannot terminate this generated VCL literal.
     return '{"' + pattern(rules) + '"}'
+
+
+def shared_policy():
+    source = Path(__file__).resolve().parents[1] / "shared/cache-policy.vcl"
+    return render_policy(source.read_text(encoding="utf-8"), load_catalogue())

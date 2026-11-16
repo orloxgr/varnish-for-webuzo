@@ -36,7 +36,10 @@ def main():
                 print(case['name']+' '+profile+' FAILED\n'+run.stdout+run.stderr,file=sys.stderr)
                 raise SystemExit(1)
             results.append(dict(case=case['name'],profile=profile,result='passed'))
-    report=dict(policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),cases_sha256=hashlib.sha256(cases.read_bytes()).hexdigest(),results=results)
+    report=dict(policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
+        catalogue_sha256=hashlib.sha256(policy.with_name('cookie-policies.json').read_bytes()).hexdigest(),
+        compiler_sha256=hashlib.sha256(policy.with_name('cookie_catalogue.py').read_bytes()).hexdigest(),
+        cases_sha256=hashlib.sha256(cases.read_bytes()).hexdigest(),results=results)
     encoded=json.dumps(report,indent=2)+'\n'
     if args.output:args.output.write_text(encoded,encoding='utf-8')
     print(encoded,end='')

@@ -1,6 +1,7 @@
 """Two presets over one application policy and central site-template additions."""
 from pathlib import Path
 import fragments
+import cookie_policy
 
 ROOT=Path(__file__).resolve().parents[1]/'profiles'
 SHARED=ROOT.parent/'shared/cache-policy.vcl'
@@ -31,6 +32,6 @@ def rules(config,profile):
     return result
 
 def catalog(config):
-    return [dict(name=value,label=LABELS[value],description=DESCRIPTIONS[value],source=SHARED.read_text(encoding='utf-8'),**rules(config,value)) for value in NAMES]
+    return [dict(name=value,label=LABELS[value],description=DESCRIPTIONS[value],source=cookie_policy.shared_policy(),**rules(config,value)) for value in NAMES]
 
-def program():return SHARED.read_text(encoding='utf-8')+'\n'+(ROOT/'control.vcl').read_text(encoding='utf-8')
+def program():return cookie_policy.shared_policy()+'\n'+(ROOT/'control.vcl').read_text(encoding='utf-8')

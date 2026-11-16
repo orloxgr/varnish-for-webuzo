@@ -1,0 +1,1966 @@
+{
+  "schemaVersion": 1,
+  "version": "2026.11.16.1",
+  "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
+  "unknownCookies": "preserve-existing-policy",
+  "policies": [
+    {
+      "id": "fbp",
+      "match": {
+        "kind": "exact",
+        "value": "_fbp"
+      },
+      "provider": "meta",
+      "integration": "facebook-for-woocommerce",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "independent",
+        "issuer": "meta-parameter-builder",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "site-configured",
+        "path": "/",
+        "maxAgeSeconds": 7776000,
+        "secure": "site-scheme",
+        "httpOnly": false,
+        "sameSite": "Lax"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f",
+        "https://developers.facebook.com/documentation/ads-commerce/conversions-api/parameters/fbp-and-fbc"
+      ]
+    },
+    {
+      "id": "fbc",
+      "match": {
+        "kind": "exact",
+        "value": "_fbc"
+      },
+      "provider": "meta",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "meta",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider",
+        "requires": "observed-fbclid-or-existing-cookie"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "ga",
+      "match": {
+        "kind": "exact",
+        "value": "_ga"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gid",
+      "match": {
+        "kind": "exact",
+        "value": "_gid"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gat",
+      "match": {
+        "kind": "exact",
+        "value": "_gat"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gac-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "_gac_"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gcl-au",
+      "match": {
+        "kind": "exact",
+        "value": "_gcl_au"
+      },
+      "provider": "google-ads",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-ads",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gcl-aw",
+      "match": {
+        "kind": "exact",
+        "value": "_gcl_aw"
+      },
+      "provider": "google-ads",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-ads",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gcl-dc",
+      "match": {
+        "kind": "exact",
+        "value": "_gcl_dc"
+      },
+      "provider": "google-ads",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-ads",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "dc-gtm-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "_dc_gtm_"
+      },
+      "provider": "google-ads",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-ads",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "clck",
+      "match": {
+        "kind": "exact",
+        "value": "_clck"
+      },
+      "provider": "microsoft",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "microsoft",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "clsk",
+      "match": {
+        "kind": "exact",
+        "value": "_clsk"
+      },
+      "provider": "microsoft",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "microsoft",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "clid",
+      "match": {
+        "kind": "exact",
+        "value": "CLID"
+      },
+      "provider": "microsoft",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "microsoft",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "uetvid",
+      "match": {
+        "kind": "exact",
+        "value": "_uetvid"
+      },
+      "provider": "microsoft",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "microsoft",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "uetsid",
+      "match": {
+        "kind": "exact",
+        "value": "_uetsid"
+      },
+      "provider": "microsoft",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "microsoft",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "ttp",
+      "match": {
+        "kind": "exact",
+        "value": "_ttp"
+      },
+      "provider": "tiktok",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "tiktok",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "tt-enable-cookie",
+      "match": {
+        "kind": "exact",
+        "value": "_tt_enable_cookie"
+      },
+      "provider": "tiktok",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "tiktok",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "ttcsid-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "ttcsid"
+      },
+      "provider": "tiktok",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "tiktok",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "pin-unauth",
+      "match": {
+        "kind": "exact",
+        "value": "_pin_unauth"
+      },
+      "provider": "pinterest",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "pinterest",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "pinterest-ct-ua",
+      "match": {
+        "kind": "exact",
+        "value": "_pinterest_ct_ua"
+      },
+      "provider": "pinterest",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "pinterest",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "marketing",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "ga-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "_ga_"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "gat-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "_gat_"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "utma",
+      "match": {
+        "kind": "exact",
+        "value": "__utma"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "utmb",
+      "match": {
+        "kind": "exact",
+        "value": "__utmb"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "utmc",
+      "match": {
+        "kind": "exact",
+        "value": "__utmc"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "utmt",
+      "match": {
+        "kind": "exact",
+        "value": "__utmt"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "utmv",
+      "match": {
+        "kind": "exact",
+        "value": "__utmv"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "utmz",
+      "match": {
+        "kind": "exact",
+        "value": "__utmz"
+      },
+      "provider": "google-analytics",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "google-analytics",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-migrations",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_migrations"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-current",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_current"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-current-add",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_current_add"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-first",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_first"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-first-add",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_first_add"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-udata",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_udata"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "sbjs-session",
+      "match": {
+        "kind": "exact",
+        "value": "sbjs_session"
+      },
+      "provider": "sourcebuster",
+      "integration": null,
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "sourcebuster",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": true,
+        "purpose": "statistics",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
+      ]
+    },
+    {
+      "id": "wordpress-logged-in-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "wordpress_logged_in_"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": true,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "wordpress-sec-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "wordpress_sec_"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": true,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "wp-postpass-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "wp-postpass_"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": true,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "comment-author-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "comment_author_"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "woocommerce-items-in-cart",
+      "match": {
+        "kind": "exact",
+        "value": "woocommerce_items_in_cart"
+      },
+      "provider": "application",
+      "integration": "woocommerce-esi",
+      "htmlEffect": "private-fragment",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": true,
+        "varnishPrivate": false,
+        "varnishCart": true,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "woocommerce-cart-hash",
+      "match": {
+        "kind": "exact",
+        "value": "woocommerce_cart_hash"
+      },
+      "provider": "application",
+      "integration": "woocommerce-esi",
+      "htmlEffect": "private-fragment",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": true,
+        "varnishPrivate": false,
+        "varnishCart": true,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "wp-woocommerce-session-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "wp_woocommerce_session_"
+      },
+      "provider": "application",
+      "integration": "woocommerce-esi",
+      "htmlEffect": "private-fragment",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": true,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": false,
+        "varnishCart": true,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "woocommerce-recently-viewed",
+      "match": {
+        "kind": "exact",
+        "value": "woocommerce_recently_viewed"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "yith-wcwl-session-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "yith_wcwl_session_"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "yith-woocompare-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "yith_woocompare_"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": true,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    },
+    {
+      "id": "phpsessid",
+      "match": {
+        "kind": "exact",
+        "value": "PHPSESSID"
+      },
+      "provider": "application",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "wordpressSafeTracking": false,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
+        "wordpressResponsePrivate": false,
+        "varnishPrivate": true,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": []
+    }
+  ]
+}
