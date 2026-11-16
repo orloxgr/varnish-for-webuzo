@@ -17,6 +17,7 @@ import connections
 import browser_cache
 import repository
 import cookie_policy
+import recognition
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -39,6 +40,7 @@ def status():
     return dict(installed=bool(config.get('installed')),package=service.installed(),running=service.running(),memory_mb=config.get('memory_mb',256),
                 default_profile=profiles.default(config),profiles=profiles.catalog(config),proxy_timeouts=timeouts.settings(config) if 'proxy_timeouts' in config else None,control_port=config.get('control_port'),
                 browser_cache=browser_cache.defaults(config),browser_cache_profiles=copy.deepcopy(browser_cache.PROFILE_PATHS),
+                cookie_recognition=recognition.status(),
                 sites=[{k:v for k,v in s.items() if k not in ('token','uid','gid','home','custom_domains','credential_roots')} for s in sites.values()])
 
 def own_file(path,value,mode=0o600):
@@ -136,11 +138,19 @@ def validate_vcl(sites,config,sid=None):
 def action(request):
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
-    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore','cookie_delivery'}
+    allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore','cookie_delivery','recognition_status','recognition_configure','recognition_update'}
     if operation not in allowed:raise ValueError('Unknown action')
     fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'},'cookie_delivery':{'id','settings'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
+    if operation=='recognition_configure':allowed_keys.add('automatic')
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
+    # Recognition downloads have their own lock and never enter site inventory,
+    # VCL reconciliation, purge, or the cache-operation transaction lock.
+    if operation=='recognition_status':return dict(cookie_recognition=recognition.status())
+    if operation=='recognition_configure':
+        return dict(cookie_recognition=recognition.configure(request.get('automatic')),message='Cookie recognition update schedule saved.')
+    if operation=='recognition_update':
+        return dict(cookie_recognition=recognition.start_update(),message='Cookie recognition update started.')
     with state.locked():
         recover()
         if operation=='status':return status()

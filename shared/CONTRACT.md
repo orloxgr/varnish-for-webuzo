@@ -9,6 +9,32 @@ host/backend/token isolation. `header` comes from the ABI-matching official
 
 ## Local cookie catalogue
 
+### Recognition snapshot updates
+
+`cookie_recognition.py` updates recognition data only. Adapters supply an
+addon-owned persistent directory and bundled `recognition.json` path to
+`status(directory, bundled)`, `configure(directory, bundled, automatic)` and
+`update(directory, bundled, force=False)`. `database()` returns the local data.
+Status reads never fetch or wait on the updater lock. Configuration and downloads
+use their own lock and atomic combined settings/status/database record; downloads
+must not hold an adapter's Varnish/site operation lock. Default automatic=true;
+scheduled calls respect it, manual force=true works regardless of the preference.
+
+Adapters schedule one daily check and expose administrator-only configuration,
+Update now and status, with native authorization/CSRF and escaped output. A check
+reads the fixed original repository's commit, then that pinned commit's CSV and
+Apache-2.0 license via verified HTTPS without redirects. The data retains the
+bundled records schema plus upstream CSV SHA256 and license text. It is never
+executed or compiled into policy. Failure keeps the prior data and reports its
+stage. The digest is byte identity, not an independent signature.
+
+Input safety bounds are 32 MiB CSV, 1 MiB revision/license, 100,000 records and
+128 columns per row and 256 KiB characters per field. Column count is checked
+before constructing CSV row arrays. Strict UTF-8/CSV and column/wildcard/control checks
+reject malformed input while preserving valid Unicode and optional metadata.
+An upstream recognition update must not change cache/consent/issuance behavior,
+reload VCL, purge/warm pages or make requests during visitor traffic.
+
 The shared `cookie-policies.json` is the reviewed execution catalogue, schema 1.
 `cookie_catalogue.py` validates it and expands `@@COOKIE_PATTERN_<consumer>@@`
 markers when the adapter generates a complete standalone VCL. The three current

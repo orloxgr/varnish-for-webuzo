@@ -69,6 +69,32 @@
     for (const input of [enabled, consentCookie, consentValue, domain, save]) input.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
     box.append(save); parent.append(box);
   }
+  let recognitionSnapshot = null, recognitionPoll = null;
+  function pollRecognition() {
+    recognitionPoll = setTimeout(() => {
+      if (busy) pollRecognition();
+      else call('recognition_status');
+    }, 1500);
+  }
+  function recognitionStatus(data) {
+    if (!data) return;
+    recognitionSnapshot = data;
+    if (recognitionPoll !== null) { clearTimeout(recognitionPoll); recognitionPoll = null; }
+    byId('recognition-automatic').checked = !!data.automatic;
+    const box = byId('recognition-status'); box.replaceChildren();
+    const date = value => value ? new Date(value).toLocaleString() : 'Not yet';
+    const count = Number.isSafeInteger(data.records) ? data.records.toLocaleString() : '—';
+    box.append(node('p', (data.bundled ? 'Bundled database' : 'Downloaded database') + ' · ' + count + ' records'));
+    box.append(node('p', 'Revision: ' + (data.revision || '—')));
+    box.append(node('p', 'Last check: ' + date(data.last_check) + ' · Last successful check: ' + date(data.last_success)));
+    box.append(node('p', 'Database updated: ' + date(data.updated_at)));
+    box.append(node('p', data.updating ? 'Update in progress…' : data.automatic && data.scheduled ? 'Automatic daily updates are enabled.' : data.automatic ? 'Automatic updates are selected; the daily schedule is not active.' : 'Automatic updates are off. Update now remains available.'));
+    const error = byId('recognition-error'), message = data.error || data.schedule_error || data.worker_error;
+    error.textContent = message ? (typeof message === 'string' ? message : JSON.stringify(message)) + ' The last valid database remains in use.' : '';
+    error.hidden = !message;
+    byId('recognition-update').dataset.unavailable = data.updating ? '1' : '0';
+    if (data.updating) pollRecognition();
+  }
   async function call(action, values = {}) {
     if (busy) return;
     busy = true; controls(); byId('error').hidden = true; byId('notice').hidden = true;
@@ -78,6 +104,7 @@
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'The operation failed.');
       if (data.sites) { snapshot = data; render(); }
+      if (data.cookie_recognition) recognitionStatus(data.cookie_recognition);
       if (data.message) { byId('notice').textContent = data.message; byId('notice').hidden = false; }
       return data;
     } catch (error) { byId('error').textContent = error.message; byId('error').hidden = false; }
@@ -185,6 +212,13 @@
     if (window.confirm('Disable Varnish for all sites and remove its service setup? Sites will return to their normal Webuzo routing.')) call('remove');
   });
   byId('refresh').addEventListener('click', () => call(snapshot && snapshot.installed ? 'reconcile' : 'status'));
+  byId('recognition-refresh').addEventListener('click', () => call('recognition_status'));
+  byId('recognition-update').addEventListener('click', () => call('recognition_update'));
+  byId('recognition-automatic').addEventListener('change', async () => {
+    const previous = recognitionSnapshot ? recognitionSnapshot.automatic : true;
+    const response = await call('recognition_configure', {automatic: byId('recognition-automatic').checked});
+    if (!response) byId('recognition-automatic').checked = previous;
+  });
   byId('save-connection').addEventListener('click', () => call('connection_setup', {port: Number(byId('control-port').value)}));
   byId('edit-profile').addEventListener('change', () => { editingProfile = byId('edit-profile').value; profileEditor(); });
   byId('save-default').addEventListener('click', () => call('defaults', {profile: byId('default-profile').value}));

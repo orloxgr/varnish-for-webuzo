@@ -5,6 +5,14 @@
   <p>Serve existing images, styles and scripts with Nginx. Cache public responses with Varnish and send private requests to the application.</p>
   <div id="wvw-error" role="alert" hidden></div><div id="wvw-notice" role="status" hidden></div>
   <div class="wvw-toolbar"><strong id="wvw-status">Checking service…</strong><button type="button" id="wvw-install" hidden>Install &amp; set up Varnish</button><button type="button" id="wvw-start" hidden>Start Varnish</button><button type="button" id="wvw-refresh">Refresh sites</button></div>
+  <section class="wvw-card" id="wvw-recognition">
+    <h3>Cookie recognition database</h3>
+    <p>Recognize cookie providers using the <a href="https://github.com/jkwakman/Open-Cookie-Database" target="_blank" rel="noopener noreferrer">Open Cookie Database</a>. Updates refresh descriptions and recognition data; they do not change cache rules, consent decisions or cookie delivery.</p>
+    <label><input type="checkbox" id="wvw-recognition-automatic"> Update automatically every day</label>
+    <div class="wvw-toolbar"><button type="button" id="wvw-recognition-update">Update now</button><button type="button" id="wvw-recognition-refresh">Refresh database status</button></div>
+    <div id="wvw-recognition-status" role="status">Checking database…</div>
+    <p id="wvw-recognition-error" role="alert" hidden></p>
+  </section>
   <section class="wvw-card" id="wvw-server" hidden>
     <h3>Server cache</h3>
     <div class="wvw-toolbar"><label for="wvw-memory">Cache size (MiB)</label><input type="number" id="wvw-memory" min="1" step="1"><button type="button" id="wvw-resize">Apply cache size</button><button type="button" id="wvw-usage">Show memory usage</button></div>

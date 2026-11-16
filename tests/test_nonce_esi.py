@@ -77,7 +77,8 @@ class ServiceFeatures(unittest.TestCase):
              patch.object(lifecycle.pwd, 'getpwall', return_value=[panel]), \
              patch.object(lifecycle.grp, 'getgrgid', return_value=SimpleNamespace(gr_mem=[])), \
              patch.object(service, 'configure_esi') as configure, patch.object(cache_size, 'recover') as recover, \
-             patch.object(repository, 'ensure_cookie_modules') as modules:
+             patch.object(repository, 'ensure_cookie_modules') as modules, \
+             patch('recognition.install') as recognition_install:
             lifecycle.install()
             configure.assert_not_called(); recover.assert_not_called()
             modules.assert_not_called()
@@ -86,6 +87,7 @@ class ServiceFeatures(unittest.TestCase):
             recover.assert_called_once_with(root / 'settings.json')
             configure.assert_called_once_with()
             modules.assert_called_once_with()
+            self.assertEqual(recognition_install.call_count, 2)
 
 
 @unittest.skipUnless(shutil.which('varnishtest'), 'native varnishtest required')

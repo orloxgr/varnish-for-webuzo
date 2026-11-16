@@ -32,6 +32,8 @@ def install():
             cache_size.recover(state.ROOT/'settings.json')
             repository.ensure_cookie_modules()
             service.configure_esi()
+    import recognition
+    recognition.install()
 
 def native_read_tmp():
     state.trusted(TMP);return TMP.read_bytes()
@@ -39,6 +41,8 @@ def native_read_tmp():
 def remove():
     import engine
     engine.remove()
+    import recognition
+    recognition.remove()
     if TMP.exists():
         if native_read_tmp()!=CONTENT:raise ValueError('The owned tmpfiles entry changed')
         TMP.unlink()

@@ -170,6 +170,20 @@ The plugin adds delimited pointers to Webuzo's documented custom domain/global i
 
 Disabling a domain restores its native routing. **Remove Varnish setup**, or deactivating the plugin, removes its include pointers, site credentials and service unit, stops its Varnish instance, and clears that instance's dedicated cache runtime through systemd. Sites return to native Webuzo handling. Distribution packages and saved administrator preferences remain available for a later setup. Rebuilds and restarts use the same native extension points.
 
+## Cookie recognition database
+
+The panel shows the local Open Cookie Database revision, record count and last
+update results. **Update automatically every day** is enabled by default;
+**Update now** also works when automatic updates are off. The daily systemd timer
+runs independently of cache operations. The database and preference remain in
+private persistent storage across plugin upgrades and reactivation.
+
+Updates download recognition metadata from the original upstream GitHub
+repository. Failed downloads or invalid data leave the last valid database in
+place. Recognition categories describe cookies; they do not change VCL rules,
+consent decisions or cookie delivery. Updating the database does not purge,
+warm or restart the cache.
+
 ## Development
 
 Build: `python3 tools/build.py`.

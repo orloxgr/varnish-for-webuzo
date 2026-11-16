@@ -1,5 +1,22 @@
 # Verification
 
+## Recognition database updates
+
+Run `python3 -B -m unittest discover -s tests -p 'test*recognition.py' -v`
+as root on a disposable Linux host. The tests cover administrator-only actions,
+fixed upstream URLs, rejected redirects, strict CSV validation, atomic updates,
+last-good retention, automatic/manual selection and owned timer lifecycle.
+Upstream input safety bounds are 32 MiB per CSV, 1 MiB per metadata/license
+response, 100,000 records, 128 columns and 256 KiB per CSV field. These bounds apply to
+downloads, not website requests or cache operations.
+
+Native Lab checks also exercised an isolated systemd worker against the actual
+upstream, manual update with automatic updates disabled, the independent cache
+lock and retention after a download failure. The cache settings, active VCL and
+Varnish PID remained unchanged. The panel fixture checks that update responses
+preserve unsaved site edits and render upstream messages as text. The Webuzo
+panel itself requires an active Webuzo license for a native upload/UI test.
+
 ## 0.4.6 — 16 November 2026
 
 The Webuzo adapter passes all 75 native shared-policy runs across 39 scenarios.
