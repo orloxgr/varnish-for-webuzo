@@ -50,7 +50,10 @@ On a cacheable public HTML delivery, the Basic policy can issue a missing `_fbp`
 independently. UltraCache additionally requires clean, public origin metadata:
 `X-UltraCache-Cookie-Policy: <catalogue version>`,
 `X-UltraCache-Cookie-Delivery: proxy-fbp`, and `X-UltraCache-Cacheable: 1`.
-`provider-endpoint-fbp` means the application's provider/CMP API owns delivery.
+`provider-endpoint-fbp` means the application's provider/CMP API owns delivery,
+including when Basic is selected. Basic needs no application metadata when no
+such integration is present. The native issuer also honors the actual Meta
+provider hold conditions stored in the catalogue; a hold does not bypass HTML.
 These response metadata contain no individual identifier and do not represent
 the current visitor's consent. Browser headers never supply approval.
 

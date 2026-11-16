@@ -4,12 +4,12 @@ Cache public HTTP responses with Varnish while Nginx handles HTTPS and serves ex
 
 ## Installation
 
-1. Upload the Webuzo ZIP in **Admin → Plugins → Add New**, then activate it.
+1. Upload the Webuzo ZIP in **Admin β†’ Plugins β†’ Add New**, then activate it.
 2. Open **Varnish Cache** and click **Install & set up Varnish**. Setup installs Varnish and its matching official modules from the signed repository for the installed Ubuntu release and creates a separate `varnish-for-webuzo` service. Its initial cache size is 256 MiB; change it under **Server cache**. Existing supported Varnish instances and their configuration are preserved; an older shared binary is not upgraded while another instance is running.
 3. Choose a profile, enable the desired domains and click **Save & Apply**. New domains start disabled and receive the central default profile, initially **Basic**, when you refresh the site list.
 4. Use **Clear cache** to clear that site's cached pages, including its aliases and HTTP/HTTPS variants.
 
-For WordPress administrators, install the separate WordPress connector ZIP and use **Tools → Varnish Cache**. The Webuzo plugin provisions a site credential under the hosting account's private `.varnish-for-webuzo` directory when saving an enabled site. It does not install WordPress plugins automatically. The connector needs PHP POSIX and cURL with Unix socket support, and uses WordPress filesystem/HTTP functions to send a scoped local purge. It never receives a panel password, general API key or command-execution capability.
+For WordPress administrators, install the separate WordPress connector ZIP and use **Tools β†’ Varnish Cache**. The Webuzo plugin provisions a site credential under the hosting account's private `.varnish-for-webuzo` directory when saving an enabled site. It does not install WordPress plugins automatically. The connector needs PHP POSIX and cURL with Unix socket support, and uses WordPress filesystem/HTTP functions to send a scoped local purge. It never receives a panel password, general API key or command-execution capability.
 
 WordPress must run as its hosting account and be able to read that account's private home directory. Credential provisioning refuses a directory located inside any of the account's document roots.
 
@@ -29,7 +29,7 @@ Public responses with a positive cache lifetime are eligible regardless of conte
 
 ## Cookies and shared HTML
 
-Open a site's **VCL & connection → Independent cookie delivery** to configure
+Open a site's **VCL & connection β†’ Independent cookie delivery** to configure
 Meta `_fbp` delivery separately from public cached HTML. Enable it only for a
 site using Meta, enter its exact consent cookie name and accepted value, and
 save. The option starts disabled. A blank cookie domain uses the current
@@ -41,13 +41,16 @@ are preserved. Login, cart and other personal content retain their own handling.
 Basic works without a WordPress companion. With UltraCache, the origin declares
 whether the proxy or the application's provider endpoint delivers the cookie;
 service-specific consent managers such as Real Cookie Banner use their actual
-application API.
+application API, including provider-specific WordPress Consent API decisions.
+A provider hold prevents new cookie issuance without preventing a public-page HIT.
 
 The shared cookie catalogue also supplies value-free response diagnostics:
 `X-Cache-Cookie-Names`, `X-Cache-Cookie-Role`, `X-Cache-Cookie-Policy`, and
 `X-Cache-Cookie-Delivery`. They identify the applied rule and delivery decision
 without exposing cookie values. Unknown cookies keep the existing HTTP policy.
 See the [shared contract](shared/CONTRACT.md) for integration details.
+The [validation results](docs/COOKIE-VALIDATION.md) describe the native and actual
+WordPress integration tests.
 
 ## VCL profiles and new sites
 
@@ -58,7 +61,7 @@ Each site has one profile selected in its own row:
 | **Basic** | WordPress/WooCommerce caching and best-effort support for other sites. Public pages, products, searches, REST and AJAX reads can HIT. Login, private sessions, checkout and cart actions bypass cache. |
 | **UltraCache** | The Basic policy plus origin-approved ESI and async-cart parents. Personal fragments are fetched separately; the shared parent can HIT. |
 
-**VCL profiles → Default for new sites** selects the profile assigned when a new site is first saved from the panel inventory. It starts as **Basic**. Changing this default does not change the profiles already assigned to existing sites or enable new sites automatically.
+**VCL profiles β†’ Default for new sites** selects the profile assigned when a new site is first saved from the panel inventory. It starts as **Basic**. Changing this default does not change the profiles already assigned to existing sites or enable new sites automatically.
 
 **Central profile VCL templates** shows the two built-in presets and their shared policy and lets the administrator add request/response rules to each profile. Central Basic rules apply to every site using Basic, including new sites. Applying central rules validates them with Varnish and invalidates enabled sites using that profile; other profiles keep their cache and site-specific additions.
 
@@ -101,7 +104,7 @@ or clear its cached HTML.
 
 Custom versioned URL patterns start empty. Declare only paths whose filenames
 change whenever their contents change, for example `/assets/app-{hash}.js`.
-`{hash}` matches 16–128 hexadecimal characters, and `*` matches within one path
+`{hash}` matches 16β€“128 hexadecimal characters, and `*` matches within one path
 segment. These are literal URL patterns, not Nginx directives or arbitrary regex.
 Neither a `?ver=` query nor an undeclared hexadecimal-looking filename is assumed
 immutable. For UltraCache's standard uploads directory, the preset for its
@@ -146,7 +149,7 @@ if (bereq.url ~ "^/news/") { set beresp.ttl = 60s; }
 
 **Show connection information** displays the server's **HTTP endpoint**, **host**, **port**, **site Host header**, **authentication header** and **site purge token**. An application sends the site's host in `Host` and its token in `X-Webuzo-Varnish-Token`. These server connection values are independent of the WordPress plugin and selected cache profile. The application must support the documented authentication and invalidation protocol; merely supporting some Varnish integration does not establish compatibility. No Varnish administration secret is needed.
 
-The endpoint defaults to `http://127.0.0.1:82`. New setup and **Refresh sites** provision it; **Server cache → Local HTTP connection port → Save connection port** allows changing it if another service uses that port. Only loopback is bound. Purge/BAN operations require the selected site's token; a read-only HEAD response identifies the Varnish listener without invalidating objects. The port must be privileged under the existing operating-system bind policy so another hosting user cannot impersonate it while Nginx is stopped. The addon does not change that policy. Port conflicts or a failed listener startup leave the previous configuration in place.
+The endpoint defaults to `http://127.0.0.1:82`. New setup and **Refresh sites** provision it; **Server cache β†’ Local HTTP connection port β†’ Save connection port** allows changing it if another service uses that port. Only loopback is bound. Purge/BAN operations require the selected site's token; a read-only HEAD response identifies the Varnish listener without invalidating objects. The port must be privileged under the existing operating-system bind policy so another hosting user cannot impersonate it while Nginx is stopped. The addon does not change that policy. Port conflicts or a failed listener startup leave the previous configuration in place.
 
 HTTP `PURGE /path?query` invalidates that exact URL across the site's HTTP/HTTPS and Vary representations. `BAN` accepts the scoped host/URL or host/HTML expressions described by the control VCL; arbitrary administration commands are not exposed. `X-Purge: soft` requests soft invalidation of the selected cache key; `X-Forwarded-Proto` selects its public HTTP/HTTPS scheme where the profile hashes by scheme. The existing versioned application contract remains available as an additional protocol. Applications prewarm by making normal GET requests to the public site URLs, subject to the site's normal caching rules.
 

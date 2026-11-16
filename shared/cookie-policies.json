@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.16.2",
+  "version": "2026.11.16.4",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -26,16 +26,30 @@
             "supported": true,
             "consentAdapter": "configured-cookie-equals",
             "originResponseWins": true,
-            "verifiedScope": "Native Varnish deliver and actual Meta ParamBuilder identifier compatibility"
+            "verifiedScope": "Native Varnish deliver and actual Meta ParamBuilder identifier compatibility",
+            "holdWhen": [
+              {
+                "cookie": "wc_facebook_signals_state",
+                "value": "held"
+              }
+            ],
+            "sources": [
+              "facebook-for-woocommerce:3.7.8/includes/Signals.php::should_hold_signals"
+            ]
           },
           "provider-endpoint-fbp": {
             "issuer": "meta-parameter-builder",
             "supported": true,
             "consentAdapters": [
-              "real-cookie-banner"
+              "real-cookie-banner",
+              "wp-consent-api"
             ],
             "originResponseWins": true,
-            "verifiedScope": "Actual WordPress/WooCommerce/Meta/RCB public local HTML HIT, accept/reject/return/revoke"
+            "verifiedScope": "Actual WordPress/WooCommerce/Meta/RCB local HTML HIT and consent lifecycle; actual WP Consent API with Complianz optin consent type and per-provider server denial",
+            "sources": [
+              "facebook-for-woocommerce:3.7.8/facebook-commerce-events-tracker.php::get_param_builder",
+              "wp-consent-api:2.1.0/inc/api-functions.php::wp_has_consent"
+            ]
           }
         }
       },

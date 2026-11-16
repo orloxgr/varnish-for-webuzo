@@ -92,6 +92,8 @@ class NativeFbpProvider(unittest.TestCase):
                 _, fields, _ = get('/page', cookie)
                 self.assertEqual(dict(fields)['X-Cache'], 'PASS')
                 self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'], 'fbp:origin-provider')
+                self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
+                self.assertEqual(dict(fields)['Surrogate-Control'],'no-store')
                 self.assertEqual(cookies(fields), [value for name,value in origin('',{})[1] if name=='Set-Cookie'])
 
     def test_browser_headers_cannot_enable_delivery_or_approve_ultracache_objects(self):
@@ -151,6 +153,30 @@ class NativeFbpProvider(unittest.TestCase):
                 self.assertEqual(dict(fields)['Cache-Control'],'public, max-age=120')
                 self.assertNotEqual(dict(fields).get('Surrogate-Control'),'no-store')
             self.assertEqual(calls,['/public-parent','/fragment'])
+
+    def test_actual_provider_hold_prevents_new_cookie_without_bypassing_public_html(self):
+        def origin(path, headers):
+            return 'public', [('Cache-Control','public, max-age=120')]
+        with proxy('basic', origin, delivery=ENABLED) as get:
+            get('/page')
+            _, fields, _ = get('/page','cmplz_marketing=allow; wc_facebook_signals_state=held')
+            self.assertEqual(dict(fields)['X-Cache'],'HIT')
+            self.assertEqual(cookies(fields),[])
+            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:provider-held')
+            self.assertEqual(dict(fields)['X-Cache-Cookie-Names'],'wc_facebook_signals_state')
+            self.assertEqual(dict(fields)['Cache-Control'],'public, max-age=120')
+
+    def test_basic_respects_an_available_authoritative_provider_endpoint(self):
+        def origin(path, headers):
+            return 'public', [('Cache-Control','public, max-age=120'),
+                ('X-UltraCache-Cookie-Policy',POLICY_VERSION),
+                ('X-UltraCache-Cookie-Delivery','provider-endpoint-fbp'), ('X-UltraCache-Cacheable','1')]
+        with proxy('basic', origin, delivery=ENABLED) as get:
+            for expected in ('MISS','HIT'):
+                _, fields, _ = get('/page','cmplz_marketing=allow')
+                self.assertEqual(dict(fields)['X-Cache'],expected)
+                self.assertEqual(cookies(fields),[])
+                self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:provider-endpoint')
 
 
 if __name__ == '__main__':

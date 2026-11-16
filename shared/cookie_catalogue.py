@@ -9,7 +9,8 @@ from pathlib import Path
 import re
 
 CONSUMERS = ('varnishPrivate', 'varnishCart', 'varnishTrackingIgnore')
-NAME = re.compile(r"[!#$%&'+.^_`|~0-9A-Za-z-]+")
+NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+VALUE = re.compile(r'[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]*')
 MARKER = re.compile(r'@@COOKIE_PATTERN_([A-Za-z]+)@@')
 
 
@@ -90,6 +91,21 @@ def render_policy(source, catalogue):
     if '@@FBP_' not in rendered:
         return rendered
     fbp = next(policy for policy in catalogue['policies'] if policy['id'] == 'fbp')
+    held = []
+    conditions = fbp['delivery'].get('transports', {}).get('proxy-fbp', {}).get('holdWhen', [])
+    if not isinstance(conditions,list) or any(not isinstance(item,dict) for item in conditions):
+        raise ValueError('Provider hold policy needs a list of conditions')
+    for condition in conditions:
+        name, expected = condition.get('cookie'), condition.get('value')
+        if not isinstance(name,str) or not NAME.fullmatch(name) or not isinstance(expected,str) or not VALUE.fullmatch(expected):
+            raise ValueError('Provider hold policy needs an exact cookie name/value')
+        expression = '(^|;[[:blank:]]*)' + re.escape(name) + '=' + re.escape(expected) + '(;|$)'
+        held.append('if (req.http.Cookie ~ {"' + expression + '"}) {\n' +
+            '        set req.http.X-SCP-Cookie-Name = ' + json.dumps(name) + ';\n' +
+            '        set req.http.X-SCP-Cookie-Role = "provider-consent";\n' +
+            '        set resp.http.X-Cache-Cookie-Delivery = "fbp:provider-held";\n' +
+            '        return;\n    }')
+    rendered = rendered.replace('@@FBP_PROVIDER_HOLD@@', '\n    '.join(held))
     attributes = fbp['attributes']
     age, path, same_site = (attributes.get(key) for key in ('maxAgeSeconds','path','sameSite'))
     if type(age) is not int or age <= 0:

@@ -1,8 +1,6 @@
 """Shared site configuration and native delivery code; never issues cookies in Python."""
 import re
-
-NAME = re.compile(r"[!#$%&'+.^_`|~0-9A-Za-z-]+")
-VALUE = re.compile(r'[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]*')
+from cookie_catalogue import NAME, VALUE
 DEFAULT = {'fbp': {'enabled': False, 'consent_cookie': 'cmplz_marketing',
                    'consent_value': 'allow', 'domain': ''}}
 

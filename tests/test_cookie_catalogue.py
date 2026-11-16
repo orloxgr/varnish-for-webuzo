@@ -68,6 +68,18 @@ class CookieCatalogue(unittest.TestCase):
         with self.assertRaises(ValueError):
             render_policy(source,self.catalogue)
 
+    def test_provider_hold_uses_reviewed_exact_cookie_condition_and_name_only_diagnostics(self):
+        source = (ROOT/'shared/cache-policy.vcl').read_text(encoding='utf-8')
+        transport = self.catalogue['policies'][0]['delivery'].setdefault('transports',{}).setdefault('proxy-fbp',{})
+        transport['holdWhen'] = [{'cookie':'provider_state','value':'held'}]
+        result = render_policy(source,self.catalogue)
+        self.assertIn('provider_state=held(;|$)',result)
+        self.assertIn('X-SCP-Cookie-Name = "provider_state"',result)
+        self.assertIn('X-Cache-Cookie-Delivery = "fbp:provider-held"',result)
+        transport['holdWhen'][0]['value'] = 'held; other=1'
+        with self.assertRaises(ValueError):
+            render_policy(source,self.catalogue)
+
     def test_malformed_or_contradictory_catalogue_is_not_generated(self):
         changes = [lambda c: c.update(schemaVersion=2),
                    lambda c: c.update(unknownCookies='pass'),
