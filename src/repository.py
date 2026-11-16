@@ -207,6 +207,8 @@ def ensure_cookie_modules():
 
 def ensure_package():
     installed=Path('/usr/sbin/varnishd').is_file()
+    if installed:
+        ensure_cookie_modules()
     if installed and compatible():
         # Do not replace a compatible existing binary or add a repository to an
         # independent install. Reconcile only sources already owned by the addon.
@@ -220,10 +222,12 @@ def ensure_package():
     codename=setup();arch=architecture()
     native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
     version=candidate(codename,arch)
-    simulation=native.run('apt-get','-s','install','varnish='+version)
+    modules=candidate(codename,arch,'varnish-modules')
+    packages=('varnish='+version,'varnish-modules='+modules)
+    simulation=native.run('apt-get','-s','install',*packages)
     removals=[line.split()[1] for line in simulation.splitlines() if line.startswith('Remv ')]
     if set(removals)-{'libvarnishapi1','libvarnishapi2','libvarnishapi3'}:raise ValueError('Varnish installation would remove another service')
-    native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','varnish='+version)
+    native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y',*packages)
     native.run('systemctl','stop','varnish')
     if before['UnitFileState']!='enabled':native.run('systemctl','disable','varnish')
-    if not compatible():raise ValueError('The installed Varnish package cannot compile the addon policy')
+    if not cookie_modules_compatible() or not compatible():raise ValueError('The installed Varnish packages cannot compile the addon policy and cookie delivery APIs')

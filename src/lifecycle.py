@@ -28,7 +28,9 @@ def install():
         if settings.get('installed'):
             import cache_size
             import service
+            import repository
             cache_size.recover(state.ROOT/'settings.json')
+            repository.ensure_cookie_modules()
             service.configure_esi()
 
 def native_read_tmp():

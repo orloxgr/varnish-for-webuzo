@@ -144,6 +144,7 @@ def action(request):
         previous=settings();sites=inventory(previous)
         if operation=='reconcile' and previous.get('installed'):
             repository.reconcile_owned()
+            repository.ensure_cookie_modules()
             service.configure_esi(previous.get('memory_mb',256))
         if operation in ('usage','resize','connection','vcl') and not previous.get('installed'):raise ValueError('Install the Varnish service first')
         if operation=='usage':return dict(usage=service.usage(previous))

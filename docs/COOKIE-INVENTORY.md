@@ -38,3 +38,27 @@ and [cookie module reference](https://www.varnish.org/docs/reference/vmod_cookie
 multiple cookies, exact attributes, renewal, deletion and the ESI child boundary.
 These baseline tests establish preservation; they do not establish independent
 provider delivery, consent support or cacheability of an unknown provider.
+
+## Native response-field transport
+
+The official `varnish-modules` package supplies the `header` VMOD. Its
+`header.append` and `header.remove` APIs can add a delivery field and remove
+only a specifically selected cookie while retaining other fields byte-for-byte.
+The native primitive tests exercise this with an Expires comma, deletion,
+HttpOnly, Secure, different paths and independent values across MISS/HIT/HIT.
+The test identifiers are fixtures; these tests do not claim Meta integration.
+
+`repository.ensure_cookie_modules` compiles the actual APIs before asking APT
+for anything. If needed, it selects the official package for the current suite
+and architecture using the existing authenticated repository workflow. The
+installed engine version is kept explicit in the module-only APT transaction;
+that path does not restart a service or replace the engine. Fresh setup installs
+the engine and modules together. Native plugin activation prepares the module
+only for an already configured Varnish setup; an explicit site refresh checks
+it again before applying generated policy. This prevents a missing module from
+being misreported as an incompatible running cache engine.
+
+The dedicated lab installed the native module package with the existing service
+PIDs unchanged. Both native HTTP field tests and lifecycle/repository/ESI
+regressions passed. Provider/CMP delivery and the final shared catalogue compiler
+remain separate work to verify before publication.

@@ -61,6 +61,18 @@ class Selection(unittest.TestCase):
             repo.ensure_cookie_modules()
         setup.assert_not_called();run.assert_not_called()
 
+    def test_missing_modules_are_prepared_before_running_engine_compatibility(self):
+        order=[]
+        def modules():order.append('modules')
+        def compatible():
+            self.assertEqual(order,['modules'])
+            order.append('policy')
+            return True
+        with patch.object(Path,'is_file',return_value=True),patch.object(Path,'exists',return_value=False),patch.object(repo,'ensure_cookie_modules',side_effect=modules),patch.object(repo,'compatible',side_effect=compatible),patch.object(repo,'setup') as setup,patch.object(native,'run') as run:
+            repo.ensure_package()
+        self.assertEqual(order,['modules','policy'])
+        setup.assert_not_called();run.assert_not_called()
+
     def test_module_install_pins_existing_engine_and_keeps_services_running(self):
         calls=[]
         def run(*args):
@@ -173,12 +185,12 @@ class Repository(unittest.TestCase):
 
     def test_adopting_compatible_independent_binary_does_not_reconfigure_apt(self):
         repo.RECORD.unlink()
-        with patch.object(Path,'is_file',return_value=True),patch.object(repo,'compatible',return_value=True),patch.object(repo,'setup') as setup,patch.object(native,'run') as run:
+        with patch.object(Path,'is_file',return_value=True),patch.object(repo,'cookie_modules_compatible',return_value=True),patch.object(repo,'compatible',return_value=True),patch.object(repo,'setup') as setup,patch.object(native,'run') as run:
             repo.ensure_package()
         setup.assert_not_called();run.assert_not_called()
 
     def test_incompatible_running_binary_is_not_replaced(self):
-        with patch.object(Path,'is_file',return_value=True),patch.object(repo,'compatible',return_value=False),patch.object(subprocess,'run',return_value=subprocess.CompletedProcess([],0)),patch.object(repo,'setup') as setup,self.assertRaises(ValueError):repo.ensure_package()
+        with patch.object(Path,'is_file',return_value=True),patch.object(repo,'ensure_cookie_modules'),patch.object(repo,'compatible',return_value=False),patch.object(subprocess,'run',return_value=subprocess.CompletedProcess([],0)),patch.object(repo,'setup') as setup,self.assertRaises(ValueError):repo.ensure_package()
         setup.assert_not_called()
 
     def test_fresh_install_uses_selected_candidate_and_does_not_remove_libraries_manually(self):
@@ -187,8 +199,8 @@ class Repository(unittest.TestCase):
             calls.append(tuple(map(str,args)))
             if args[:2]==('systemctl','show'):return 'not-found' if 'LoadState' in args[-2] else 'disabled'
             return ''
-        with patch.object(Path,'is_file',return_value=False),patch.object(repo,'setup',return_value='resolute'),patch.object(repo,'candidate',return_value='10.2.0-1~resolute'),patch.object(repo,'compatible',return_value=True),patch.object(subprocess,'run',return_value=subprocess.CompletedProcess([],1)),patch.object(native,'run',side_effect=run):repo.ensure_package()
-        self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','varnish=10.2.0-1~resolute'),calls)
+        with patch.object(Path,'is_file',return_value=False),patch.object(repo,'setup',return_value='resolute'),patch.object(repo,'candidate',return_value='10.2.0-1~resolute'),patch.object(repo,'compatible',return_value=True),patch.object(repo,'cookie_modules_compatible',return_value=True),patch.object(subprocess,'run',return_value=subprocess.CompletedProcess([],1)),patch.object(native,'run',side_effect=run):repo.ensure_package()
+        self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','varnish=10.2.0-1~resolute','varnish-modules=10.2.0-1~resolute'),calls)
         self.assertFalse(any('remove' in call or 'libvarnishapi3' in call for call in calls))
 
 
