@@ -32,8 +32,14 @@ there is no automatic extraction of personal HTML from arbitrary themes.
 
 The original Accept header reaches the application. JSON, XML, dynamic HTML
 and functional Cookie variations retain real Vary matching. Unquoted
-grammar-equivalent Accept whitespace is normalized in a separate key. Missing
-and explicitly empty Accept/Cookie headers remain distinct native variants.
+grammar-equivalent Accept whitespace is normalized in a separate key. Simple
+Accept and Accept-Language lists also share case-insensitive tokens and equivalent
+quality notation: an omitted q equals q=1, and q=0.900 equals q=0.9. Order and
+different qualities remain distinct. Media parameters, quoted values and
+nonstandard syntax retain their differences. Original request headers still reach
+the application, and public Vary headers are restored for downstream clients.
+Missing and explicitly empty Accept/Cookie/language headers remain distinct
+native variants. This works in Basic without UltraCache or a WordPress plugin.
 
 For stored public UltraCache HTML, including page-cache ESI parents, the origin
 contract consists of `X-Ultra-Cache-Source: apache-static` (or `X-UltraCache-Source`)

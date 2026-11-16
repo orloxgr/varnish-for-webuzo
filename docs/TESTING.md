@@ -1,5 +1,26 @@
 # Verification
 
+## 0.4.6 — 16 November 2026
+
+The Webuzo adapter passes all 75 native shared-policy runs across 39 scenarios.
+Independent baseline Basic tests reproduced extra MISSes from equivalent Accept
+case and q notation without UltraCache headers or a WordPress plugin. The new
+common cases verify equivalent Accept/Accept-Language reuse in both profiles.
+
+Six additional scenarios cover case, whitespace and equivalent q spelling;
+real weight/order/language/media differences; case-sensitive parameter and
+quoted values; nonstandard syntax; combined Vary with Cookie; original origin
+headers; spoofed scratch headers; and absent, empty and wildcard language keys.
+Internal keys do not appear in downstream Vary or response headers.
+
+- Policy SHA-256: `b18c2dd20dfe0b0b2a36ceb395456f5d454edb367e6b1c79edfd51f11eaffcc3`.
+- Cases SHA-256: `afc4e48bd1252445928de137b7c7d46a7d513932fd97ba169af3b5eecd77e694`.
+- Policy, integration contract, cases and runner are byte-identical to Hestia.
+
+This verification used isolated native processes and the actual Webuzo renderer.
+No production configuration or installed service was changed, and no broader
+backend audit was repeated. Cookie ordering is unchanged by this update.
+
 ## 0.4.5 — 16 November 2026
 
 Focused nonce-ESI verification used the Webuzo VCL renderer and native

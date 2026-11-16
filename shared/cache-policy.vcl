@@ -12,6 +12,8 @@ sub scp_init {
     unset req.http.X-SCP-Key-Query;
     unset req.http.X-SCP-Vary-Cookie;
     unset req.http.X-SCP-Vary-Accept;
+    unset req.http.X-SCP-Vary-Accept-Language;
+    unset req.http.X-SCP-Normalize-Value;
     unset req.http.X-SCP-HTML-Accept;
     unset req.http.X-SCP-Accept-Check;
     unset req.http.X-ESI-Private-Request;
@@ -124,7 +126,11 @@ sub scp_deliver {
         "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Cookie[[:blank:]]*(?=,|$)", "\1Cookie");
     set resp.http.Vary = regsuball(resp.http.Vary,
         "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Accept[[:blank:]]*(?=,|$)", "\1Accept");
+    set resp.http.Vary = regsuball(resp.http.Vary,
+        "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Accept-Language[[:blank:]]*(?=,|$)", "\1Accept-Language");
     unset resp.http.X-SCP-Vary-Accept;
+    unset resp.http.X-SCP-Vary-Accept-Language;
+    unset resp.http.X-SCP-Normalize-Value;
     unset resp.http.X-SCP-Client-Vary;
     unset resp.http.X-SCP-Reason;
     unset resp.http.X-SCP-Key-URL;
@@ -234,6 +240,10 @@ sub scp_response_variants {
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)") {
         set beresp.http.Vary = regsuball(beresp.http.Vary,
             "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Cookie");
+    }
+    if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Accept-Language[[:blank:]]*(,|$)") {
+        set beresp.http.Vary = regsuball(beresp.http.Vary,
+            "(?i)(^|,)[[:blank:]]*Accept-Language[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Accept-Language");
     }
 }
 
@@ -416,6 +426,19 @@ sub scp_ultracache_backend_response {
 
 # Keep raw Accept at the origin. Only an identified public stored HTML object
 # can substitute its known image-capability dimensions for the raw header.
+sub scp_normalize_quality {
+    # Called only for complete simple negotiation lists: case-insensitive tokens
+    # and valid q weights, with no media parameter values or quoted strings.
+    # Preserve order and every different weight; normalize equivalent notation.
+    set req.http.X-SCP-Normalize-Value = std.tolower(req.http.X-SCP-Normalize-Value);
+    set req.http.X-SCP-Normalize-Value = regsuball(req.http.X-SCP-Normalize-Value,
+        ";q=1([.]0*)?(?=,|$)", "");
+    set req.http.X-SCP-Normalize-Value = regsuball(req.http.X-SCP-Normalize-Value,
+        ";q=0([.]0*)?(?=,|$)", ";q=0");
+    set req.http.X-SCP-Normalize-Value = regsuball(req.http.X-SCP-Normalize-Value,
+        "(;q=0[.][0-9]*[1-9])0+(?=,|$)", "\1");
+}
+
 sub scp_representation_recv {
     std.collect(req.http.Accept);
     if (req.http.Accept) { set req.http.X-SCP-Vary-Accept = req.http.Accept; }
@@ -423,6 +446,26 @@ sub scp_representation_recv {
         set req.http.X-SCP-Vary-Accept = regsuball(req.http.X-SCP-Vary-Accept, "[[:blank:]]*,[[:blank:]]*", ",");
         set req.http.X-SCP-Vary-Accept = regsuball(req.http.X-SCP-Vary-Accept, "[[:blank:]]*;[[:blank:]]*", ";");
         set req.http.X-SCP-Vary-Accept = regsuball(req.http.X-SCP-Vary-Accept, "^[[:blank:]]+|[[:blank:]]+$", "");
+        if (req.http.X-SCP-Vary-Accept ~ {"(?i)^[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+(;q=(0([.][0-9]{0,3})?|1([.]0{0,3})?))?(,[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+(;q=(0([.][0-9]{0,3})?|1([.]0{0,3})?))?)*$"}) {
+            set req.http.X-SCP-Normalize-Value = req.http.X-SCP-Vary-Accept;
+            call scp_normalize_quality;
+            set req.http.X-SCP-Vary-Accept = req.http.X-SCP-Normalize-Value;
+            unset req.http.X-SCP-Normalize-Value;
+        }
+    }
+    std.collect(req.http.Accept-Language);
+    if (req.http.Accept-Language) {
+        set req.http.X-SCP-Vary-Accept-Language = req.http.Accept-Language;
+        # Only simple language ranges and weights have case-insensitive values.
+        # Other syntax remains an exact variant and still reaches the origin.
+        set req.http.X-SCP-Normalize-Value = regsuball(req.http.Accept-Language, "[[:blank:]]*,[[:blank:]]*", ",");
+        set req.http.X-SCP-Normalize-Value = regsuball(req.http.X-SCP-Normalize-Value, "[[:blank:]]*;[[:blank:]]*", ";");
+        set req.http.X-SCP-Normalize-Value = regsuball(req.http.X-SCP-Normalize-Value, "^[[:blank:]]+|[[:blank:]]+$", "");
+        if (req.http.X-SCP-Normalize-Value ~ "(?i)^([a-z]{1,8}(-[a-z0-9]{1,8})*|[*])(;q=(0([.][0-9]{0,3})?|1([.]0{0,3})?))?(,([a-z]{1,8}(-[a-z0-9]{1,8})*|[*])(;q=(0([.][0-9]{0,3})?|1([.]0{0,3})?))?)*$") {
+            call scp_normalize_quality;
+            set req.http.X-SCP-Vary-Accept-Language = req.http.X-SCP-Normalize-Value;
+        }
+        unset req.http.X-SCP-Normalize-Value;
     }
     if (req.http.Accept ~ "(?i)^[[:blank:]]*text/html[[:blank:]]*(;[[:blank:]]*q[[:blank:]]*=[[:blank:]]*1([.]0*)?[[:blank:]]*)?(,|$)") {
         # Match the origin's explicit codec support and q=0 rules. Unusual

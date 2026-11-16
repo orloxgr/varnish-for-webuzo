@@ -32,7 +32,7 @@ and `purge` in the complete VCL and defines host/backend/token isolation.
    public Vary and supplies X-Cache/Hits; it removes its other response scratch.
 
 `X-SCP-*` is internal. Site VCL editors must not allow callers to modify it.
-Do not expose the internal Cookie/Accept Vary key in downstream responses.
+Do not expose the internal Cookie/Accept/Accept-Language Vary keys in downstream responses.
 The common policy owns all request/response privacy and retention decisions;
 remove duplicate panel-specific versions of those rules.
 
@@ -48,6 +48,18 @@ Apache-static provenance or an actual `X-Ultra-Cache: HIT`, with the existing
 public/cacheable/variant/no-Set-Cookie checks. This includes stored ESI parents;
 new dynamic `STORE` responses retain raw Accept variation. Static and dynamic
 HTML both retain functional Cookie variation; only analytics IDs are omitted.
+
+Both presets normalize simple `Accept` and `Accept-Language` lists in internal
+Vary keys without requiring application metadata or a plugin. Case-insensitive
+media/language tokens, insignificant spacing and equivalent q weights share
+variants. Absent quality and q=1 are equivalent; fractional trailing zeros and
+zero notation are canonicalized. Preference order, different weights, actual
+language/media differences and absent versus empty headers remain distinct.
+Media parameter values, quoted values and nonstandard syntax are not subjected
+to this additional normalization. Original request headers reach the origin,
+temporary normalization scratch is removed before the fetch, and downstream
+Vary retains the public header names. These rules neither admit private content
+nor block a request with different syntax.
 
 For exact URL PURGE, call `scp_key` on the authenticated original purge URL and
 BAN within the adapter site scope by `X-Cache-Object-URL == X-SCP-Key-URL`.
