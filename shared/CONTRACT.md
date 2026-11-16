@@ -54,6 +54,20 @@ independently. UltraCache additionally requires clean, public origin metadata:
 These response metadata contain no individual identifier and do not represent
 the current visitor's consent. Browser headers never supply approval.
 
+For an origin-approved shared ESI parent, `Vary: Cookie` uses a second internal
+functional remainder without the catalogue's private cart carrier cookies.
+Original cookies still reach the origin and private children; ordinary objects
+retain their full functional Vary. This keeps personal session IDs out of the
+approved public parent's variant key while language/other functional dimensions
+remain distinct. Adapters use a new cache namespace for these key semantics.
+
+The existing `X-UltraCache-ESI-Private-Count` determines downstream privacy of an
+assembled response. A positive count makes only the final delivery private;
+the template remains shared and keeps producing HITs with separate fragments.
+For older approved parents without a count, Shared-Parent:1 is the legacy
+private-parent declaration. An explicit zero retains public-only ESI response
+caching. No general ESI PASS, retention limit, or raw Cookie removal is added.
+
 The native value uses Meta's documented four-part identifier, timestamp in
 milliseconds and random integer in its provider range. The actual Meta SDK
 accepts it and may add its own fifth provenance appendix at the next origin
@@ -62,6 +76,9 @@ cookie and all original Set-Cookie fields, including provider normalization,
 renewal and deletion. New values are created only in `vcl_deliver` and appended
 with the native header API; no personal value is stored in a shared object.
 The lifetime is 90 days, path `/`, SameSite=Lax and Secure on HTTPS.
+When a delivery gains a personal cookie, its response-only Cache-Control and
+Surrogate-Control prevent downstream caches replaying that identifier. The
+stored public object retains its original policy and still serves other HITs.
 
 A cold Basic origin response that sets a cookie retains normal uncacheable
 delivery. This does not add a hidden origin refill or promise that a cold MISS

@@ -11,6 +11,7 @@ sub scp_init {
     unset req.http.X-SCP-Key-Path;
     unset req.http.X-SCP-Key-Query;
     unset req.http.X-SCP-Vary-Cookie;
+    unset req.http.X-SCP-Vary-ESI-Cookie;
     unset req.http.X-SCP-Vary-Accept;
     unset req.http.X-SCP-Vary-Accept-Language;
     unset req.http.X-SCP-Normalize-Value;
@@ -140,11 +141,21 @@ sub scp_deliver {
     }
     set resp.http.X-Cache = resp.http.X-SCP-Result;
     call scp_cookie_delivery;
+    if (req.http.X-SCP-Profile == "ultracache" &&
+        (resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" ||
+         (!resp.http.X-UltraCache-ESI-Private-Count && resp.http.X-UltraCache-ESI-Shared-Parent == "1"))) {
+        # The object is a reusable ESI template, but this assembled delivery
+        # contains private fragments. Only its downstream response is private.
+        set resp.http.Cache-Control = "private, no-store";
+        set resp.http.Surrogate-Control = "no-store";
+    }
     unset resp.http.X-Cache-Hits;
     if (resp.http.X-Cache == "HIT") { set resp.http.X-Cache-Hits = obj.hits; }
     if (resp.http.X-SCP-Client-Vary) { set resp.http.Vary = resp.http.X-SCP-Client-Vary; }
     set resp.http.Vary = regsuball(resp.http.Vary,
         "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Cookie[[:blank:]]*(?=,|$)", "\1Cookie");
+    set resp.http.Vary = regsuball(resp.http.Vary,
+        "(?i)(^|,)[[:blank:]]*X-SCP-Vary-ESI-Cookie[[:blank:]]*(?=,|$)", "\1Cookie");
     set resp.http.Vary = regsuball(resp.http.Vary,
         "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Accept[[:blank:]]*(?=,|$)", "\1Accept");
     set resp.http.Vary = regsuball(resp.http.Vary,
@@ -157,6 +168,7 @@ sub scp_deliver {
     unset resp.http.X-SCP-Key-URL;
     unset resp.http.X-SCP-Profile;
     unset resp.http.X-SCP-Vary-Cookie;
+    unset resp.http.X-SCP-Vary-ESI-Cookie;
     unset resp.http.X-SCP-HTML-Accept;
     unset resp.http.X-UltraCache-ESI-Shared-Parent;
     unset resp.http.X-UltraCache-ESI-Candidate;
@@ -207,7 +219,7 @@ sub scp_cookie_delivery {
         set resp.http.X-Cache-Cookie-Delivery = "fbp:origin-provider";
         return;
     }
-    if (req.http.Cookie ~ {"(^|;[[:blank:]]*)_fbp="}) {
+    if (req.http.Cookie ~ {"(^|;[[:blank:]]*)_fbp=[^;[:blank:]]+"}) {
         set resp.http.X-Cache-Cookie-Delivery = "fbp:existing-preserved";
         return;
     }
@@ -217,24 +229,34 @@ sub scp_cookie_delivery {
         set resp.http.X-Cache-Cookie-Delivery = "fbp:origin-private-or-non-html";
         return;
     }
-    if (req.http.X-SCP-Profile == "ultracache" &&
-        (resp.http.X-UltraCache-Cookie-Policy != "@@COOKIE_POLICY_VERSION@@" ||
-         resp.http.X-UltraCache-Cookie-Delivery != "proxy-fbp" ||
-         resp.http.X-UltraCache-Cacheable != "1")) {
-        set resp.http.X-Cache-Cookie-Delivery = "fbp:provider-endpoint";
-        return;
+    if (req.http.X-SCP-Profile == "ultracache") {
+        if (resp.http.X-UltraCache-Cookie-Policy != "@@COOKIE_POLICY_VERSION@@" ||
+            resp.http.X-UltraCache-Cacheable != "1") {
+            set resp.http.X-Cache-Cookie-Delivery = "fbp:origin-approval-required";
+            return;
+        }
+        if (resp.http.X-UltraCache-Cookie-Delivery == "provider-endpoint-fbp") {
+            set resp.http.X-Cache-Cookie-Delivery = "fbp:provider-endpoint";
+            return;
+        }
+        if (resp.http.X-UltraCache-Cookie-Delivery != "proxy-fbp") {
+            set resp.http.X-Cache-Cookie-Delivery = "fbp:issuer-not-approved";
+            return;
+        }
     }
     set req.http.X-SCP-Fbp-New = "_fbp=fb." + req.http.X-SCP-Fbp-Index + "." +
         std.integer(real=std.real(time=now) * 1000) + "." +
         std.integer(real=std.random(0, 2147483647)) +
-        "; Max-Age=7776000; Path=/; SameSite=Lax";
+        "; Max-Age=@@FBP_MAX_AGE@@; Path=@@FBP_PATH@@; SameSite=@@FBP_SAME_SITE@@@@FBP_HTTP_ONLY@@";
     if (req.http.X-SCP-Fbp-Domain != "") {
         set req.http.X-SCP-Fbp-New = req.http.X-SCP-Fbp-New + "; Domain=" + req.http.X-SCP-Fbp-Domain;
     }
-    if (req.http.X-Forwarded-Proto ~ "(?i)^https$") {
-        set req.http.X-SCP-Fbp-New = req.http.X-SCP-Fbp-New + "; Secure";
-    }
+    @@FBP_SECURE_VCL@@
     header.append(resp.http.Set-Cookie, req.http.X-SCP-Fbp-New);
+    # This delivery now contains one visitor's identifier. Keep the stored
+    # public object reusable, but prevent downstream caches replaying its cookie.
+    set resp.http.Cache-Control = "private, no-store";
+    set resp.http.Surrogate-Control = "no-store";
     unset req.http.X-SCP-Fbp-New;
     set resp.http.X-Cache-Cookie-Delivery = "fbp:independent";
 }
@@ -298,11 +320,19 @@ sub scp_cookie_variation {
     # Vary: Cookie is keyed by the functional remainder, without analytics IDs.
     # Unknown/consent/referral/language cookies are retained, never whitelisted.
     unset req.http.X-SCP-Vary-Cookie;
+    unset req.http.X-SCP-Vary-ESI-Cookie;
     if (req.http.Cookie) {
         set req.http.X-SCP-Vary-Cookie = regsuball(req.http.Cookie, {"@@COOKIE_PATTERN_varnishTrackingIgnore@@[^;]*"}, "");
         set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
         set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, ";[[:blank:]]*", "; ");
         if (req.http.Cookie != "" && req.http.X-SCP-Vary-Cookie == "") { unset req.http.X-SCP-Vary-Cookie; }
+        # Prepare a second lookup dimension without personal carrier values.
+        # Only an approved public ESI parent can choose this dimension below.
+        set req.http.X-SCP-Vary-ESI-Cookie = regsuball(req.http.X-SCP-Vary-Cookie,
+            {"@@COOKIE_PATTERN_varnishCart@@[^;]*"}, "");
+        set req.http.X-SCP-Vary-ESI-Cookie = regsuball(req.http.X-SCP-Vary-ESI-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
+        set req.http.X-SCP-Vary-ESI-Cookie = regsuball(req.http.X-SCP-Vary-ESI-Cookie, ";[[:blank:]]*", "; ");
+        if (req.http.X-SCP-Vary-ESI-Cookie == "") { unset req.http.X-SCP-Vary-ESI-Cookie; }
     }
 }
 
@@ -335,8 +365,14 @@ sub scp_response_variants {
             "(?i)(^|,)[[:blank:]]*Accept[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Accept");
     }
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)") {
-        set beresp.http.Vary = regsuball(beresp.http.Vary,
-            "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Cookie");
+        if (bereq.http.X-SCP-Profile == "ultracache" && beresp.do_esi &&
+            beresp.http.X-UltraCache-ESI-Shared-Parent == "1") {
+            set beresp.http.Vary = regsuball(beresp.http.Vary,
+                "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-ESI-Cookie");
+        } else {
+            set beresp.http.Vary = regsuball(beresp.http.Vary,
+                "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Cookie");
+        }
     }
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Accept-Language[[:blank:]]*(,|$)") {
         set beresp.http.Vary = regsuball(beresp.http.Vary,

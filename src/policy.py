@@ -137,7 +137,7 @@ sub vcl_recv {
 sub vcl_pass { call scp_pass; }
 sub vcl_hash {
  call scp_key;
- hash_data("webuzo-shared-policy-v1");
+ hash_data("webuzo-shared-policy-v7");
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
  hash_data(req.http.X-SCP-Key-URL);
  return (lookup);

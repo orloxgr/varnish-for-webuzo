@@ -2,12 +2,37 @@
 import shutil
 import unittest
 from test_cookie_delivery import proxy, cookies
+from cookie_catalogue import load_catalogue
+POLICY_VERSION = load_catalogue()['version']
 
 ENABLED = {'fbp': {'enabled': True}}
 
 
 @unittest.skipUnless(shutil.which('varnishd'), 'Native varnishd required')
 class NativeFbpProvider(unittest.TestCase):
+    def test_private_esi_visitors_share_parent_without_downstream_personal_caching(self):
+        parents, fragments = [], []
+
+        def origin(path, headers):
+            if path.startswith('/?ultracache_esi='):
+                visitor = 'A' if '=A' in headers.get('Cookie', '') else 'B'
+                fragments.append(visitor)
+                return 'cart-' + visitor + '-nonce-' + str(len(fragments)), [('Cache-Control', 'private, no-store')]
+            parents.append(path)
+            return '<html><esi:include src="/?ultracache_esi=cart&amp;esi_scope=private"/></html>', [
+                ('Cache-Control', 'public, max-age=120'), ('Vary', 'Cookie'),
+                ('Surrogate-Control', 'ESI/1.0'), ('X-UltraCache-ESI-Shared-Parent', '1')]
+
+        with proxy('ultracache', origin) as get:
+            for index, visitor in enumerate(('A', 'B', 'A')):
+                _, fields, body = get('/parent', 'wp_woocommerce_session_demo=' + visitor + '; ultracache_esi_optin=1; locale=en')
+                self.assertEqual(dict(fields)['X-Cache'], 'MISS' if index == 0 else 'HIT')
+                self.assertEqual(body, '<html>cart-' + visitor + '-nonce-' + str(index + 1) + '</html>')
+                self.assertEqual(dict(fields)['Cache-Control'], 'private, no-store')
+                self.assertEqual(dict(fields)['Surrogate-Control'], 'no-store')
+            self.assertEqual(parents, ['/parent'])
+            self.assertEqual(fragments, ['A', 'B', 'A'])
+
     def test_two_new_visitors_share_html_with_different_cookies_and_keep_existing(self):
         calls = []
         def origin(path, headers):
@@ -20,14 +45,22 @@ class NativeFbpProvider(unittest.TestCase):
                 self.assertEqual((status,body), (200,'<html>same-public-page</html>'))
                 self.assertEqual(dict(fields)['X-Cache'], expected)
                 self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'], 'fbp:independent')
+                self.assertEqual(dict(fields)['Cache-Control'], 'private, no-store')
+                self.assertEqual(dict(fields)['Surrogate-Control'], 'no-store')
                 emitted = cookies(fields)
                 self.assertEqual(len(emitted), 1)
                 self.assertRegex(emitted[0], r'^_fbp=fb\.1\.[0-9]{13}\.[0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$')
                 minted.append(emitted[0].split(';')[0])
             self.assertNotEqual(*minted)
+            _, fields, _ = get('/page','cmplz_marketing=allow; _fbp=')
+            self.assertEqual(dict(fields)['X-Cache'], 'HIT')
+            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:independent')
+            self.assertEqual(len(cookies(fields)),1)
             _, fields, _ = get('/page', 'cmplz_marketing=allow; ' + minted[0])
             self.assertEqual(dict(fields)['X-Cache'], 'HIT')
             self.assertEqual(cookies(fields), [])
+            self.assertEqual(dict(fields)['Cache-Control'], 'public, max-age=120')
+            self.assertNotIn('Surrogate-Control',dict(fields))
             self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'], 'fbp:existing-preserved')
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0]['Cookie'], 'cmplz_marketing=allow')
@@ -67,7 +100,7 @@ class NativeFbpProvider(unittest.TestCase):
             return 'public', [('Cache-Control','public, max-age=120')]
         forged = {'X-SCP-Fbp-Enabled':'1', 'X-SCP-Fbp-Consent':'1',
                   'X-SCP-Fbp-New':'_fbp=forged', 'X-UltraCache-Cookie-Delivery':'proxy-fbp',
-                  'X-UltraCache-Cookie-Policy':'2026.11.16.1'}
+                  'X-UltraCache-Cookie-Policy':POLICY_VERSION}
         for profile, config in [('basic',None), ('ultracache',ENABLED)]:
             with self.subTest(profile=profile), proxy(profile, origin, delivery=config) as get:
                 for expected in ('MISS','HIT'):
@@ -76,8 +109,8 @@ class NativeFbpProvider(unittest.TestCase):
                     self.assertEqual(cookies(fields), [])
 
     def test_ultracache_requires_current_origin_policy_and_proxy_ownership(self):
-        for ownership, version, allowed in [('proxy-fbp','2026.11.16.1',True),
-                                             ('provider-endpoint-fbp','2026.11.16.1',False),
+        for ownership, version, allowed in [('proxy-fbp',POLICY_VERSION,True),
+                                             ('provider-endpoint-fbp',POLICY_VERSION,False),
                                              ('proxy-fbp','old-policy',False)]:
             def origin(path, headers):
                 return 'public', [('Cache-Control','public, max-age=120'),
@@ -94,12 +127,30 @@ class NativeFbpProvider(unittest.TestCase):
             def origin(path, headers):
                 return 'origin', [('Cache-Control','private, no-store' if path=='/private' else 'public, max-age=120'),
                     ('Content-Type','application/json' if path=='/json' else 'text/html'),
-                    ('X-UltraCache-Cookie-Policy','2026.11.16.1'),
+                    ('X-UltraCache-Cookie-Policy',POLICY_VERSION),
                     ('X-UltraCache-Cookie-Delivery','proxy-fbp'), ('X-UltraCache-Cacheable','1')]
             with self.subTest(profile=profile), proxy(profile, origin, delivery=ENABLED) as get:
                 for path in ('/private','/json','/wp-admin/'):
                     _, fields, _ = get(path,'cmplz_marketing=allow')
                     self.assertEqual(cookies(fields), [])
+
+    def test_public_only_esi_keeps_public_response_caching(self):
+        calls = []
+        def origin(path, headers):
+            calls.append(path)
+            if path == '/fragment':
+                return 'public-fragment', [('Cache-Control','public, max-age=120')]
+            return '<html><esi:include src="/fragment"/></html>', [
+                ('Cache-Control','public, max-age=120'), ('Surrogate-Control','ESI/1.0'),
+                ('X-UltraCache-ESI-Shared-Parent','1'), ('X-UltraCache-ESI-Private-Count','0')]
+        with proxy('ultracache', origin) as get:
+            for expected in ('MISS','HIT'):
+                _, fields, body = get('/public-parent')
+                self.assertEqual(body,'<html>public-fragment</html>')
+                self.assertEqual(dict(fields)['X-Cache'],expected)
+                self.assertEqual(dict(fields)['Cache-Control'],'public, max-age=120')
+                self.assertNotEqual(dict(fields).get('Surrogate-Control'),'no-store')
+            self.assertEqual(calls,['/public-parent','/fragment'])
 
 
 if __name__ == '__main__':

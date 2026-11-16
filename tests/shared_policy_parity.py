@@ -16,6 +16,7 @@ def main():
     args=parser.parse_args()
     cases=Path(__file__).with_name('shared_policy_cases.json')
     policy=Path(__file__).resolve().parents[1]/'shared/cache-policy.vcl'
+    catalogue_version=json.loads(policy.with_name('cookie-policies.json').read_text(encoding='utf-8'))['version']
     results=[]
     for profile in ('basic','ultracache'):
         programs={}
@@ -30,6 +31,8 @@ def main():
             rendered=programs[configuration]
             server='\n'.join(case['origin']).removeprefix('accept\n')
             client='\n'.join(case['requests'])
+            server=server.replace('@@CATALOGUE_VERSION@@',catalogue_version)
+            client=client.replace('@@CATALOGUE_VERSION@@',catalogue_version)
             for marker,headers in (('@@GET_HEADERS@@',rendered.get('get_headers',{})),('@@PURGE_HEADERS@@',rendered.get('purge_headers',{}))):
                 client=client.replace(marker,' '.join('-hdr '+json.dumps(k+': '+v) for k,v in headers.items()))
             content=('varnishtest '+json.dumps(case['name']+' '+profile)+'\nserver s1 {\n'+server+'\n} -start\n'

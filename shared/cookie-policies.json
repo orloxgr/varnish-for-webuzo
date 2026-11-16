@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.16.1",
+  "version": "2026.11.16.2",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -16,10 +16,28 @@
       "cacheKey": "ignore",
       "delivery": {
         "mode": "independent",
-        "issuer": "meta-parameter-builder",
-        "supported": false,
+        "issuer": "transport-specific",
+        "supported": true,
         "preserveExisting": true,
-        "renewal": "provider"
+        "renewal": "provider",
+        "transports": {
+          "proxy-fbp": {
+            "issuer": "meta-compatible-native",
+            "supported": true,
+            "consentAdapter": "configured-cookie-equals",
+            "originResponseWins": true,
+            "verifiedScope": "Native Varnish deliver and actual Meta ParamBuilder identifier compatibility"
+          },
+          "provider-endpoint-fbp": {
+            "issuer": "meta-parameter-builder",
+            "supported": true,
+            "consentAdapters": [
+              "real-cookie-banner"
+            ],
+            "originResponseWins": true,
+            "verifiedScope": "Actual WordPress/WooCommerce/Meta/RCB public local HTML HIT, accept/reject/return/revoke"
+          }
+        }
       },
       "consent": {
         "required": true,

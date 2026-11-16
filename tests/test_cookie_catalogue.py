@@ -42,7 +42,7 @@ class CookieCatalogue(unittest.TestCase):
     def test_delivery_support_does_not_become_a_request_blocker(self):
         entry = self.catalogue['policies'][0]
         self.assertEqual(entry['id'], 'fbp')
-        self.assertFalse(entry['delivery']['supported'])
+        entry['delivery']['supported'] = False
         self.assertTrue(matches(self.catalogue, 'varnishTrackingIgnore', '_fbp=existing'))
         entry['delivery']['supported'] = True
         self.assertTrue(matches(self.catalogue, 'varnishTrackingIgnore', '_fbp=existing'))
@@ -56,6 +56,17 @@ class CookieCatalogue(unittest.TestCase):
         result = render_policy(source, self.catalogue)
         self.assertIn('_reviewed_fixture', result)
         self.assertNotIn('|_fbp|', result)
+
+    def test_native_attributes_are_generated_from_the_reviewed_provider_policy(self):
+        source = (ROOT/'shared/cache-policy.vcl').read_text(encoding='utf-8')
+        attributes = self.catalogue['policies'][0]['attributes']
+        attributes.update(maxAgeSeconds=3600,path='/shop',sameSite='Strict',httpOnly=True,secure=True)
+        result = render_policy(source,self.catalogue)
+        self.assertIn('; Max-Age=3600; Path=/shop; SameSite=Strict; HttpOnly',result)
+        self.assertNotIn('@@FBP_',result)
+        attributes['path'] = '/; other=cookie'
+        with self.assertRaises(ValueError):
+            render_policy(source,self.catalogue)
 
     def test_malformed_or_contradictory_catalogue_is_not_generated(self):
         changes = [lambda c: c.update(schemaVersion=2),

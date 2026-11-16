@@ -86,4 +86,31 @@ def render_policy(source, catalogue):
         return cookie_pattern(catalogue, match.group(1))
     # A version is a literal VCL string, not user-provided source code.
     version = json.dumps(catalogue['version'], ensure_ascii=True)[1:-1]
-    return MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)
+    rendered = MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)
+    if '@@FBP_' not in rendered:
+        return rendered
+    fbp = next(policy for policy in catalogue['policies'] if policy['id'] == 'fbp')
+    attributes = fbp['attributes']
+    age, path, same_site = (attributes.get(key) for key in ('maxAgeSeconds','path','sameSite'))
+    if type(age) is not int or age <= 0:
+        raise ValueError('Native Meta cookie policy needs a positive Max-Age')
+    if not isinstance(path, str) or not path.startswith('/') or re.search(r'[\x00-\x20\x7f;"\\]', path):
+        raise ValueError('Native Meta cookie policy needs a literal cookie path')
+    if same_site not in ('Lax','Strict','None') or type(attributes.get('httpOnly')) is not bool:
+        raise ValueError('Native Meta cookie policy needs explicit SameSite and HttpOnly attributes')
+    secure = attributes.get('secure')
+    if secure == 'site-scheme':
+        secure_vcl = '''if (req.http.X-Forwarded-Proto ~ "(?i)^https$") {
+        set req.http.X-SCP-Fbp-New = req.http.X-SCP-Fbp-New + "; Secure";
+    }'''
+    elif secure is True:
+        secure_vcl = 'set req.http.X-SCP-Fbp-New = req.http.X-SCP-Fbp-New + "; Secure";'
+    elif secure is False:
+        secure_vcl = ''
+    else:
+        raise ValueError('Native Meta cookie policy needs a known Secure attribute policy')
+    for marker, value in {'MAX_AGE':str(age), 'PATH':path, 'SAME_SITE':same_site,
+                           'HTTP_ONLY':'; HttpOnly' if attributes['httpOnly'] else '',
+                           'SECURE_VCL':secure_vcl}.items():
+        rendered = rendered.replace('@@FBP_' + marker + '@@', value)
+    return rendered
