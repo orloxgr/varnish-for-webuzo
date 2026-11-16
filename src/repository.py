@@ -141,7 +141,7 @@ def compatible():
     import policy
     with tempfile.TemporaryDirectory(dir=state.ROOT) as folder:
         candidate=Path(folder)/'probe.vcl'
-        site=dict(id='a'*32,token='b'*64,names=['probe.invalid'],enabled=True,profile='basic',bypass=[])
+        site=dict(id='a'*32,token='b'*64,domain='probe.invalid',owner='probe',names=['probe.invalid'],enabled=True,profile='basic',bypass=[])
         candidate.write_text(policy.render({site['id']:site},'a'*64,'b'*64),encoding='utf-8')
         try:native.run('/usr/sbin/varnishd','-C','-j','none','-f',candidate)
         except RuntimeError:return False
@@ -187,6 +187,30 @@ sub vcl_deliver { header.append(resp.http.Set-Cookie, "probe=1; Path=/"); }
     return True
 
 
+def cookie_module_version(codename,arch,engine_version):
+    """Select published dependencies for the installed engine, not a version cap."""
+    provides=native.run('dpkg-query','-W','-f=${Provides}','varnish')
+    abi_pattern=r'\b(?:varnishabi|varnishd-abi)-[A-Za-z0-9.+~-]+'
+    engine_abis=set(re.findall(abi_pattern,provides))
+    official=[]
+    for line in native.run('apt-cache','madison','varnish-modules').splitlines():
+        parts=[part.strip() for part in line.split('|')]
+        if len(parts)==3 and parts[0]=='varnish-modules' and parts[2].split()==[BASE,codename+'/main',arch,'Packages']:
+            if parts[1] not in official:official.append(parts[1])
+    metadata=native.run('apt-cache','show','varnish-modules')
+    for version in official:
+        for paragraph in metadata.split('\n\n'):
+            found=re.search(r'^Version:\s*(\S+)\s*$',paragraph,re.M)
+            dependencies=re.search(r'^Depends:\s*(.*(?:\n[ \t]+.*)*)',paragraph,re.M)
+            if not found or found[1]!=version or not dependencies:continue
+            required_abis=set(re.findall(abi_pattern,dependencies[1]))
+            exact_engine=re.search(r'(?<![A-Za-z0-9+-])varnish\s*\(\s*=\s*([^\s)]+)\s*\)',dependencies[1])
+            if engine_abis and required_abis and not engine_abis.intersection(required_abis):continue
+            if exact_engine and exact_engine[1]!=engine_version:continue
+            return version
+    raise ValueError('The official repository has no cookie module package matching the installed Varnish dependencies')
+
+
 def ensure_cookie_modules():
     """Add the official VMOD package without replacing a running cache engine."""
     if cookie_modules_compatible():return
@@ -195,16 +219,16 @@ def ensure_cookie_modules():
     # an administrator's keyring. Do not add another Signed-By for that source.
     if RECORD.exists() or not existing_source(codename,arch):codename=setup()
     native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
-    version=candidate(codename,arch,'varnish-modules')
     engine_version=native.run('dpkg-query','-W','-f=${Version}','varnish').strip()
     if not engine_version or any(c.isspace() for c in engine_version):raise ValueError('Cannot determine the installed Varnish package version')
+    version=cookie_module_version(codename,arch,engine_version)
     packages=('varnish='+engine_version,'varnish-modules='+version)
     simulation=native.run('apt-get','-s','--no-remove','install',*packages)
     # Pinning the installed engine version also makes the real APT transaction
     # refuse an engine upgrade if package metadata changes after the preview.
     if any(line.startswith('Remv ') or re.match(r'Inst varnish(?::[^ ]+)? ',line) for line in simulation.splitlines()):
         raise ValueError('The cookie module package would replace Varnish. Install modules matching the existing engine before retrying.')
-    native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','--no-remove',*packages)
+    native.run('env','DEBIAN_FRONTEND=noninteractive','NEEDRESTART_MODE=l','apt-get','install','-y','--no-remove',*packages)
     if not cookie_modules_compatible():raise ValueError('The installed Varnish modules cannot compile the cookie delivery APIs')
 
 

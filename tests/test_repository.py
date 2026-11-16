@@ -78,15 +78,15 @@ class Selection(unittest.TestCase):
         def run(*args):
             calls.append(args)
             return '9.1.0-2~noble' if args[0]=='dpkg-query' else 'Inst varnish-modules (9.1.0-2~noble)\n'
-        with patch.object(repo,'cookie_modules_compatible',side_effect=[False,True]),patch.object(repo,'setup',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'candidate',return_value='9.1.0-2~noble'),patch.object(native,'run',side_effect=run):
+        with patch.object(repo,'cookie_modules_compatible',side_effect=[False,True]),patch.object(repo,'setup',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'cookie_module_version',return_value='9.1.0-2~noble'),patch.object(native,'run',side_effect=run):
             repo.ensure_cookie_modules()
-        self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y','--no-remove','varnish=9.1.0-2~noble','varnish-modules=9.1.0-2~noble'),calls)
+        self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','NEEDRESTART_MODE=l','apt-get','install','-y','--no-remove','varnish=9.1.0-2~noble','varnish-modules=9.1.0-2~noble'),calls)
         self.assertFalse(any('systemctl' in call for call in calls))
 
     def test_module_install_reuses_an_administrators_matching_official_source(self):
         def run(*args):
             return '9.1.0-2~noble' if args[0]=='dpkg-query' else 'Inst varnish-modules (9.1.0-2~noble)\n'
-        with patch.object(repo,'cookie_modules_compatible',side_effect=[False,True]),patch.object(Path,'exists',return_value=False),patch.object(repo,'release',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'existing_source',return_value=True),patch.object(repo,'candidate',return_value='9.1.0-2~noble'),patch.object(repo,'setup') as setup,patch.object(native,'run',side_effect=run):
+        with patch.object(repo,'cookie_modules_compatible',side_effect=[False,True]),patch.object(Path,'exists',return_value=False),patch.object(repo,'release',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'existing_source',return_value=True),patch.object(repo,'cookie_module_version',return_value='9.1.0-2~noble'),patch.object(repo,'setup') as setup,patch.object(native,'run',side_effect=run):
             repo.ensure_cookie_modules()
         setup.assert_not_called()
 
@@ -96,9 +96,24 @@ class Selection(unittest.TestCase):
             def run(*args):
                 calls.append(args)
                 return '9.1.0-2~noble' if args[0]=='dpkg-query' else plan
-            with self.subTest(plan=plan),patch.object(repo,'cookie_modules_compatible',return_value=False),patch.object(repo,'setup',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'candidate',return_value='9.1.0-2~noble'),patch.object(native,'run',side_effect=run),self.assertRaisesRegex(ValueError,'would replace Varnish'):
+            with self.subTest(plan=plan),patch.object(repo,'cookie_modules_compatible',return_value=False),patch.object(repo,'setup',return_value='noble'),patch.object(repo,'architecture',return_value='amd64'),patch.object(repo,'cookie_module_version',return_value='9.1.0-2~noble'),patch.object(native,'run',side_effect=run),self.assertRaisesRegex(ValueError,'would replace Varnish'):
                 repo.ensure_cookie_modules()
             self.assertFalse(any(call[0]=='env' for call in calls))
+
+    def test_module_selection_matches_installed_abi_and_exact_engine_dependency(self):
+        listing='\n'.join('varnish-modules | '+v+' | '+repo.BASE+' noble/main amd64 Packages' for v in ('9.2','9.1-2','9.1-1'))
+        metadata='\n\n'.join('Version: '+v+'\nDepends: varnish (= '+engine+'), '+abi+', libc6\n' for v,engine,abi in (
+            ('9.2','9.2','varnishd-abi-new'),('9.1-2','9.1-2','varnishd-abi-current'),('9.1-1','9.1-1','varnishd-abi-current')))
+        with patch.object(native,'run',side_effect=['varnishd-abi-current',listing,metadata]):
+            self.assertEqual(repo.cookie_module_version('noble','amd64','9.1-1'),'9.1-1')
+        with patch.object(native,'run',side_effect=['varnishabi-current',listing,metadata.replace('varnishd-abi-current','varnishabi-current')]):
+            self.assertEqual(repo.cookie_module_version('noble','amd64','9.1-1'),'9.1-1')
+
+    def test_unrelated_repository_or_incompatible_abi_is_not_selected(self):
+        for listing,abi in (('varnish-modules | 9.2 | https://other.test noble/main amd64 Packages','varnishd-abi-current'),
+                            ('varnish-modules | 9.2 | '+repo.BASE+' noble/main amd64 Packages','varnishd-abi-new')):
+            with patch.object(native,'run',side_effect=['varnishd-abi-current',listing,'Version: 9.2\nDepends: '+abi+'\n']),self.assertRaisesRegex(ValueError,'matching'):
+                repo.cookie_module_version('noble','amd64','9.1')
 
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Disposable Linux/root tests')
