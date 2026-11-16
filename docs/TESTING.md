@@ -1,6 +1,6 @@
 # Verification
 
-## 0.4.5-dev.1 — 16 November 2026
+## 0.4.5 — 16 November 2026
 
 Focused nonce-ESI verification used the Webuzo VCL renderer and native
 varnishtest in an isolated lab source tree. Eight new checks pass, together with
@@ -22,7 +22,7 @@ varnishtest in an isolated lab source tree. Eight new checks pass, together with
 
 These are native HTTP fixtures, not additional actual WordPress nonce signature
 or browser validation. Existing installed lab service PIDs were unchanged; no
-production configuration, release or installed service was changed. Existing
+production configuration or installed service was changed. Existing
 objects parsed before the feature is enabled need normal invalidation/refetch.
 
 ## 0.4.4 — 16 November 2026
