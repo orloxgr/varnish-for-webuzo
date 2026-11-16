@@ -70,7 +70,7 @@ request needed a fetch; the header does not claim to distinguish eviction,
 purge, expiry and a never-fetched representation. Native Varnish logs contain
 that transaction detail.
 
-Responses with private/no-store/no-cache instructions, Set-Cookie, Vary `*`,
+Origin responses with private/no-store/no-cache instructions, Set-Cookie, Vary `*`,
 or incomplete standalone bodies are not stored. Error statuses follow native/origin
 freshness rather than a separate addon status veto. Site/account, hostname
 and HTTP/HTTPS boundaries and scoped invalidation remain independent of presets.

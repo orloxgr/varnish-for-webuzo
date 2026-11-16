@@ -30,6 +30,8 @@ def render(sites,gateway,origin_secret,config=None):
     text=['''vcl 4.1;
 import std;
 import purge;
+import header;
+import blob;
 ''']
     for scheme,name in (('http','plain'),('https','secure')):
         text.append('backend '+name+' { .path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock"; '+

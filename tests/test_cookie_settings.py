@@ -43,7 +43,7 @@ class CookieSettings(unittest.TestCase):
         target['cookie_delivery'] = {'fbp': {'enabled': True}}
         source = cookie_policy.delivery_configuration(target, sites)
         self.assertIn('if (req.http.host == "www.example.test")', source)
-        self.assertIn('set req.http.X-SCP-Fbp-Index = "2";', source)
+        self.assertIn('blob.length(blob.decode(', source)
         self.assertIn('if (req.http.host == "other-alias.test")', source)
         target['cookie_delivery']['fbp']['domain'] = 'example.test'
         source = cookie_policy.delivery_configuration(target, sites)

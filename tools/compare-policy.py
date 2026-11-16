@@ -28,7 +28,8 @@ def main():
         if left!=right:raise SystemExit('Native parity reports differ')
         if any(left.get(field)!=digests[name] for field,name in (
             ('policy_sha256','shared/cache-policy.vcl'),('cases_sha256','tests/shared_policy_cases.json'),
-            ('catalogue_sha256','shared/cookie-policies.json'),('compiler_sha256','shared/cookie_catalogue.py'))):
+            ('catalogue_sha256','shared/cookie-policies.json'),('compiler_sha256','shared/cookie_catalogue.py'),
+            ('delivery_module_sha256','shared/cookie_delivery.py'))):
             raise SystemExit('The reports do not test these source files')
         cases=json.loads((root/'tests/shared_policy_cases.json').read_text(encoding='utf-8'))
         expected=[dict(case=case['name'],profile=profile,result='passed') for profile in ('basic','ultracache')

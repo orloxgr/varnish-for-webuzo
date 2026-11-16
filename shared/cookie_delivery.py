@@ -41,10 +41,11 @@ def recv_configuration(value, hostname, owned_domains=()):
         return ''
     consent = '(^|;[[:blank:]]*)' + re.escape(config['consent_cookie']) + '=' + re.escape(config['consent_value']) + '(;|$)'
     domain = config['domain']
-    index = (domain or hostname).count('.')
+    index = ('"' + str(domain.count('.')) + '"' if domain else
+             'blob.length(blob.decode(decoding=IDENTITY, encoded=regsuball(req.http.host, "[^.]", "")))')
     return '\n'.join([
         'set req.http.X-SCP-Fbp-Enabled = "1";',
         'set req.http.X-SCP-Fbp-Domain = "' + domain + '";',
-        'set req.http.X-SCP-Fbp-Index = "' + str(index) + '";',
+        'set req.http.X-SCP-Fbp-Index = ' + index + ';',
         'if (req.http.Cookie ~ {"' + consent + '"}) { set req.http.X-SCP-Fbp-Consent = "1"; }',
     ])

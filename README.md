@@ -5,7 +5,7 @@ Cache public HTTP responses with Varnish while Nginx handles HTTPS and serves ex
 ## Installation
 
 1. Upload the Webuzo ZIP in **Admin → Plugins → Add New**, then activate it.
-2. Open **Varnish Cache** and click **Install & set up Varnish**. Setup installs the Varnish package selected by APT from the official signed repository for the installed Ubuntu release and creates a separate `varnish-for-webuzo` service. Its initial cache size is 256 MiB; change it under **Server cache**. Existing supported Varnish instances and their configuration are preserved; an older shared binary is not upgraded while another instance is running.
+2. Open **Varnish Cache** and click **Install & set up Varnish**. Setup installs Varnish and its matching official modules from the signed repository for the installed Ubuntu release and creates a separate `varnish-for-webuzo` service. Its initial cache size is 256 MiB; change it under **Server cache**. Existing supported Varnish instances and their configuration are preserved; an older shared binary is not upgraded while another instance is running.
 3. Choose a profile, enable the desired domains and click **Save & Apply**. New domains start disabled and receive the central default profile, initially **Basic**, when you refresh the site list.
 4. Use **Clear cache** to clear that site's cached pages, including its aliases and HTTP/HTTPS variants.
 
@@ -25,7 +25,29 @@ Both Varnish manager and cache worker run as the dedicated `webuzo-varnish` syst
 
 **Show memory usage** reads an on-demand snapshot from the native counters of this Varnish instance: cache bytes used/free, configured budget, hits, misses and passes. Total service memory is shown separately because it includes connection and processing overhead in addition to stored objects.
 
-Public responses with a positive cache lifetime are eligible regardless of content type, including HTML, CSS, JavaScript, JSON and redirects. Unknown request cookies reach the origin; functional query strings remain in the cache key and declared `Vary` fields keep representations separate. Authorization, write requests and known private sessions bypass shared cache. Responses with `Set-Cookie`, private/no-store/no-cache instructions or standalone partial/304 bodies are not stored; normal conditional and range delivery from complete cached objects remain available. Cache lifetime and grace follow the origin response and native Varnish policy. The addon imposes no per-site TTL ceiling and does not disable grace for Basic. Administrators can use additional response VCL for an explicit site-specific policy.
+Public responses with a positive cache lifetime are eligible regardless of content type, including HTML, CSS, JavaScript, JSON and redirects. Unknown request cookies reach the origin; functional query strings remain in the cache key and declared `Vary` fields keep representations separate. Authorization, write requests and known private sessions bypass shared cache. Origin responses with `Set-Cookie`, private/no-store/no-cache instructions or standalone partial/304 bodies are not stored; normal conditional and range delivery from complete cached objects remain available. Cache lifetime and grace follow the origin response and native Varnish policy. The addon imposes no per-site TTL ceiling and does not disable grace for Basic. Administrators can use additional response VCL for an explicit site-specific policy.
+
+## Cookies and shared HTML
+
+Open a site's **VCL & connection → Independent cookie delivery** to configure
+Meta `_fbp` delivery separately from public cached HTML. Enable it only for a
+site using Meta, enter its exact consent cookie name and accepted value, and
+save. The option starts disabled. A blank cookie domain uses the current
+hostname; an explicit parent domain must belong to the same hosting account.
+
+New consenting visitors can receive the same cached public page with different
+personal Meta cookies. Existing cookies, provider renewals and cookie deletions
+are preserved. Login, cart and other personal content retain their own handling.
+Basic works without a WordPress companion. With UltraCache, the origin declares
+whether the proxy or the application's provider endpoint delivers the cookie;
+service-specific consent managers such as Real Cookie Banner use their actual
+application API.
+
+The shared cookie catalogue also supplies value-free response diagnostics:
+`X-Cache-Cookie-Names`, `X-Cache-Cookie-Role`, `X-Cache-Cookie-Policy`, and
+`X-Cache-Cookie-Delivery`. They identify the applied rule and delivery decision
+without exposing cookie values. Unknown cookies keep the existing HTTP policy.
+See the [shared contract](shared/CONTRACT.md) for integration details.
 
 ## VCL profiles and new sites
 

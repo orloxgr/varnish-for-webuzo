@@ -624,5 +624,69 @@
       "txreq -url /language-edge -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept-Language: EL;Q=0.9000\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {language6}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Vary-Accept-Language == <undef>\nexpect resp.http.X-SCP-Normalize-Value == <undef>",
       "txreq -url /language-edge -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Accept-Language: EL;Q=0.9000\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {language6}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Vary-Accept-Language == <undef>\nexpect resp.http.X-SCP-Normalize-Value == <undef>"
     ]
+  },
+  {
+    "name": "cookie delivery uses one public object and preserves existing provider IDs",
+    "cookie_delivery": {
+      "fbp": {
+        "enabled": true
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"X-UltraCache-Cookie-Policy: 2026.11.16.1\" -hdr \"X-UltraCache-Cookie-Delivery: proxy-fbp\" -hdr \"X-UltraCache-Cacheable: 1\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow; _fbp=fb.1.1700000000000.123.AQECAQMC\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:existing-preserved\""
+    ]
+  },
+  {
+    "name": "cookie delivery follows current consent and does not change other site policy",
+    "cookie_delivery": {
+      "fbp": {
+        "enabled": true
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"X-UltraCache-Cookie-Policy: 2026.11.16.1\" -hdr \"X-UltraCache-Cookie-Delivery: proxy-fbp\" -hdr \"X-UltraCache-Cacheable: 1\" -body {public}",
+      "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"X-UltraCache-Cookie-Policy: 2026.11.16.1\" -hdr \"X-UltraCache-Cookie-Delivery: proxy-fbp\" -hdr \"X-UltraCache-Cacheable: 1\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=deny\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=deny\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: other.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: other.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>"
+    ]
+  },
+  {
+    "name": "cookie diagnostics show matched private names without cookie values",
+    "origin": [
+      "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\"  -body {private}"
+    ],
+    "requests": [
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: tracking=one; wordpress_logged_in_actual=private-secret\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {private}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Names == \"wordpress_logged_in_actual\"\nexpect resp.http.X-Cache-Cookie-Role == \"private\"\nexpect resp.http.X-Cache-Cookie-Policy == \"2026.11.16.1\""
+    ]
+  },
+  {
+    "name": "cookie diagnostics describe functional variant names without values",
+    "origin": [
+      "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"Vary: Cookie\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: lang=el; currency=EUR; _ga=private-id\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Names == \"lang, currency\"\nexpect resp.http.X-Cache-Cookie-Role == \"public-variant\"",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: lang=el; currency=EUR; _ga=other-id\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Names == \"lang, currency\""
+    ]
+  },
+  {
+    "name": "cookie diagnostics do not reflect malformed raw Cookie content",
+    "origin": [
+      "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"Vary: Cookie\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: private-malformed-text\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Names == <undef>"
+    ]
   }
 ]

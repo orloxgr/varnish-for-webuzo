@@ -84,4 +84,6 @@ def render_policy(source, catalogue):
     validate(catalogue)
     def replace(match):
         return cookie_pattern(catalogue, match.group(1))
-    return MARKER.sub(replace, source)
+    # A version is a literal VCL string, not user-provided source code.
+    version = json.dumps(catalogue['version'], ensure_ascii=True)[1:-1]
+    return MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)

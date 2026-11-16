@@ -50,6 +50,7 @@
   }
   function cookieDeliveryEditor(parent, site) {
     const settings = site.cookie_delivery.fbp, box = node('details');
+    box.className = 'wvw-cookie-delivery';
     box.append(node('summary', 'Independent cookie delivery'));
     const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = settings.enabled;
     enabled.setAttribute('aria-label', 'Deliver Meta _fbp independently for ' + site.domain);

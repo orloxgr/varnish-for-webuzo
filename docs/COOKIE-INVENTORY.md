@@ -26,7 +26,10 @@ patterns when generating a configuration. The panel displays this generated VCL.
 The separate recognition snapshot supplies descriptions only; its categories do
 not grant caching or issuance permission.
 
-The panel currently has no CMP integration or independent provider-cookie issuer.
+The baseline had no CMP integration or independent provider-cookie issuer. The
+new per-site editor uses the shared Meta delivery configuration, with an exact
+consent-cookie predicate checked on each request. Application-owned CMP APIs
+retain service/revision-based decisions through the provider endpoint contract.
 The clean-refill/handoff, Apache Static, drop-in and browser fallback mechanisms
 belong to the UltraCache application inventory. A static HIT can skip PHP;
 application cooperation cannot assume that PHP runs for every page delivery.

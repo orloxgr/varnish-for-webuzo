@@ -31,3 +31,4 @@
 #wvw .wvw-site-details > button { margin-top: 16px; }
 #wvw tr[hidden] { display: none; }
 #wvw tr[data-details-for] > td { max-width: none; }
+#wvw .wvw-cookie-delivery input[type=text] { display: block; box-sizing: border-box; width: 100%; max-width: 760px; margin-top: 6px; padding: 9px; border: 1px solid #b4bfd6; border-radius: 4px; font-family: monospace; }

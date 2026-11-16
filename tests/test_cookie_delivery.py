@@ -15,7 +15,7 @@ from test_profiles import program
 
 
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None):
+def proxy(profile, respond, transform=None, delivery=None):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -24,7 +24,8 @@ def proxy(profile, respond, transform=None):
             body, headers = respond(self.path, self.headers)
             body = body.encode()
             self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
+            if not any(name.lower() == 'content-type' for name, _ in headers):
+                self.send_header('Content-Type', 'text/html')
             self.send_header('Content-Length', str(len(body)))
             self.send_header('Connection', 'close')
             for name, value in headers:
@@ -42,7 +43,7 @@ def proxy(profile, respond, transform=None):
     try:
         with tempfile.TemporaryDirectory(prefix='wvw-cookie-http-') as folder:
             root = Path(folder)
-            source = program(profile).replace('${s1_port}', str(origin.server_port))
+            source = program(profile, cookie_delivery=delivery).replace('${s1_port}', str(origin.server_port))
             if transform is not None:
                 source = transform(source)
             (root / 'policy.vcl').write_text(source)
@@ -72,7 +73,7 @@ def proxy(profile, respond, transform=None):
                 def get(path, cookie=None, extra=None):
                     connection = http.client.HTTPConnection('127.0.0.1', port, timeout=10)
                     try:
-                        headers = {'Host': 'example.test', 'X-WV-Gateway': 'e' * 64}
+                        headers = {'Host': 'example.test', 'X-WV-Gateway': 'e' * 64, 'X-Forwarded-Proto': 'https'}
                         if cookie is not None:
                             headers['Cookie'] = cookie
                         if extra is not None:
@@ -174,7 +175,7 @@ class NativeHeaderPrimitive(unittest.TestCase):
                 *[('Set-Cookie', value) for value in kept]]
 
         def transform(source):
-            return source.replace('import purge;', 'import purge;\nimport header;').replace(
+            return source.replace(
                 ' call scp_backend_response;',
                 ' header.remove(beresp.http.Set-Cookie, "^_fbp=");\n call scp_backend_response;').replace(
                 ' call scp_deliver;',
@@ -194,7 +195,7 @@ class NativeHeaderPrimitive(unittest.TestCase):
             return 'same-public-html', [('Cache-Control', 'public, max-age=120')]
 
         def transform(source):
-            return source.replace('import purge;', 'import purge;\nimport header;').replace(
+            return source.replace(
                 ' call scp_deliver;',
                 ' header.append(resp.http.Set-Cookie, "fixture=" + req.http.X-Fixture-Visitor + "; Path=/");\n call scp_deliver;')
 
