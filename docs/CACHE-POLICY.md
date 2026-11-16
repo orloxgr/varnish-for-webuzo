@@ -94,3 +94,17 @@ The browser retains its complete tracking URL. A cache HIT does not execute
 PHP landing handlers; server-side attribution that must run on every visit
 needs its normal separate tracking request or before-cache integration. The
 addon does not inject or modify WordPress application code.
+
+## Native ESI parser
+
+The owned Varnish service enables `+esi_ignore_other_elements` so approved ESI
+includes are processed inside HTML attributes as well as inline JavaScript and
+JSON. Activation of an existing addon installation or **Refresh sites** adds the
+flag to the owned startup unit and the running parser without restarting or
+flushing Varnish. Existing runtime feature flags remain enabled; a stopped
+service is not started by this update.
+
+Objects parsed before this parser setting was enabled need their normal
+invalidation and refetch before attribute includes are processed. This does not
+change ESI parent admission, fragment cookie scope, private/no-store behavior or
+any cache lifetime.

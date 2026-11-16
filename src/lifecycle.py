@@ -23,6 +23,13 @@ def install():
     if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_gid!=panel.pw_gid or stat.S_IMODE(info.st_mode)!=0o730:raise ValueError('Unsafe IPC directory')
     if TMP.exists() and native_read_tmp()!=CONTENT:raise ValueError('An unrelated tmpfiles configuration exists')
     state.write(TMP,CONTENT);TMP.chmod(0o644)
+    with state.locked():
+        settings=state.read(state.ROOT/'settings.json',{})
+        if settings.get('installed'):
+            import cache_size
+            import service
+            cache_size.recover(state.ROOT/'settings.json')
+            service.configure_esi()
 
 def native_read_tmp():
     state.trusted(TMP);return TMP.read_bytes()

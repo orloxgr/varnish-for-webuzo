@@ -18,6 +18,7 @@ ADMIN_SECRET=routing.CONFIG/'admin.secret'
 ACTIVE=routing.CONFIG/'active.vcl'
 DAEMON='webuzo-varnish'
 CACHE=Path('/var/lib/varnish-for-webuzo-cache')
+ESI_FEATURE='+esi_ignore_other_elements'
 
 def installed():return Path('/usr/sbin/varnishd').is_file()
 def running():
@@ -52,7 +53,7 @@ StateDirectory=varnish-for-webuzo-cache
 StateDirectoryMode=0700
 RuntimeDirectory=varnish-for-webuzo-cache
 RuntimeDirectoryMode=0755
-ExecStart=/usr/sbin/varnishd -j none -F -a public=/run/varnish-for-webuzo-cache/frontend.sock,mode=0666 -T 127.0.0.1:6086 -S /etc/varnish-for-webuzo/admin.secret -f /etc/varnish-for-webuzo/active.vcl -n /var/lib/varnish-for-webuzo-cache -s malloc,CACHE_BUDGETm
+ExecStart=/usr/sbin/varnishd -j none -F -a public=/run/varnish-for-webuzo-cache/frontend.sock,mode=0666 -T 127.0.0.1:6086 -S /etc/varnish-for-webuzo/admin.secret -f /etc/varnish-for-webuzo/active.vcl -n /var/lib/varnish-for-webuzo-cache -p feature=+esi_ignore_other_elements -s malloc,CACHE_BUDGETm
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=131072
@@ -66,6 +67,27 @@ ReadWritePaths=/var/lib/varnish-for-webuzo-cache
 [Install]
 WantedBy=multi-user.target
 '''.replace('CACHE_BUDGET',str(size))
+
+def configure_esi(size=None):
+    """Persist native attribute parsing and enable it without restarting Varnish."""
+    expected=unit(size).encode()
+    previous=native.read(UNIT)
+    # Accept only the exact owned unit, with or without this added parameter.
+    if previous not in (expected,expected.replace(b' -p feature='+ESI_FEATURE.encode(),b'')):
+        raise ValueError('The owned service unit was changed')
+    changed=previous!=expected
+    try:
+        if changed:
+            state.write(UNIT,expected);UNIT.chmod(0o644)
+            native.run('systemctl','daemon-reload')
+        if running():
+            # Incremental native syntax keeps every other runtime feature flag.
+            admin('param.set','feature',ESI_FEATURE)
+    except Exception:
+        if changed:
+            state.write(UNIT,previous);UNIT.chmod(0o644)
+            native.run('systemctl','daemon-reload')
+        raise
 
 def usage(config):
     data=json.loads(native.run('/usr/bin/varnishstat','-n',CACHE,'-1','-j'))

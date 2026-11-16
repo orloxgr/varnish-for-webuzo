@@ -1,5 +1,30 @@
 # Verification
 
+## 0.4.5-dev.1 — 16 November 2026
+
+Focused nonce-ESI verification used the Webuzo VCL renderer and native
+varnishtest in an isolated lab source tree. Eight new checks pass, together with
+14 existing cache-size/settings tests. No broader audit was repeated.
+
+- The actual startup parameter composes nonce includes in inline JavaScript,
+  JSON and HTML attributes. One shared parent serves A/B/A with separately
+  refetched private fragments and the expected visitor-specific values.
+- Private children receive only the permitted session cookie, and their
+  Set-Cookie response never leaks into the shared parent response.
+- A native runtime parameter update preserves an existing `esi_remove_bom`
+  feature. Owned-unit changes persist without restart, restore the previous file
+  on native failure, and refuse unrelated units or a mismatched cache budget.
+- The native activation hook configures only an already installed service;
+  enabling the flag never starts a stopped service.
+- A cold private/no-store parent with `Surrogate-Control: content=ESI/1.0,
+  no-store` and its own WooCommerce Set-Cookie composes an ESI mini-cart while
+  remaining PASS. The shared policy needs no change for this case.
+
+These are native HTTP fixtures, not additional actual WordPress nonce signature
+or browser validation. Existing installed lab service PIDs were unchanged; no
+production configuration, release or installed service was changed. Existing
+objects parsed before the feature is enabled need normal invalidation/refetch.
+
 ## 0.4.4 — 16 November 2026
 
 All 147 Webuzo backend tests pass, together with 63 shared native HTTP cases.

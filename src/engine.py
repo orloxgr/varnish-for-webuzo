@@ -142,7 +142,9 @@ def action(request):
         recover()
         if operation=='status':return status()
         previous=settings();sites=inventory(previous)
-        if operation=='reconcile' and previous.get('installed'):repository.reconcile_owned()
+        if operation=='reconcile' and previous.get('installed'):
+            repository.reconcile_owned()
+            service.configure_esi(previous.get('memory_mb',256))
         if operation in ('usage','resize','connection','vcl') and not previous.get('installed'):raise ValueError('Install the Varnish service first')
         if operation=='usage':return dict(usage=service.usage(previous))
         if operation=='resize':
