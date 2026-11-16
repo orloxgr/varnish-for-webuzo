@@ -2,6 +2,14 @@
 
 ## Recognition database updates
 
+The isolated Python entrypoint is tested directly with `-I -B`, without an
+import wrapper. The native systemd check runs the unmodified `recognition.py`
+entrypoint with only its state directory redirected to disposable storage.
+It downloaded 2,288 records with exit status 0, while automatic updates were
+disabled and the cache-operation lock was held. VCL, cache settings and the
+Varnish PID remained unchanged. The entrypoint regression and related updater
+and lifecycle suite pass 31 Linux/root checks.
+
 Run `python3 -B -m unittest discover -s tests -p 'test*recognition.py' -v`
 as root on a disposable Linux host. The tests cover administrator-only actions,
 fixed upstream URLs, rejected redirects, strict CSV validation, atomic updates,

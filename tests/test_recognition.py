@@ -3,6 +3,7 @@ import copy
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,14 @@ import state
 
 
 class RecognitionActions(unittest.TestCase):
+    def test_real_isolated_entrypoint_imports_its_modules_before_rejecting_invalid_mode(self):
+        entry = Path(__file__).resolve().parents[1] / 'src/recognition.py'
+        result = subprocess.run([sys.executable, '-I', '-B', str(entry), '--mode', 'invalid'],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, '')
+        self.assertIn('Invalid recognition update mode', result.stdout)
+
     def test_admin_only_and_no_arbitrary_url_or_command_input(self):
         for action in ('recognition_status', 'recognition_configure', 'recognition_update'):
             with self.subTest(action=action), patch.object(recognition, 'start_update') as start:
