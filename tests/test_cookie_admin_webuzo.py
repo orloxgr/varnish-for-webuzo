@@ -365,6 +365,39 @@ class PolicyTransactions(unittest.TestCase):
 class NativeCookieRules(unittest.TestCase):
     run_policy = http.NativeProfiles.run_policy
 
+    def test_absent_private_cookie_keeps_public_hits_and_downstream_cookie_vary(self):
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile):
+                self.run_policy(profile,[http.origin('/page','public'),http.origin('/page','private')],
+                    [http.get('/page','public',cache='MISS'),
+                     'expect resp.http.Vary ~ "Cookie"',
+                     http.get('/page','public',cache='HIT'),
+                     'expect resp.http.Vary ~ "Cookie"',
+                     http.get('/page','private',['Cookie: site_personal=yes'],cache='PASS'),
+                     'expect resp.http.Cache-Control ~ "private"',
+                     'expect resp.http.Cache-Control ~ "no-store"',
+                     http.get('/page','public',cache='HIT')],
+                    config={'cookie_policies':choices('private','site_personal')})
+
+    def test_connected_private_only_contract_ignores_unrelated_cookie_variation(self):
+        original=http.site;rules=choices('private','site_personal')
+        connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
+        digest=cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules)
+        self.assertTrue(digest)
+        def connected(*args,**kwargs):
+            row=original(*args,**kwargs)
+            if row['domain']=='example.test':row['cookie_integration']=connection
+            return row
+        headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+digest,'X-UltraCache-Cookie-Vary: policy-only']
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                self.run_policy(profile,[http.origin('/page','public',headers=headers),http.origin('/page','private',headers=headers)],
+                    [http.get('/page','public',['Cookie: vendor_id=one'],cache='MISS'),
+                     http.get('/page','public',['Cookie: vendor_id=two'],cache='HIT'),
+                     'expect resp.http.Vary ~ "Cookie"',
+                     http.get('/page','private',['Cookie: vendor_id=two; site_personal=yes'],cache='PASS'),
+                     'expect resp.http.Cache-Control ~ "private"'],config={'cookie_policies':rules})
+
     def test_connected_policy_cookie_vary_uses_native_digest_and_keeps_public_variants(self):
         original=http.site;rules=choices('variant','site_currency')
         connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
