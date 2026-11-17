@@ -16,6 +16,7 @@ import lifecycle
 import state
 import cache_size
 import repository
+import engine
 import test_profiles as http
 
 
@@ -78,15 +79,20 @@ class ServiceFeatures(unittest.TestCase):
              patch.object(lifecycle.grp, 'getgrgid', return_value=SimpleNamespace(gr_mem=[])), \
              patch.object(service, 'configure_esi') as configure, patch.object(cache_size, 'recover') as recover, \
              patch.object(repository, 'ensure_cookie_modules') as modules, \
+             patch.object(repository, 'ensure_cookie_handoff') as handoff, \
+             patch.object(engine,'action') as reconcile, \
              patch('recognition.install') as recognition_install:
             lifecycle.install()
             configure.assert_not_called(); recover.assert_not_called()
             modules.assert_not_called()
+            handoff.assert_not_called();reconcile.assert_not_called()
             state.save(root / 'settings.json', dict(installed=True, memory_mb=8192))
             lifecycle.install()
             recover.assert_called_once_with(root / 'settings.json')
             configure.assert_called_once_with()
             modules.assert_called_once_with()
+            handoff.assert_called_once_with()
+            reconcile.assert_called_once_with(dict(actor='root',admin=True,action='reconcile'))
             self.assertEqual(recognition_install.call_count, 2)
 
 

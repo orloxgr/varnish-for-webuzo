@@ -31,6 +31,7 @@ def install():
             import repository
             cache_size.recover(state.ROOT/'settings.json')
             repository.ensure_cookie_modules()
+            repository.ensure_cookie_handoff()
             service.configure_esi()
     import recognition
     recognition.install()

@@ -32,13 +32,14 @@ def render(sites,gateway,origin_secret,config=None):
 import std;
 import purge;
 import header;
+import cookie_handoff;
 ''']
     for scheme,name in (('http','plain'),('https','secure')):
         text.append('backend '+name+' { .path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock"; '+
             '.connect_timeout = '+timeouts.seconds(allowances['connect'])+'; '+
             '.first_byte_timeout = '+timeouts.seconds(timeouts.first_byte(allowances))+'; '+
             '.between_bytes_timeout = '+timeouts.seconds(allowances['read'])+'; }')
-    admin_rules=[];cookie_groups={}
+    admin_rules=[];response_rules=[];response_groups={};cookie_groups={}
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if site.get('enabled') and not site.get('error'):
             key=json.dumps(cookie_views.normalize(site.get('cookie_policies')),sort_keys=True)
@@ -47,8 +48,15 @@ import header;
         body=cookie_views.compile_recv(config,group['site'])
         condition=' || '.join('req.http.X-WV-Site == '+quoted(identity) for identity in group['ids'])
         if body:admin_rules.append('if ('+condition+') {\n'+body+'\n}')
+        rules=cookie_views.cookie_admin.response_rules(config.get('cookie_policies'),group['site'].get('cookie_policies'))
+        response_groups.setdefault(rules,[]).extend(group['ids'])
+    for rules,identities in response_groups.items():
+        # Response matching has no row-ID diagnostics. Identical literal action
+        # lists can share one body while every site keeps its own request rules.
+        condition=' || '.join('bereq.http.X-WV-Site == '+quoted(identity) for identity in identities)
+        response_rules.append('if ('+condition+') {\nif (cookie_handoff.detach({"'+rules+'"}, bereq.is_bgfetch)) {}\n}')
     if cookie_groups:text.append(cookie_views.defaults_vcl())
-    text += [profiles.program('\n'.join(admin_rules)),'''
+    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules)),'''
 sub vcl_recv {
  call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';
@@ -157,11 +165,12 @@ sub vcl_hit {
  if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; }
  call scp_hit;
 }
-sub vcl_miss { if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; } }
+sub vcl_miss { call scp_cookie_miss; if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; } }
 sub wvw_soft_purge {
  set req.http.X-WV-Soft-Purge = purge.soft(); return (synth(200, "Soft purge completed"));
 }
 sub vcl_backend_fetch { call scp_backend_fetch; }
+sub vcl_backend_error { cookie_handoff.discard(); }
 sub vcl_backend_response {
  set beresp.http.X-WV-Site = bereq.http.X-WV-Site;
  set beresp.http.X-Cache-Object-Host = bereq.http.host;

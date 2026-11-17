@@ -25,7 +25,7 @@ Both Varnish manager and cache worker run as the dedicated `webuzo-varnish` syst
 
 **Show memory usage** reads an on-demand snapshot from the native counters of this Varnish instance: cache bytes used/free, configured budget, hits, misses and passes. Total service memory is shown separately because it includes connection and processing overhead in addition to stored objects.
 
-Public responses with a positive cache lifetime are eligible regardless of content type, including HTML, CSS, JavaScript, JSON and redirects. Unknown request cookies reach the origin; functional query strings remain in the cache key and declared `Vary` fields keep representations separate. Authorization, write requests and known private sessions bypass shared cache. Origin responses with `Set-Cookie`, private/no-store/no-cache instructions or standalone partial/304 bodies are not stored; normal conditional and range delivery from complete cached objects remain available. Cache lifetime and grace follow the origin response and native Varnish policy. The addon imposes no per-site TTL ceiling and does not disable grace for Basic. Administrators can use additional response VCL for an explicit site-specific policy.
+Public responses with a positive cache lifetime are eligible regardless of content type, including HTML, CSS, JavaScript, JSON and redirects. Unknown request cookies reach the origin; functional query strings remain in the cache key and declared `Vary` fields keep representations separate. Authorization, write requests and known private sessions bypass shared cache. Origin private/no-store/no-cache instructions and standalone partial/304 bodies are not stored; responses setting only Shared cookies retain cacheable public HTML, while Variant, Private and unclassified response cookies keep the response outside shared storage; normal conditional and range delivery from complete cached objects remain available. Cache lifetime and grace follow the origin response and native Varnish policy. The addon imposes no per-site TTL ceiling and does not disable grace for Basic. Administrators can use additional response VCL for an explicit site-specific policy.
 
 ## Cookies and shared HTML
 
@@ -34,9 +34,13 @@ cookie, centrally or per site. This includes `_fbp`, with the same controls as
 other cookies. The table controls cache variation; it does not generate cookies.
 The website or its provider owns cookie creation, consent, renewal and deletion.
 
-Origin `Set-Cookie` fields retain their separate values and attributes and are
-not stored in a shared cached object. UltraCache private ESI fragments retain
-the existing session and downstream privacy handling.
+When a cacheable public response sets only Shared cookies, the native handoff
+removes those fields before storing the HTML and delivers the exact original
+fields only to the visitor who caused that fetch. Duplicate fields, attributes,
+renewals and deletions are preserved. Their values never enter the shared object.
+Warm HITs use the provider's existing browser or application delivery path.
+UltraCache private ESI fragments retain their session and downstream privacy
+handling.
 
 The shared cookie catalogue also supplies value-free response diagnostics:
 `X-Cache-Cookie-Names`, `X-Cache-Cookie-Role` and `X-Cache-Cookie-Policy`.
@@ -201,17 +205,10 @@ panel can synchronize UltraCache even when its Varnish setup is disabled.
 Updating an already configured addon reapplies its current setup automatically;
 fresh installation still requires the administrator to set up the service.
 
-The panel shows the local Open Cookie Database revision, record count and last
-update results. **Update automatically every day** is enabled by default;
-**Update now** also works when automatic updates are off. The daily systemd timer
-runs independently of cache operations. The database and preference remain in
-private persistent storage across plugin upgrades and reactivation.
-
-Updates download recognition metadata from the original upstream GitHub
-repository. Failed downloads or invalid data leave the last valid database in
-place. Recognition categories describe cookies; they do not change VCL rules,
-consent decisions or cookie delivery. Updating the database does not purge,
-warm or restart the cache.
+The panel shows the bundled recognition record count, reviewed rule count and
+source revision. Recognition data and executable defaults are updated together
+with the plugin. Existing central and per-site choices are preserved. Old
+downloaded snapshots are not consumed, and no daily download job is created.
 
 ## Development
 

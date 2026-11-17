@@ -13,8 +13,10 @@ class NativePolicy(unittest.TestCase):
     def test_runtime_retention_and_marker_settings_are_preserved(self):
         original=http.program
         def instrument(*args,**kwargs):
-            return original(*args,**kwargs).replace('\n}\n\nsub scp_backend_response {',
-                '\n set beresp.http.X-Test-Marker-TTL = beresp.ttl; set beresp.http.X-Test-Marker-Grace = beresp.grace; set beresp.http.X-Test-Marker-Keep = beresp.keep;\n}\n\nsub scp_backend_response {')
+            source=original(*args,**kwargs)
+            marker='    set beresp.uncacheable = true;\n}'
+            self.assertIn(marker,source)
+            return source.replace(marker,'    set beresp.uncacheable = true;\n set beresp.http.X-Test-Marker-TTL = beresp.ttl; set beresp.http.X-Test-Marker-Grace = beresp.grace; set beresp.http.X-Test-Marker-Keep = beresp.keep;\n}')
         for profile in profiles.NAMES:
             observation='set beresp.http.X-User-TTL = beresp.ttl; set beresp.http.X-User-Grace = beresp.grace; set beresp.http.X-User-Keep = beresp.keep;'
             config={'profile_rules':{profile:dict(recv_vcl='',backend_vcl=observation)}}
@@ -59,7 +61,8 @@ class NativePolicy(unittest.TestCase):
             self.run_policy(profile,
                 [http.origin('/cookie',visitor,['Set-Cookie: visitor='+visitor],cache='public, max-age=1800') for visitor in ('A','B')],
                 [http.get('/cookie','A',cache='PASS'),'expect resp.http.Set-Cookie == "visitor=A"',
-                 'expect resp.http.Cache-Control == "public, max-age=1800"',http.get('/cookie','B',cache='PASS'),'expect resp.http.Set-Cookie == "visitor=B"'])
+                 'expect resp.http.Cache-Control == "private, no-store"',http.get('/cookie','B',cache='PASS'),'expect resp.http.Set-Cookie == "visitor=B"'],
+                config={'cookie_policies':{'schemaVersion':1,'rules':[dict(id='private-visitor',match=dict(kind='exact',value='visitor'),description='Private per-visitor response',action='private')]}})
 
 
 if __name__=='__main__':unittest.main()

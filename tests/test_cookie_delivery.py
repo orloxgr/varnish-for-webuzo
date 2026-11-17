@@ -15,7 +15,7 @@ from test_profiles import program
 
 
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None, configuration=None):
+def proxy(profile, respond, transform=None, configuration=None,policies=None):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -26,7 +26,8 @@ def proxy(profile, respond, transform=None, configuration=None):
             self.send_response(200)
             if not any(name.lower() == 'content-type' for name, _ in headers):
                 self.send_header('Content-Type', 'text/html')
-            self.send_header('Content-Length', str(len(body)))
+            if not any(name.lower() == 'content-length' for name, _ in headers):
+                self.send_header('Content-Length', str(len(body)))
             self.send_header('Connection', 'close')
             for name, value in headers:
                 self.send_header(name, value)
@@ -43,7 +44,9 @@ def proxy(profile, respond, transform=None, configuration=None):
     try:
         with tempfile.TemporaryDirectory(prefix='wvw-cookie-http-') as folder:
             root = Path(folder)
-            source = program(profile, config=configuration).replace('${s1_port}', str(origin.server_port))
+            selected=dict(configuration or {})
+            if policies is not None:selected['cookie_policies']=policies
+            source = program(profile, config=selected).replace('${s1_port}', str(origin.server_port))
             if transform is not None:
                 source = transform(source)
             (root / 'policy.vcl').write_text(source)
@@ -86,6 +89,7 @@ def proxy(profile, respond, transform=None, configuration=None):
                     finally:
                         connection.close()
 
+                get.endpoint=('127.0.0.1',port)
                 try:
                     yield get
                 finally:

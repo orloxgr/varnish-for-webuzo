@@ -8,11 +8,8 @@
   <details class="wvw-card" id="wvw-cookie-admin-panel"><summary>Cookie policies</summary><div id="wvw-cookie-admin"></div></details>
   <section class="wvw-card" id="wvw-recognition">
     <h3>Cookie recognition database</h3>
-    <p>Recognize cookie providers using the <a href="https://github.com/jkwakman/Open-Cookie-Database" target="_blank" rel="noopener noreferrer">Open Cookie Database</a>. Updates refresh descriptions and recognition data; they do not change cache rules, consent decisions or cookie delivery.</p>
-    <label><input type="checkbox" id="wvw-recognition-automatic"> Update automatically every day</label>
-    <div class="wvw-toolbar"><button type="button" id="wvw-recognition-update">Update now</button><button type="button" id="wvw-recognition-refresh">Refresh database status</button></div>
+    <p>Cookie recognition and reviewed Shared / Variant / Private defaults are included together. Update the plugin to receive a new reviewed database. Your central and site choices are preserved. Provider descriptions use the <a href="https://github.com/jkwakman/Open-Cookie-Database" target="_blank" rel="noopener noreferrer">Open Cookie Database</a>.</p>
     <div id="wvw-recognition-status" role="status">Checking database…</div>
-    <p id="wvw-recognition-error" role="alert" hidden></p>
   </section>
   <section class="wvw-card" id="wvw-server" hidden>
     <h3>Server cache</h3>

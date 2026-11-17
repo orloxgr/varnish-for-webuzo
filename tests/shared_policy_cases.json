@@ -734,5 +734,16 @@
       "txreq -url \"/empty-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: vendor_id=bob\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {bob}\nexpect resp.http.X-Cache == \"MISS\"",
       "txreq -url \"/empty-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: vendor_id=alice\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {alice}\nexpect resp.http.X-Cache == \"HIT\""
     ]
+  },
+  {
+    "name": "Shared response cookies are delivered once outside the stored public object",
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/shared-response\"\nexpect req.http.X-SCP-Cookie-Handoff == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Set-Cookie: _fbp=real-provider-value; Path=/; Secure; SameSite=Lax\" -hdr \"Set-Cookie: _ga=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/\" -body {same-public-html}"
+    ],
+    "requests": [
+      "txreq -url \"/shared-response\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {same-public-html}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == \"_fbp=real-provider-value; Path=/; Secure; SameSite=Lax\"\nexpect resp.http.Cache-Control == \"private, no-store\"",
+      "txreq -url \"/shared-response\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {same-public-html}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Cache-Control == \"public, max-age=1800\"",
+      "txreq -url \"/shared-response\" -hdr \"Host: example.test\" -hdr \"Cookie: _fbp=different-provider-id\" @@GET_HEADERS@@\nrxresp\nexpect resp.body == {same-public-html}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>"
+    ]
   }
 ]

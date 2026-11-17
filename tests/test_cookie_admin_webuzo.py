@@ -50,7 +50,7 @@ class NativeScope(unittest.TestCase):
         self.first, self.second = account(), account('c','other.test','account_b')
         self.sites = {row['id']:row for row in (self.first,self.second)}
         self.enterContext(patch.object(native, 'collect', side_effect=lambda: copy.deepcopy(self.sites)))
-        self.enterContext(patch.object(cookie_views.recognition.cookie_recognition, 'database', return_value={'revision':'test','records':[]}))
+        self.enterContext(patch.object(cookie_views.recognition, 'database', return_value={'revision':'test','records':[]}))
         state.save(engine.SETTINGS, {'installed':False, 'sites':copy.deepcopy(self.sites)})
 
     def request(self, action='cookie_policies_status', actor='account_a', **extra):
@@ -67,7 +67,7 @@ class NativeScope(unittest.TestCase):
 
     def test_new_recognition_metadata_is_visible_without_claiming_an_executed_rule(self):
         database={'revision':'new','records':[dict(id='new',name='new_unbundled_cookie_17',provider='',wildcard=False)]}
-        with patch.object(cookie_views.recognition.cookie_recognition,'database',return_value=database):
+        with patch.object(cookie_views.recognition,'database',return_value=database):
             rows=self.request()['cookie_policies']['rows']
         row=next(row for row in rows if row['name']=='new_unbundled_cookie_17')
         self.assertEqual((row['action'],row['scope'],row['active_rule'],row['effective_action']),('variant','recognition',False,'existing-policy'))
@@ -133,7 +133,7 @@ class NativeScope(unittest.TestCase):
         self.request('cookie_policies_save', id=self.first['id'], settings=choices('variant'))
         before = engine.SETTINGS.read_bytes()
         database = {'revision':'new','records':[dict(id='new',name='other_cookie',provider='Changed provider',wildcard=False)]}
-        with patch.object(cookie_views.recognition.cookie_recognition,'database',return_value=database):
+        with patch.object(cookie_views.recognition,'database',return_value=database):
             self.request()
         self.assertEqual(engine.SETTINGS.read_bytes(), before)
 
@@ -493,17 +493,26 @@ class NativeCookieRules(unittest.TestCase):
             sites[row['id']]=row
         source=engine.policy.render(sites,'e'*64,'f'*64)
         self.assertEqual(source.count('sub scp_bundled_cookie_rules {'),1)
+        self.assertEqual(source.count('if (cookie_handoff.detach({"'),2)
         for scheme in ('http','https'):
             source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
         source=source.replace('local.socket != "public"','client.ip != "127.0.0.1"').replace('local.socket == "public"','client.ip == "127.0.0.1"')
         with patch.object(http,'program',return_value=source):
             self.run_policy('basic',
-                [http.origin('/page','first-a'),http.origin('/page','first-b'),http.origin('/page','second-shared')],
+                [http.origin('/page','first-a'),http.origin('/page','first-b'),http.origin('/page','second-shared'),
+                 http.origin('/cookie','private-fields',['Set-Cookie: local_option=variant-new']),
+                 http.origin('/cookie','shared-fields',['Set-Cookie: local_option=shared-new'])],
                 [http.get('/page','first-a',['Cookie: local_option=A'],cache='MISS',host='site-0.example.test'),
                  http.get('/page','first-a',['Cookie: local_option=A'],cache='HIT',host='site-0.example.test'),
                  http.get('/page','first-b',['Cookie: local_option=B'],cache='MISS',host='site-0.example.test'),
                  http.get('/page','second-shared',['Cookie: local_option=A'],cache='MISS',host='site-1.example.test'),
-                 http.get('/page','second-shared',['Cookie: local_option=B'],cache='HIT',host='site-1.example.test')])
+                 http.get('/page','second-shared',['Cookie: local_option=B'],cache='HIT',host='site-1.example.test'),
+                 http.get('/cookie','private-fields',cache='PASS',host='site-0.example.test'),
+                 'expect resp.http.Set-Cookie == "local_option=variant-new"',
+                 http.get('/cookie','shared-fields',cache='MISS',host='site-1.example.test'),
+                 'expect resp.http.Set-Cookie == "local_option=shared-new"',
+                 http.get('/cookie','shared-fields',cache='HIT',host='site-1.example.test'),
+                 'expect resp.http.Set-Cookie == <undef>'])
 
     def test_bundled_defaults_share_tracking_vary_consent_and_pass_private_session(self):
         for profile in ('basic','ultracache'):

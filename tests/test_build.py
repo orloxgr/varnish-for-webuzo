@@ -22,10 +22,14 @@ class PackageVersions(unittest.TestCase):
             entry.write_bytes(entry.read_bytes().replace(b'\r\n',b'\n').replace(b'\n',b'\r\n'))
             assets=root/'panel';assets.mkdir()
             binary=b'\x89PNG\r\n\x00\r\n';(assets/'icon.png').write_bytes(binary)
+            native=root/'shared/native';native.mkdir(parents=True)
+            for name in ('cookie_handoff.c','cookie_handoff.vcc'):(native/name).write_bytes(b'Native source\r\n')
             with patch.object(builder,'ROOT',root):archive=builder.build()
             with zipfile.ZipFile(archive) as bundle:
                 self.assertNotIn(b'\r\n',bundle.read(PLUGIN+'/'+PLUGIN+'.php'))
                 self.assertEqual(bundle.read(PLUGIN+'/panel/icon.png'),binary)
+                for name in ('cookie_handoff.c','cookie_handoff.vcc'):
+                    self.assertEqual(bundle.read(PLUGIN+'/shared/native/'+name),b'Native source\n')
 
     def test_repository_metadata_agrees(self):
         self.assertEqual(builder.package_version(), json.loads((ROOT / 'info.json').read_text())['version'])

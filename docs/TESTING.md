@@ -1,29 +1,13 @@
 # Verification
 
-## Recognition database updates
+## Bundled cookie database
 
-The isolated Python entrypoint is tested directly with `-I -B`, without an
-import wrapper. The native systemd check runs the unmodified `recognition.py`
-entrypoint with only its state directory redirected to disposable storage.
-It downloaded 2,288 records with exit status 0, while automatic updates were
-disabled and the cache-operation lock was held. VCL, cache settings and the
-Varnish PID remained unchanged. The entrypoint regression and related updater
-and lifecycle suite pass 31 Linux/root checks.
-
-Run `python3 -B -m unittest discover -s tests -p 'test*recognition.py' -v`
-as root on a disposable Linux host. The tests cover administrator-only actions,
-fixed upstream URLs, rejected redirects, strict CSV validation, atomic updates,
-last-good retention, automatic/manual selection and owned timer lifecycle.
-Upstream input safety bounds are 32 MiB per CSV, 1 MiB per metadata/license
-response, 100,000 records, 128 columns and 256 KiB per CSV field. These bounds apply to
-downloads, not website requests or cache operations.
-
-Native Lab checks also exercised an isolated systemd worker against the actual
-upstream, manual update with automatic updates disabled, the independent cache
-lock and retention after a download failure. The cache settings, active VCL and
-Varnish PID remained unchanged. The panel fixture checks that update responses
-preserve unsaved site edits and render upstream messages as text. The Webuzo
-panel itself requires an active Webuzo license for a native upload/UI test.
+Recognition metadata and reviewed executable defaults ship with the addon.
+`tests/test_recognition.py` verifies the isolated CLI status, administrator
+boundary, truthful responses to former updater calls, retirement of only owned
+scheduler files and use of bundled data instead of old downloaded snapshots.
+The runtime does not download or schedule database updates. The common upstream
+updater remains a development helper with its own input-validation tests.
 
 ## 0.4.6 — 16 November 2026
 
@@ -368,8 +352,8 @@ external identities are adopted through the normal transaction path.
 
 ## Concrete bundled policies
 
-The current shared matrix passes 91 native HTTP cases. Both panel implementations
-use the same 24 shared files. It includes an unconnected origin returning empty
+The current shared matrix passes 93 native HTTP cases. Both panel implementations
+use the same 27 shared files. It includes an unconnected origin returning empty
 policy settings: Alice and Bob must each fetch their own representation, then
 Alice must reuse only hers. An expected contract must be a real digest before
 origin policy-only variation can be trusted.
@@ -435,3 +419,46 @@ including the four replacement cases for ignored historical provider state.
 The shared parity fixture's `--legacy-cookie-delivery` flag injects a retired
 field into raw test site state only. It is not a production configuration option
 or a compatibility path.
+
+## Request-owned Shared response cookie handoff
+
+The native C VMOD stores detached response fields only for the originating
+client task. The complete fields are removed before object storage and returned
+to that task; warmed HITs do not replay another visitor's fields. The same ordered
+central/site/bundled action resolver is used for request and response cookies.
+
+The focused native run passed ten response/lifecycle tests on Basic and
+UltraCache, including concurrent MISS/HIT pairs, duplicate fields, Expires,
+renewals/deletions, mixed unknown/private fields, mandatory login state, original
+origin privacy, aborted clients, discarded backend retries, client restart to
+a warmed HIT, background refill and failed body fetch. Before the common fix,
+the independent retry and restart fixtures reproduced fields from a discarded
+attempt; both pass with reset/bind/discard cleanup. Pending entries return to
+zero after the tasks complete.
+
+On the Webuzo VM, dependency setup installed development headers for exactly
+the existing engine version and built the VMOD without changing that engine or
+the installed Varnish process. An isolated systemd pre-start build also ran under
+the owned service's user/filesystem restrictions. Source identity is included in
+generated VCL and the build signature, so C-only updates require a fresh native
+module identity. No customer server was used for these checks.
+
+The final source-aware Webuzo matrix passed all 93 cases with the corrected
+builder. Strict comparison with Hestia matched all 27 common source files and
+all 93 results, including the C, VCC and builder digests.
+
+The complete Webuzo Python run executed 292 methods. Its 281 initial passes were
+followed by a focused re-run of all eleven failures/errors after updating stale
+fixtures and grouping identical response rule strings; those eleven plus the
+new C-only reload regression passed (12 methods). Corrections retain private,
+unknown-cookie, functional-Vary, fingerprint-upgrade and account-isolation
+assertions. The 48-site fixture now emits two response bodies for its two actual
+policies and also verifies real Shared response cookies versus Variant PASS.
+This avoids repeating a complete policy for row IDs that have identical effects.
+
+The C-only reload test reproduced stale implementation reuse before the builder
+fix. With the signature in the actual `$Module` directive, a new VCL executes
+the changed C implementation and switching back retains the previous mapping.
+The isolated systemd startup helper and panel PHP syntax check also passed.
+The installed lab addon remained 0.7.0 with its original native process and no
+pending transaction; no new release or customer deployment was performed.

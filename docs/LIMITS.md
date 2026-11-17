@@ -77,7 +77,7 @@ The source currently adds these decisions beyond numeric engine defaults:
 | Rule | Effect and reason |
 | --- | --- |
 | Status below 200 or standalone 206/304 | Body-integrity exclusions remain. The addon no longer imposes a blanket 400+ veto: origin/native freshness applies. Native Varnish 9.1 still assigns a non-positive TTL to 500/503 unless an administrator explicitly changes it. |
-| Origin `Set-Cookie` on the response | Uncacheable; prevents replaying one visitor's cookie to another. Cookie creation belongs to the application/provider; the panel does not mint identifiers. |
+| Origin `Set-Cookie` on the response | Shared-only fields are handed to the owning client before storing public HTML; Variant, Private and unclassified fields remain outside shared storage. The panel does not mint identifiers. |
 | Origin `private`, `no-store`, `no-cache`, `Pragma: no-cache`, `Surrogate-Control: no-store`, `Vary: *`, or non-positive TTL | Uncacheable. These are origin instructions/representation boundaries, not subscription restrictions. |
 | Authorization, private WordPress cookies, WooCommerce session/cart cookies and private application actions | PASS. An UltraCache-approved shared ESI parent is the explicit exception for supported cart/session handling. |
 | Site bypass paths and administrator VCL | May explicitly force PASS or set TTL/grace/keep. They are administrator configuration, not hidden addon quotas. |
@@ -195,7 +195,7 @@ document also inventories the Webuzo panel, transport and helper controls.
 | Item | Classification and current result |
 | --- | --- |
 | Site/account/host boundaries, scoped purge credentials and private sessions | Required to provide shared hosting caching without exposing another tenant or visitor's state. Retained. |
-| Origin privacy, Set-Cookie and real representation negotiation | Required correctness/privacy policy. Retained. Neither integration needs to rewrite every ordinary Set-Cookie response to private/no-store just to keep it out of Varnish. Webuzo already preserved those ordinary origin headers. |
+| Origin privacy, Set-Cookie and real representation negotiation | Required correctness/privacy policy. Retained. Deliveries containing real cookie fields use private/no-store downstream headers. Shared HTML storage is independent of that per-client delivery. |
 | Five-minute site TTL cap and forced Basic grace zero | Addon choices, not Varnish requirements. Removed before this change. |
 | Literal uncacheable marker TTL, grace/keep resets | Redundant addon overrides. Removed; native `param.uncacheable_ttl` applies, as in Hestia. A marker is not a cached private body. |
 | Forced UltraCache keep five minutes | Optional retention tuning, not a correctness requirement or fresh-TTL cap. Removed, as in Hestia. |

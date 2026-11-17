@@ -5,6 +5,7 @@ network, or WordPress dependency. Loading happens when generating VCL, not on an
 HTTP request. Cookie values never enter this API.
 """
 import json
+import hashlib
 from pathlib import Path
 import re
 from vcl_source import expand
@@ -81,7 +82,7 @@ def cookie_pattern(catalogue, consumer):
     return '(^|;[[:blank:]]*)(' + '|'.join(names) + ')='
 
 
-def render_policy(source, catalogue, admin_rules=''):
+def render_policy(source, catalogue, admin_rules='', response_rules=''):
     """Expand only reviewed names; output remains a standalone native VCL."""
     validate(catalogue)
     source = expand(source)
@@ -91,4 +92,10 @@ def render_policy(source, catalogue, admin_rules=''):
     version = json.dumps(catalogue['version'], ensure_ascii=True)[1:-1]
     rendered = MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)
     rendered = rendered.replace('@@COOKIE_ADMIN_RULES@@', admin_rules)
-    return rendered
+    rendered = rendered.replace('@@COOKIE_RESPONSE_RULES@@', response_rules)
+    # Native-helper-only updates must also activate a newly loaded VCL/VMOD.
+    # This contains source identity, never visitor state or an engine ABI guess.
+    root=Path(__file__).parent
+    identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in
+        ('native/cookie_handoff.c','native/cookie_handoff.vcc','native_build.py'))).hexdigest()
+    return '# Native cookie handoff sources: '+identity+'\n'+rendered

@@ -21,6 +21,7 @@ ACTIVE=routing.CONFIG/'active.vcl'
 DAEMON='webuzo-varnish'
 CACHE=Path('/var/lib/varnish-for-webuzo-cache')
 ESI_FEATURE='+esi_ignore_other_elements'
+PREPARE_COOKIE='ExecStartPre=+/usr/bin/python3 -I /usr/local/webuzo/plugins/varnish-for-webuzo/src/prepare_cookie_module.py\n'
 
 def installed():return Path('/usr/sbin/varnishd').is_file()
 def running():
@@ -68,12 +69,14 @@ Description=Varnish for Webuzo
 After=network.target nginx.service
 [Service]
 Type=simple
+TimeoutStartSec=infinity
 User=webuzo-varnish
 Group=webuzo-varnish
 StateDirectory=varnish-for-webuzo-cache
 StateDirectoryMode=0700
 RuntimeDirectory=varnish-for-webuzo-cache
 RuntimeDirectoryMode=0755
+COOKIE_MODULE_PREPARE
 ExecStart=/usr/sbin/varnishd -j none -F -a public=/run/varnish-for-webuzo-cache/frontend.sock,mode=0666 -T 127.0.0.1:6086 -S /etc/varnish-for-webuzo/admin.secret -f /etc/varnish-for-webuzo/active.vcl -n /var/lib/varnish-for-webuzo-cache -p feature=+esi_ignore_other_elements -s malloc,CACHE_BUDGETm
 Restart=on-failure
 RestartSec=2
@@ -87,14 +90,17 @@ PrivateDevices=true
 ReadWritePaths=/var/lib/varnish-for-webuzo-cache
 [Install]
 WantedBy=multi-user.target
-'''.replace('CACHE_BUDGET',str(size))
+'''.replace('CACHE_BUDGET',str(size)).replace('COOKIE_MODULE_PREPARE\n',PREPARE_COOKIE)
 
 def configure_esi(size=None):
     """Persist native attribute parsing and enable it without restarting Varnish."""
     expected=unit(size).encode()
     previous=native.read(UNIT)
     # Accept only the exact owned unit, with or without this added parameter.
-    if previous not in (expected,expected.replace(b' -p feature='+ESI_FEATURE.encode(),b'')):
+    owned={value.replace(feature,b'') if feature else value
+           for value in (expected,expected.replace(PREPARE_COOKIE.encode(),b'').replace(b'TimeoutStartSec=infinity\n',b''))
+           for feature in (b'',b' -p feature='+ESI_FEATURE.encode())}
+    if previous not in owned:
         raise ValueError('The owned service unit was changed')
     changed=previous!=expected
     try:

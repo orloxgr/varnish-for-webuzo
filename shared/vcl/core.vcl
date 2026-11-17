@@ -1,6 +1,8 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    cookie_handoff.reset();
+    unset req.http.X-SCP-Cookie-Handoff;
     unset req.http.X-SCP-Cookie-Contract;
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
@@ -57,6 +59,8 @@ sub scp_hit {
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
 }
 sub scp_backend_fetch {
+    cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
+    unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-SCP-Admin-Remaining;
     unset bereq.http.X-SCP-Admin-Keep;
     unset bereq.http.X-SCP-Admin-Matched;
@@ -90,6 +94,7 @@ sub scp_backend_response {
             set beresp.http.Vary = beresp.http.Vary + ", X-Forwarded-Proto";
         }
     }
+    call scp_shared_response_cookies;
     call scp_response_privacy;
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
     # Static and dynamic responses both retain functional Cookie variation.
@@ -98,6 +103,7 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    cookie_handoff.deliver();
     if (req.http.X-SCP-Pass == "1" || obj.uncacheable) {
         set resp.http.X-SCP-Result = "PASS";
         if (req.http.X-SCP-Reason) { set resp.http.X-SCP-Result-Reason = req.http.X-SCP-Reason; }

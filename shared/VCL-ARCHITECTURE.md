@@ -27,3 +27,9 @@ existing single-program publication provides the complete immutable artifact.
 
 The module split itself changes no policy. Cookie administrator rules are a
 separate change and must be verified by real request/response behavior.
+
+The cookie delivery source module also uses the common request-owned
+`cookie_handoff` VMOD. Its small native source is built for the installed engine
+ABI; it is a runtime dependency like the official header module, not a VCL
+include or a cookie-value store. The per-client handoff is finalized with the
+request. A native pre-start build refreshes it after engine package upgrades.

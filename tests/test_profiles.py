@@ -111,8 +111,8 @@ class NativeProfiles(unittest.TestCase):
              get('/page','shared',['Cookie: _ga=second; consent=no'],cache='HIT')])
     def test_real_cookie_vary_still_separates_origin_responses(self):
         self.run_policy('ultracache',[origin('/page','A',['Vary: Cookie']),origin('/page','B',['Vary: Cookie'])],
-            [get('/page','A',['Cookie: audience=A'],cache='MISS'),get('/page','B',['Cookie: audience=B'],cache='MISS'),
-             get('/page','A',['Cookie: audience=A'],cache='HIT')])
+            [get('/page','A',['Cookie: site_audience=A'],cache='MISS'),get('/page','B',['Cookie: site_audience=B'],cache='MISS'),
+             get('/page','A',['Cookie: site_audience=A'],cache='HIT')])
     def test_accept_variants_and_exact_purge_preserve_other_urls_and_accounts(self):
         accepts=(None,'text/html','application/xhtml+xml,text/html;q=0.9','application/json','application/xml','text/html;q=0,application/json')
         headers=lambda a:[] if a is None else ['Accept: '+a]
@@ -166,10 +166,10 @@ class NativeProfiles(unittest.TestCase):
             [origin('/data','A',['Vary: Cookie'],mime='application/json'),
              origin('/data','B',['Vary: Cookie'],mime='application/json'),
              origin('/data','authenticated',mime='application/json')],
-            [get('/data','A',['Cookie: audience=A'],cache='MISS'),
-             get('/data','B',['Cookie: audience=B'],cache='MISS'),
-             get('/data','authenticated',['Cookie: audience=A','Authorization: Bearer fixture'],cache='PASS'),
-             get('/data','A',['Cookie: audience=A'],cache='HIT')])
+            [get('/data','A',['Cookie: site_audience=A'],cache='MISS'),
+             get('/data','B',['Cookie: site_audience=B'],cache='MISS'),
+             get('/data','authenticated',['Cookie: site_audience=A','Authorization: Bearer fixture'],cache='PASS'),
+             get('/data','A',['Cookie: site_audience=A'],cache='HIT')])
     def test_public_redirects_and_other_success_responses_can_hit(self):
         responses=[];requests=[]
         for status in (203,204,300,301,302,307):
@@ -308,7 +308,7 @@ class NativeProfiles(unittest.TestCase):
         self.run_policy('ultracache',
             [origin('/parent','anonymous',['X-UltraCache-Woo-Async-Parent: 1','Vary: Cookie']),origin('/parent','private')],
             [get('/parent','anonymous',cache='MISS'),
-             get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1'],cache='PASS')])
+             get('/parent','private',['Cookie: wp_woocommerce_session_demo=A; ultracache_esi_optin=1; site_locale=el'],cache='PASS')])
     def test_no_store_parent_cannot_be_approved_for_shared_esi(self):
         self.run_policy('ultracache',[origin('/parent',body,['Surrogate-Control: ESI/1.0, no-store','X-UltraCache-ESI-Shared-Parent: 1']) for body in ('A','B')],
             [get('/parent',body,['Cookie: woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='PASS') for body in ('A','B')])

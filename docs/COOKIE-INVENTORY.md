@@ -6,7 +6,7 @@
 | Cookie choices | Shared / Variant / Private table, with site overrides over central and bundled rules |
 | Private sessions and carts | Common private-state roles and application-approved UltraCache ESI parents |
 | Tracking URLs and cookies | Separate lookup dimensions; original URL and Cookie reach the origin |
-| Origin Set-Cookie | Individual fields, attributes, renewals and deletions are forwarded without storing them in shared objects |
+| Origin Set-Cookie | Shared-only fields use the request-owned native handoff; original values and attributes never enter shared objects |
 | Cookie creation and consent | Origin application/provider; no native per-cookie issuer |
 | ESI delivery privacy | Common private-delivery helper prevents downstream caching of an assembled personal response |
 | Ownership and persistence | Native Webuzo inventory, root-private settings and recoverable transactions |
@@ -26,3 +26,8 @@ transport primitives rather than a native cookie issuer.
 engine before choosing matching modules from the authenticated OS repository.
 Existing engine ownership and service lifecycle remain separate from policy
 compilation.
+
+`repository.ensure_cookie_handoff` installs headers matching the existing engine
+and builds `shared/native` with `shared/native_build.py`. A build receipt covers
+the source, builder and native ABI. The owned service pre-start command checks
+it before startup; the cache process retains its unprivileged service identity.

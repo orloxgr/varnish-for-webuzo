@@ -11,7 +11,7 @@
 | Cookie creation and consent | Owned by the origin application/provider; the common table controls cache variation |
 | Concrete bundled defaults | `shared/cookie_defaults.py`, `shared/cookie-assessments.json` and generated `shared/cookie-defaults.json` |
 | Core login/cart roles | `shared/cookie-policies.json`, validated by `shared/cookie_catalogue.py` |
-| Recognition metadata | `shared/cookie_recognition.py`, local persistent snapshot and bundled fallback |
+| Recognition metadata | Versioned bundled recognition data, shipped with reviewed executable defaults |
 | Native site ownership | `src/native.py::collect`, Webuzo users/domains inventory and Unix identity |
 | Settings and rollback | `src/engine.py`, root-private settings and transaction journal |
 | Deployment | `src/service.py`, complete candidate VCL, native load/use, retained active startup VCL |
@@ -19,9 +19,9 @@
 Recognition categories alone do not grant a cache rule or a cookie issuer.
 Every bundled cookie has a concrete Shared, Variant or Private rule. Explicit
 central and site choices override these defaults within the existing core
-privacy checks. Daily recognition updates cannot silently change executable
-rules: missing upstream entries retain their bundled rules, and newly discovered
-names without a bundled match are labelled as proposals until explicitly saved.
+privacy checks. Recognition data and reviewed executable defaults ship together in plugin updates.
+Existing central and site choices are retained; downloaded-only metadata does not
+replace the bundled database.
 
 ## Native account boundary
 
@@ -46,7 +46,7 @@ the complete rendered text before native compilation.
 
 Cookie-policy saves use the existing native transaction and compile the actual
 candidate before activation. They preserve site routing/profile, browser cache,
-delivery preferences and updater state. Cache invalidation is scoped to enabled
+service preferences and bundled data. Cache invalidation is scoped to enabled
 sites whose effective executable policy changes.
 
 The sheet displays cookie name, description, Shared/Variant/Private action and

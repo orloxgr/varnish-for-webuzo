@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.16.4",
+  "version": "2026.11.17.1",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -23,10 +23,10 @@
         "transports": {
           "proxy-fbp": {
             "issuer": "meta-compatible-native",
-            "supported": true,
+            "supported": false,
             "consentAdapter": "configured-cookie-equals",
             "originResponseWins": true,
-            "verifiedScope": "Native Varnish deliver and actual Meta ParamBuilder identifier compatibility",
+            "verifiedScope": "Retired native identifier generator. Original provider response cookies use the generic Shared HTML handoff; new identifiers use the actual browser/application provider.",
             "holdWhen": [
               {
                 "cookie": "wc_facebook_signals_state",

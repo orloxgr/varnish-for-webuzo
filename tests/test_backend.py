@@ -194,7 +194,7 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(service.ACTIVE.read_text(),'old VCL')
         self.assertFalse(engine.JOURNAL.exists())
     def test_timeout_refresh_keeps_existing_site_objects_and_persists_allowances(self):
-        current=site();previous=dict(installed=True,sites={current['id']:current},manifest={},gateway='e'*64,origin='f'*64)
+        current=site();previous=dict(installed=True,sites={current['id']:current},manifest={},gateway='e'*64,origin='f'*64,cookie_defaults_digest=engine.cookie_views.default_digest())
         desired=copy.deepcopy(previous);service.ACTIVE.write_text('old VCL')
         with patch.object(engine,'plans',return_value=[]),patch.object(service,'load',return_value=('old','new')),patch.object(service,'admin'),patch.object(service,'prune'),patch.object(service,'write_vcl',side_effect=lambda p,c:p.write_text(c)),patch.object(engine,'reload_servers'),patch.object(service,'purge') as purge:
             engine.apply(previous,desired)

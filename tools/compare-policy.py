@@ -14,7 +14,8 @@ def main():
     if bool(args.left_report)!=bool(args.right_report):parser.error('Supply both parity reports together')
     root=Path(__file__).resolve().parents[1]
     digests={}
-    for name in ('shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
+    for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native_build.py',
+                 'shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
                  'shared/vcl/representations.vcl','shared/vcl/ultracache-esi.vcl',
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
@@ -41,6 +42,10 @@ def main():
                    if name == 'shared/cache-policy.vcl' or name.startswith('shared/vcl/')}
         if left.get('policy_modules') != modules:
             raise SystemExit('The reports do not test all current VCL source modules')
+        handoff={name.removeprefix('shared/'):value for name,value in digests.items()
+                 if name.startswith('shared/native/') or name=='shared/native_build.py'}
+        if left.get('handoff_sources') != handoff:
+            raise SystemExit('The reports do not test the current native cookie handoff')
         cases=json.loads((root/'tests/shared_policy_cases.json').read_text(encoding='utf-8'))
         expected=[dict(case=case['name'],profile=profile,result='passed') for profile in ('basic','ultracache')
             for case in cases if profile in case.get('profiles',['basic','ultracache'])]

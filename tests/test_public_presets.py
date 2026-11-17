@@ -85,9 +85,9 @@ class PublicPresets(unittest.TestCase):
     def test_real_cookie_variation_is_not_removed_from_dynamic_html(self):
         for profile in profiles.NAMES:
             self.run_policy(profile,[origin('/page','A',['Vary: Cookie']),origin('/page','B',['Vary: Cookie'])],
-                [get('/page','A',['Accept: '+WARM,'Cookie: audience=A'],cache='MISS'),
-                 get('/page','B',['Accept: '+WARM,'Cookie: audience=B'],cache='MISS'),
-                 get('/page','A',['Accept: '+WARM,'Cookie: audience=A'],cache='HIT')])
+                [get('/page','A',['Accept: '+WARM,'Cookie: site_audience=A'],cache='MISS'),
+                 get('/page','B',['Accept: '+WARM,'Cookie: site_audience=B'],cache='MISS'),
+                 get('/page','A',['Accept: '+WARM,'Cookie: site_audience=A'],cache='HIT')])
 
     def test_client_labels_and_reasons_agree_for_origin_privacy_and_sessions(self):
         self.run_policy('ultracache',[origin('/public','public'),origin('/public','alice'),origin('/public','bob'),

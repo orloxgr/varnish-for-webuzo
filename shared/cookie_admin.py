@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 
-from cookie_catalogue import validate
+from cookie_catalogue import validate, load_catalogue
 from cookie_defaults import NAME, valid_name, defaults, assessment, bundle, rule_for
 
 ACTIONS = ('automatic', 'shared', 'variant', 'private')
@@ -112,6 +112,19 @@ def executable(central=None, site=None):
     """Projection used for targeted invalidation; descriptions/IDs are metadata."""
     return [(row['scope'], row['match']['kind'], row['match']['value'], row['action'])
             for row in active(central, site)]
+
+
+def response_rules(central=None, site=None):
+    """Same ordered choices for every real response cookie, without values.
+
+    Core authentication/cart contracts remain authoritative in both directions.
+    Tab/newline cannot occur in normalized literal matches.
+    """
+    mandatory = [dict(action='private', match=row['match'])
+                 for row in load_catalogue()['policies']
+                 if row['consumers']['varnishPrivate'] or row['consumers']['varnishCart']]
+    return ''.join(row['action']+'\t'+row['match']['kind']+'\t'+row['match']['value']+'\n'
+                   for row in mandatory + active(central, site))
 
 
 def _recognition_match(row):
@@ -270,7 +283,7 @@ def table(database, catalogue, central=None, site=None):
         row['valid_match'] = valid_name(row['match']['value'])
         row['active_rule'] = bool(winner or rule_for(row['match']))
         row['default_version'] = bundle()[1]['version']
-        row['policy_behavior'] = {'shared':'Shares HTML across these cookie values; the original cookie still reaches the application.', 'variant':'Caches a separate public representation for each cookie value, including absence.', 'private':'Passes matching requests to the application without sharing their response.'}[row['action']]
+        row['policy_behavior'] = {'shared':'Shares public HTML across visitors. Preserves original provider cookies without storing or replaying their values.', 'variant':'Caches a separate public representation for each cookie value, including absence.', 'private':'Passes matching requests to the application without sharing their response.'}[row['action']]
         row['core_precedence'] = 'Authentication, private sessions/cart contracts and origin private/no-store remain authoritative.'
         baseline = _proposal(row['match'], catalogue)
         if baseline and baseline['proposal'] == 'private':

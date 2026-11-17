@@ -102,7 +102,7 @@ def view(config, sites, request):
     central = normalize(config.get('cookie_policies'))
     local = normalize(site.get('cookie_policies')) if site else None
     admin = administrator(request)
-    database = recognition.cookie_recognition.database(recognition.DIRECTORY, recognition.BUNDLED)
+    database = recognition.database()
     catalogue=load_catalogue();profile=site.get('profile','basic') if site else None
     rows = cookie_admin.table(database, catalogue, central, local)
     inherited = cookie_admin.table(database, catalogue, central if site else None, None)

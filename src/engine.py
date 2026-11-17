@@ -221,13 +221,10 @@ def action(request):
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if operation=='recognition_configure':allowed_keys.add('automatic')
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
-    # Recognition downloads have their own lock and never enter site inventory,
-    # VCL reconciliation, purge, or the cache-operation transaction lock.
-    if operation=='recognition_status':return dict(cookie_recognition=recognition.status())
-    if operation=='recognition_configure':
-        return dict(cookie_recognition=recognition.configure(request.get('automatic')),message='Cookie recognition update schedule saved.')
-    if operation=='recognition_update':
-        return dict(cookie_recognition=recognition.start_update(),message='Cookie recognition update started.')
+    # Bundled database status does not enter site inventory or cache transactions.
+    if operation in ('recognition_status','recognition_configure','recognition_update'):
+        result=recognition.status()
+        return dict(cookie_recognition=result,message=result['message'])
     with state.locked():
         recover()
         if operation=='status':return status()
@@ -235,6 +232,7 @@ def action(request):
         if operation=='reconcile' and previous.get('installed'):
             repository.reconcile_owned()
             repository.ensure_cookie_modules()
+            repository.ensure_cookie_handoff()
             service.configure_esi(previous.get('memory_mb',256))
         if operation in ('usage','resize','connection','vcl') and not previous.get('installed'):raise ValueError('Install the Varnish service first')
         if operation=='usage':return dict(usage=service.usage(previous))

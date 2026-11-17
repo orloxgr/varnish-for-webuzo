@@ -6,6 +6,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.request
 import native
@@ -232,10 +233,35 @@ def ensure_cookie_modules():
     if not cookie_modules_compatible():raise ValueError('The installed Varnish modules cannot compile the cookie delivery APIs')
 
 
+def ensure_cookie_handoff():
+    """Build against the existing engine; dependency setup cannot replace it."""
+    engine=native.run('dpkg-query','-W','-f=${Version} ${db:Status-Status}','varnish').strip().split()
+    if len(engine)!=2 or engine[1]!='installed':raise ValueError('A configured native Varnish package is required')
+    version=engine[0]
+    development=subprocess.run(['dpkg-query','-W','-f=${Version} ${db:Status-Status}','varnish-dev'],capture_output=True,text=True,env=native.ENV)
+    dependencies=[]
+    if development.stdout.strip()!=version+' installed':dependencies.append('varnish-dev='+version)
+    if not shutil.which('cc'):dependencies.append('build-essential')
+    if not shutil.which('pkg-config'):dependencies.append('pkg-config')
+    if dependencies:
+        codename=release();arch=architecture()
+        if RECORD.exists() or not existing_source(codename,arch):setup()
+        native.run('apt-get','update','-o','APT::Update::Error-Mode=any')
+        packages=('varnish='+version,*dependencies)
+        preview=native.run('apt-get','-s','--no-remove','install',*packages)
+        if any(line.startswith('Remv ') or re.match(r'Inst varnish(?::[^ ]+)? ',line) for line in preview.splitlines()):
+            raise ValueError('Install build dependencies matching the existing Varnish engine; the addon will not replace it')
+        native.run('env','DEBIAN_FRONTEND=noninteractive','NEEDRESTART_MODE=l','apt-get','install','-y','--no-remove',*packages)
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'shared'))
+    from native_build import build
+    return build()
+
+
 def ensure_package():
     installed=Path('/usr/sbin/varnishd').is_file()
     if installed:
         ensure_cookie_modules()
+        ensure_cookie_handoff()
     if installed and compatible():
         # Do not replace a compatible existing binary or add a repository to an
         # independent install. Reconcile only sources already owned by the addon.
@@ -257,4 +283,5 @@ def ensure_package():
     native.run('env','DEBIAN_FRONTEND=noninteractive','apt-get','install','-y',*packages)
     native.run('systemctl','stop','varnish')
     if before['UnitFileState']!='enabled':native.run('systemctl','disable','varnish')
+    ensure_cookie_handoff()
     if not cookie_modules_compatible() or not compatible():raise ValueError('The installed Varnish packages cannot compile the addon policy and cookie delivery APIs')

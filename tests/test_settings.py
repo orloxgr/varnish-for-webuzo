@@ -92,7 +92,7 @@ class Settings(unittest.TestCase):
     def test_adding_empty_vcl_defaults_does_not_purge_another_account(self):
         first=dict(id='a'*32,domain='first.example.test',names=['first.example.test'],enabled=True,error='',token='b'*64,bypass=[])
         second=dict(first,id='c'*32,domain='second.example.test',names=['second.example.test'],token='d'*64)
-        previous=dict(installed=True,sites={first['id']:first,second['id']:second},gateway='e'*64,origin='f'*64)
+        previous=dict(installed=True,sites={first['id']:first,second['id']:second},gateway='e'*64,origin='f'*64,cookie_defaults_digest=engine.cookie_views.default_digest())
         updated=copy.deepcopy(previous)
         for site in updated['sites'].values():site.update(recv_vcl='',backend_vcl='')
         updated['sites'][first['id']]['recv_vcl']='if (req.url == "/members/") { return (pass); }'
@@ -102,7 +102,7 @@ class Settings(unittest.TestCase):
     def test_central_basic_rules_invalidate_only_sites_assigned_to_basic(self):
         first=dict(id='a'*32,domain='first.example.test',names=['first.example.test'],enabled=True,error='',token='b'*64,bypass=[],profile='basic')
         second=dict(first,id='c'*32,domain='second.example.test',names=['second.example.test'],token='d'*64,profile='ultracache')
-        previous=dict(installed=True,sites={first['id']:first,second['id']:second},gateway='e'*64,origin='f'*64)
+        previous=dict(installed=True,sites={first['id']:first,second['id']:second},gateway='e'*64,origin='f'*64,cookie_defaults_digest=engine.cookie_views.default_digest())
         updated=copy.deepcopy(previous);updated['profile_rules']={'basic':{'recv_vcl':'if (req.url == "/members/") { return (pass); }','backend_vcl':''}}
         with patch.object(engine,'JOURNAL',self.root/'transaction.json'),patch.object(engine,'plans',return_value=[]),patch.object(service,'ACTIVE',self.root/'active.vcl'),patch.object(service,'load',return_value=('old','new')),patch.object(service,'admin'),patch.object(service,'write_vcl'),patch.object(service,'prune'),patch.object(engine,'reload_servers'),patch.object(service,'purge') as purge:
             engine.apply(previous,updated)

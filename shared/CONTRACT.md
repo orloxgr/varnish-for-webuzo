@@ -5,37 +5,20 @@ byte-for-byte in each distribution. `vcl_source.py` expands them into one comple
 runtime program before compilation (see `VCL-ARCHITECTURE.md`). They contain
 Basic/UltraCache request, privacy, ESI, representation and key policy. They import
 nothing from another checkout or network resource. The adapter imports `std`
-and `purge`, `header`, and `blob` in the complete VCL and defines
+and `purge`, `header`, and `cookie_handoff` in the complete VCL and defines
 host/backend/token isolation. `header` comes from the ABI-matching official
 `varnish-modules` package; duplicate Set-Cookie fields are never comma-joined.
 
 ## Local cookie catalogue
 
-### Recognition snapshot updates
+### Reviewed database lifecycle
 
-`cookie_recognition.py` updates recognition data only. Adapters supply an
-addon-owned persistent directory and bundled `recognition.json` path to
-`status(directory, bundled)`, `configure(directory, bundled, automatic)` and
-`update(directory, bundled, force=False)`. `database()` returns the local data.
-Status reads never fetch or wait on the updater lock. Configuration and downloads
-use their own lock and atomic combined settings/status/database record; downloads
-must not hold an adapter's Varnish/site operation lock. Default automatic=true;
-scheduled calls respect it, manual force=true works regardless of the preference.
-
-Adapters schedule one daily check and expose administrator-only configuration,
-Update now and status, with native authorization/CSRF and escaped output. A check
-reads the fixed original repository's commit, then that pinned commit's CSV and
-Apache-2.0 license via verified HTTPS without redirects. The data retains the
-bundled records schema plus upstream CSV SHA256 and license text. It is never
-executed or compiled into policy. Failure keeps the prior data and reports its
-stage. The digest is byte identity, not an independent signature.
-
-Input safety bounds are 32 MiB CSV, 1 MiB revision/license, 100,000 records and
-128 columns per row and 256 KiB characters per field. Column count is checked
-before constructing CSV row arrays. Strict UTF-8/CSV and column/wildcard/control checks
-reject malformed input while preserving valid Unicode and optional metadata.
-An upstream recognition update must not change cache/consent/issuance behavior,
-reload VCL, purge/warm pages or make requests during visitor traffic.
+Recognition descriptions, assessments and concrete executable defaults ship
+in the same reviewed plugin version. Installed panels do not schedule upstream
+recognition downloads or consume downloaded-only snapshots. Existing local
+snapshots remain untouched for rollback. Explicit central/site choices retain
+precedence when bundled defaults change. The shared recognition downloader is
+a development/import helper; raw upstream categories never activate policy.
 
 The shared `cookie-policies.json` is the reviewed execution catalogue, schema 1.
 `cookie_catalogue.py` validates it and expands `@@COOKIE_PATTERN_<consumer>@@`
@@ -77,7 +60,7 @@ The API is `normalize(value)`, `table(database,catalogue,central=None,site=None)
 `resolve(central=None,site=None)`, `executable(central=None,site=None)` and
 `compile_vcl(central=None,site=None)`. `table` includes the proposal separately
 from the actual action, origin/scope, inherited action, local snapshot, confidence
-and reason. Missing daily upstream rows do not hide bundled executable rules.
+and reason. Recognition rows and their bundled executable choices are versioned together.
 New names outside the versioned bundle are `scope=recognition, active_rule=false`
 with a concrete proposal, never falsely labelled as applied. A local choice
 activates them through the ordinary save transaction.
@@ -116,7 +99,7 @@ Site rules precede central choices, which precede bundled defaults; within a sco
 prefixes. Higher matches consume pairs from an internal copy so a lower broad
 prefix cannot undo a specific choice. Contradictory equal matches in one scope
 are rejected. Core authentication, cart/ESI contracts, request credentials and
-origin private/no-store/Set-Cookie admission remain authoritative.
+origin private/no-store decisions remain authoritative. Shared response cookies use the request-owned handoff below.
 
 The adapter passes a site-scoped dispatcher body into
 `shared_policy(admin_rules='')` / `render_policy(source,catalogue,admin_rules='')`.
@@ -159,7 +142,8 @@ digest retains literal native `Vary: Cookie`: an older Shared or tracking-ignore
 projection cannot describe a newer application policy. These representations
 still cache normally. Unknown/mixed provenance and Basic without the optional
 connection retain the existing functional Cookie Vary handling.
-Origin private/no-store/Set-Cookie admission is unchanged, and the
+Origin private/no-store remains authoritative, Shared response fields use the
+request-owned handoff, and the
 original request Cookie reaches the application unchanged. Incoming browser
 copies of all three contract headers are discarded by init. The application
 derives its markers from its stored signed policy and source-response provenance,
@@ -172,8 +156,32 @@ All cookie names, including `_fbp`, use the same Shared/Variant/Private rules.
 The native proxy does not generate cookie identifiers or turn a cache action
 into consent. The former per-site Meta issuer/configuration is retired.
 Applications/providers own cookie creation, renewal, deletion and actual consent.
-Original Set-Cookie fields retain normal uncached delivery; no personal field
-is stored and replayed as a shared cache object.
+`cookie_admin.response_rules()` uses the same ordered site > central > bundled
+choices and exact/prefix resolution as requests, with core authentication/cart
+privacy first. An otherwise public, fresh response can cache only if every
+Set-Cookie name resolves to Shared. Mixed Private/Variant/unknown names retain
+the original uncached response. No cookie values enter generated rules.
+
+The common `cookie_handoff` VMOD binds a backend task to its originating client
+MISS using an internal identity removed before the origin request. It copies
+complete original fields into that client task’s temporary memory, removes them
+before object storage, and appends them only to that client’s response. Task
+finalization frees pending fields on delivery or abort; concurrent requests do
+not share this state. Background fills discard their non-client Shared fields.
+Private ESI children do not promote cookies into a shared parent response.
+Deliveries containing original Set-Cookie remain downstream private/no-store;
+the stored public HTML retains its public freshness.
+
+Build `shared/native/*.c`/`.vcc` with `native_build.build()` against the installed
+native `varnish-dev` ABI, before publishing a VCL that imports it. Build identity
+covers both source files and native ABI. Atomic library replacement preserves
+running VMOD mappings; source changes get a new generated VMOD identity. Native
+startup rebuilds against matching updated headers before loading the durable
+VCL. This dependency does not select a newer engine during addon installation.
+
+On warm HITs, actual browser/provider or private application endpoints continue
+to own identifier creation and consent. The Meta/WooCommerce provider endpoint
+is one existing integration, rather than a special native generator or form.
 
 For an origin-approved shared ESI parent, `Vary: Cookie` uses the internal
 functional remainder without private cart carrier cookies. Original cookies
