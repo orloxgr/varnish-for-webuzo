@@ -68,7 +68,7 @@ def explain_cart_precedence(metadata, match, profile, catalogue, selected_action
     cart=next((entry for entry in catalogue['policies'] if entry['consumers']['varnishCart']
                and cookie_admin._matches(entry['match'],match)),None)
     if not cart:return
-    metadata['core_precedence']='Reviewed WooCommerce rule '+cart['id']+' takes precedence over the table choice. '
+    metadata['core_precedence']='WooCommerce cart/session protection takes precedence over the table choice. '
     if profile=='basic':
         metadata['effective_action']='private'
         metadata['core_precedence']+='Basic passes this cart/session request to the application.'
@@ -97,7 +97,7 @@ def view(config, sites, request):
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])
-        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match') if key in fallback})
+        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior') if key in fallback})
                             if fallback else None)
     integration=None; integration_error=site.get('cookie_integration_notice','') if site else ''
     precedence=[]

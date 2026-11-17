@@ -44,6 +44,19 @@ candidate before activation. They preserve site routing/profile, browser cache,
 delivery preferences and updater state. Cache invalidation is scoped to enabled
 sites whose effective executable policy changes.
 
+The sheet displays cookie name, description, Shared/Variant/Private action and
+the source of that choice. Internal row identifiers stay in saved snapshots;
+they are not a visible column. **Why / precedence** opens a full-width explanation
+with the selected action, applied behavior, provider evidence and any overriding
+login, session or cart protection. Unsaved edits are labelled until applied.
+Reset removes the choice from the current scope and restores its inherited rule.
+CSV exports Cookie, Description and Action columns, which can be pasted back
+without exposing internal IDs. Pasting an existing literal match updates its
+existing local choice rather than creating conflicting duplicate rules.
+
+Sites with identical local cookie snapshots share one compiled rule body in the
+native VCL. Their host and cache identities remain separate.
+
 ## Optional WordPress connection
 
 Each site can explicitly connect its UltraCache cookie-policy endpoint. The

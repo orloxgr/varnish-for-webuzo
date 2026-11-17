@@ -123,7 +123,7 @@ class NativeScope(unittest.TestCase):
         view=self.request()['cookie_policies']
         row=next(row for row in view['rows'] if row['id']=='custom:campaign')
         self.assertEqual((row['action'],row['effective_action']),('shared','private'))
-        self.assertIn('woocommerce-cart-hash',row['core_precedence'])
+        self.assertIn('WooCommerce cart/session protection',row['core_precedence'])
         self.assertIn('Basic passes',row['core_precedence'])
         self.assertEqual(engine.SETTINGS.read_bytes(),before)
 
@@ -143,7 +143,7 @@ class NativeScope(unittest.TestCase):
         self.assertEqual(row['effective_action'],'shared')
         self.assertEqual(row['reset_metadata']['effective_action'],'private')
         self.assertEqual(row['inherited']['effective_action'],'private')
-        self.assertIn('woocommerce-cart-hash',row['reset_metadata']['core_precedence'])
+        self.assertIn('WooCommerce cart/session protection',row['reset_metadata']['core_precedence'])
         self.assertIn('Basic passes',row['inherited']['core_precedence'])
 
     def test_ultracache_explicit_private_cart_passes_entire_request_and_reset_restores_esi_metadata(self):

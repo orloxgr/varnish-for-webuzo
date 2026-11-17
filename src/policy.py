@@ -40,11 +40,15 @@ import blob;
             '.connect_timeout = '+timeouts.seconds(allowances['connect'])+'; '+
             '.first_byte_timeout = '+timeouts.seconds(timeouts.first_byte(allowances))+'; '+
             '.between_bytes_timeout = '+timeouts.seconds(allowances['read'])+'; }')
-    admin_rules=[]
+    admin_rules=[];cookie_groups={}
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if site.get('enabled') and not site.get('error'):
-            body=cookie_views.compile_recv(config,site)
-            if body:admin_rules.append('if (req.http.X-WV-Site == '+quoted(site['id'])+') {\n'+body+'\n}')
+            key=json.dumps(cookie_views.normalize(site.get('cookie_policies')),sort_keys=True)
+            cookie_groups.setdefault(key,dict(site=site,ids=[]))['ids'].append(site['id'])
+    for group in cookie_groups.values():
+        body=cookie_views.compile_recv(config,group['site'])
+        condition=' || '.join('req.http.X-WV-Site == '+quoted(identity) for identity in group['ids'])
+        if body:admin_rules.append('if ('+condition+') {\n'+body+'\n}')
     text += [profiles.program('\n'.join(admin_rules)),'''
 sub vcl_recv {
  call scp_init;
