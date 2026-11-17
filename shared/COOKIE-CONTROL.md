@@ -60,7 +60,7 @@ For connected apply, native adapters call `materialized_snapshot(central,site)`:
 Descriptions and provenance remain outside execution/digest semantics. The same
 resolved rule list is compiled natively and executed by the application.
 `shared/cookie-defaults.json` supplies the standalone application's identical
-bundled rules. A panel-managed committed snapshot remains authoritative until
+bundled rules. A nonempty panel-managed committed snapshot remains authoritative until
 the next ordinary signed commit, even if application code has newer defaults.
 
 `automatic` remains accepted for old snapshots/recovery. New native targets
@@ -71,8 +71,10 @@ trimmed and exclude controls/DEL, ; = double quotes and braces; every consumer
 escapes literals for its own language (including Apache argument whitespace).
 
 `snapshot()` with no choices still means an actual empty clear/disconnect;
-never inject bundled rules into that recovery operation. Standalone behavior
-resumes according to the application's normal unmanaged rules after a clear.
+never inject bundled rules into that recovery operation. A genuinely empty signed clear releases managed runtime ownership while
+retaining the empty policy and transaction request identity. Standalone bundled
+rules resume; the informational runtime digest is separate from the signed
+empty activeDigest. Rollback restores the previous ownership and frozen policy.
 
 ## Digests and authenticated replies
 

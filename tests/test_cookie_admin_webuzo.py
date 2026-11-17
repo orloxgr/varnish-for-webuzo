@@ -5,6 +5,7 @@ import os
 import pwd
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -279,14 +280,22 @@ class PolicyTransactions(unittest.TestCase):
     def configuration(self):
         sites = {row['id']:row for row in (account(),account('c','other.test','account_b'))}
         return dict(installed=True,sites=sites,gateway='e'*64,origin='f'*64,proxy_timeouts=native.proxy_timeouts(),
-                    cookie_defaults_version=cookie_views.default_version())
+                    cookie_defaults_version=cookie_views.default_version(),cookie_defaults_digest=cookie_views.default_digest())
 
     def test_bundle_upgrade_invalidates_enabled_sites_and_records_current_version(self):
-        previous=self.configuration();previous['cookie_defaults_version']='previous-bundle'
+        previous=self.configuration();previous['cookie_defaults_digest']='previous-execution'
         following=copy.deepcopy(previous);service.ACTIVE.write_text('previous VCL')
         _,_,purge=self.apply_settings(previous,following)
         self.assertEqual({call.args[0]['id'] for call in purge.call_args_list},set(previous['sites']))
         self.assertEqual(engine.settings()['cookie_defaults_version'],cookie_views.default_version())
+
+    def test_editorial_version_change_does_not_invalidate_or_reload_policy(self):
+        previous=self.configuration();previous['cookie_defaults_version']='previous-editorial-version'
+        following=copy.deepcopy(previous)
+        service.ACTIVE.write_text(engine.policy.render(previous['sites'],previous['gateway'],previous['origin'],previous))
+        load,admin,purge=self.apply_settings(previous,following)
+        load.assert_not_called();admin.assert_not_called();purge.assert_not_called()
+        self.assertEqual(engine.settings()['cookie_defaults_digest'],previous['cookie_defaults_digest'])
 
     def test_site_rule_invalidates_only_its_enabled_site(self):
         previous = self.configuration(); following = copy.deepcopy(previous)
@@ -433,6 +442,52 @@ class PolicyTransactions(unittest.TestCase):
 class NativeCookieRules(unittest.TestCase):
     run_policy = http.NativeProfiles.run_policy
 
+    def test_admission_fix_retires_old_warm_objects_without_restart_or_purge(self):
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile):
+                # Webuzo already omits an unconfigured contract header. Model
+                # the historical empty-header caller to reproduce the common
+                # admission defect and prove old bad objects cannot survive it.
+                current=http.program(profile).replace(' call scp_recv;',' set req.http.X-SCP-Cookie-Contract = "";\n call scp_recv;')
+                self.assertIn('webuzo-shared-policy-v8',current)
+                guarded_v7=current.replace('webuzo-shared-policy-v8','webuzo-shared-policy-v7')
+                bad_v7=guarded_v7.replace('bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$"','bereq.http.X-SCP-Cookie-Contract')
+                self.assertNotEqual(bad_v7,guarded_v7)
+                headers=['Vary: Cookie','X-UltraCache-Cookie-Settings:','X-UltraCache-Cookie-Vary: policy-only']
+                origin='\n'.join([http.origin('/warm','old-alice',headers),http.origin('/warm','alice',headers),http.origin('/warm','bob',headers)]).removeprefix('accept\n')
+                first='\n'.join([http.get('/warm','old-alice',['Cookie: vendor_id=alice'],cache='MISS'),http.get('/warm','old-alice',['Cookie: vendor_id=bob'],cache='HIT')])
+                second=http.get('/warm','old-alice',['Cookie: vendor_id=bob'],cache='HIT')
+                final='\n'.join([http.get('/warm','alice',['Cookie: vendor_id=alice'],cache='MISS'),http.get('/warm','bob',['Cookie: vendor_id=bob'],cache='MISS'),http.get('/warm','alice',['Cookie: vendor_id=alice'],cache='HIT')])
+                source=('varnishtest "Admission upgrade retires old warm cache objects"\nserver s1 {\n'+origin+'\n} -start\n'
+                        'varnish v1 -vcl {\n'+bad_v7+'\n} -start\nclient c1 {\n'+first+'\n} -run\n'
+                        'varnish v1 -vcl {\n'+guarded_v7+'\n}\nclient c2 {\n'+second+'\n} -run\n'
+                        'varnish v1 -vcl {\n'+current+'\n}\nclient c3 {\n'+final+'\n} -run\nserver s1 -wait\n')
+                with tempfile.TemporaryDirectory(prefix='wvw-admission-upgrade-') as folder:
+                    path=Path(folder)/'upgrade.vtc';path.write_text(source)
+                    result=subprocess.run(['varnishtest','-t','30',str(path)],capture_output=True,text=True,timeout=40)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_many_distinct_site_choices_share_one_native_defaults_body(self):
+        sites={}
+        for index in range(48):
+            domain='site-'+str(index)+'.example.test'
+            row=dict(http.site(),id=format(index,'032x'),domain=domain,names=[domain],
+                     cookie_policies=choices('variant' if index%2==0 else 'shared','local_option',identity='custom:'+str(index)))
+            sites[row['id']]=row
+        source=engine.policy.render(sites,'e'*64,'f'*64)
+        self.assertEqual(source.count('sub scp_bundled_cookie_rules {'),1)
+        for scheme in ('http','https'):
+            source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
+        source=source.replace('local.socket != "public"','client.ip != "127.0.0.1"').replace('local.socket == "public"','client.ip == "127.0.0.1"')
+        with patch.object(http,'program',return_value=source):
+            self.run_policy('basic',
+                [http.origin('/page','first-a'),http.origin('/page','first-b'),http.origin('/page','second-shared')],
+                [http.get('/page','first-a',['Cookie: local_option=A'],cache='MISS',host='site-0.example.test'),
+                 http.get('/page','first-a',['Cookie: local_option=A'],cache='HIT',host='site-0.example.test'),
+                 http.get('/page','first-b',['Cookie: local_option=B'],cache='MISS',host='site-0.example.test'),
+                 http.get('/page','second-shared',['Cookie: local_option=A'],cache='MISS',host='site-1.example.test'),
+                 http.get('/page','second-shared',['Cookie: local_option=B'],cache='HIT',host='site-1.example.test')])
+
     def test_bundled_defaults_share_tracking_vary_consent_and_pass_private_session(self):
         for profile in ('basic','ultracache'):
             with self.subTest(profile=profile):
@@ -547,7 +602,9 @@ class NativeCookieRules(unittest.TestCase):
                 headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+digest,'X-UltraCache-Cookie-Vary: policy-only']
                 self.run_policy(profile,[http.origin('/page','EUR',headers=headers,expect=['expect req.http.Cookie == "vendor_id=one; site_currency=EUR"']),http.origin('/page','USD',headers=headers)],
                     [http.get('/page','EUR',['Cookie: vendor_id=one; site_currency=EUR'],cache='MISS'),
+                     'expect resp.http.X-Cache-Cookie-Names == "site_currency"',
                      http.get('/page','EUR',['Cookie: vendor_id=two; site_currency=EUR'],cache='HIT'),
+                     'expect resp.http.X-Cache-Cookie-Names == "site_currency"',
                      'expect resp.http.Vary ~ "Cookie"',
                      http.get('/page','USD',['Cookie: vendor_id=two; site_currency=USD'],cache='MISS'),
                      http.get('/page','USD',['Cookie: vendor_id=three; site_currency=USD'],cache='HIT')],config={'cookie_policies':rules})

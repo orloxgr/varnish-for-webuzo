@@ -294,32 +294,49 @@ def _tidy(header):
             'if (req.http.' + header + ' == "") { unset req.http.' + header + '; }')
 
 
-def compile_vcl(central=None, site=None):
+def compile_vcl(central=None, site=None, *, chain_defaults=False):
     """Body for scp_admin_cookie_rules, called after core privacy checks.
 
     Remove already handled pairs from a working copy so a lower-priority prefix
     cannot undo an exact/site decision. Keep the real origin Cookie unchanged.
     """
-    rules = active(central, site)
-    if not rules:
+    rules = resolve(concrete(central),concrete(site)) if chain_defaults else active(central, site)
+    return _compile_rules(rules,chain_defaults=chain_defaults)
+
+
+def defaults_vcl():
+    """Emit once per program; explicit site rules consume their pairs first."""
+    return 'sub scp_bundled_cookie_rules {\n'+_compile_rules(resolve(defaults()),initialize=False,finish=False)+'\n}'
+
+
+def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False):
+    if not rules and not chain_defaults:
         return ''
-    code = ['set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Keep;']
+    code = ['set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Keep;'] if initialize else []
     # Public responses also need downstream variation when an absent cookie
     # would turn the same URL into a private request. Otherwise an outer cache
     # can answer before the request reaches our private guard.
     if any(rule['action'] in ('variant','private') for rule in rules):
         code.append('set req.http.X-SCP-Admin-Has-Variant = "1";')
-    # Exact bundled matches are disjoint; compile them as action groups instead
-    # of thousands of per-cookie blocks. Prefixes retain specificity ordering.
+    # Compile bundled exact names and prefixes as disjoint action groups.
+    # A broader prefix excludes more-specific selectors with another action;
+    # this retains precedence without hundreds of repeated VCL blocks.
     # Explicit rules keep their individual diagnostics and priority.
     grouped=[]
     for rule in rules:
         if rule['id'].startswith('bundled:'):
             key=(rule['scope'],rule['action'],rule['match']['kind'])
-            target=(next((item for item in grouped if item.get('_key')==key),None) if rule['match']['kind']=='exact' else
-                    grouped[-1] if grouped and grouped[-1].get('_key')==key else None)
-            if target:target['_patterns'].append(_pattern(rule['match']))
-            else:grouped.append(dict(rule,id='bundled:'+rule['action'],_key=key,_patterns=[_pattern(rule['match'])]))
+            pattern=_pattern(rule['match'])
+            if rule['match']['kind']=='prefix':
+                base=rule['match']['value']
+                children=[child['match']['value'][len(base):] for child in rules if
+                    child['match']['kind']=='prefix' and child['action']!=rule['action'] and
+                    child['match']['value']!=base and child['match']['value'].startswith(base)]
+                if children:
+                    pattern=re.escape(base)+'(?!'+'|'.join(re.escape(value) for value in sorted(set(children)))+')[^=;[:blank:]]*'
+            target=next((item for item in grouped if item.get('_key')==key),None)
+            if target:target['_patterns'].append(pattern)
+            else:grouped.append(dict(rule,id='bundled:'+rule['action'],_key=key,_patterns=[pattern]))
         else:grouped.append(rule)
     for rule in grouped:
         name = '(?:'+'|'.join(rule['_patterns'])+')' if '_patterns' in rule else _pattern(rule['match'])
@@ -358,6 +375,8 @@ def compile_vcl(central=None, site=None):
                              'set req.http.X-SCP-Cookie-Name = regsuball(req.http.X-SCP-Cookie-Name, ";[[:blank:]]*", ", ");', '}'])
         code.extend(['set req.http.X-SCP-Admin-Remaining = regsuball(req.http.X-SCP-Admin-Remaining, {"' + pattern + '[^;]*"}, "");',
                      _tidy('X-SCP-Admin-Remaining'), '}'])
-    code.extend(['set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Keep + "; " + req.http.X-SCP-Admin-Remaining;',
-                 _tidy('X-SCP-Admin-Filtered'), _tidy('X-SCP-Admin-Variant')])
+    if chain_defaults:code.append('call scp_bundled_cookie_rules;')
+    if finish:
+        code.extend(['set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Keep + "; " + req.http.X-SCP-Admin-Remaining;',
+                     _tidy('X-SCP-Admin-Filtered'), _tidy('X-SCP-Admin-Variant')])
     return '\n'.join(code)

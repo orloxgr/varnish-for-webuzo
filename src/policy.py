@@ -49,6 +49,7 @@ import blob;
         body=cookie_views.compile_recv(config,group['site'])
         condition=' || '.join('req.http.X-WV-Site == '+quoted(identity) for identity in group['ids'])
         if body:admin_rules.append('if ('+condition+') {\n'+body+'\n}')
+    if cookie_groups:text.append(cookie_views.defaults_vcl())
     text += [profiles.program('\n'.join(admin_rules)),'''
 sub vcl_recv {
  call scp_init;
@@ -151,7 +152,7 @@ sub vcl_pass { call scp_pass; }
 sub vcl_hash {
  call scp_key;
  call scp_cookie_hash;
- hash_data("webuzo-shared-policy-v7");
+ hash_data("webuzo-shared-policy-v8");
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
  hash_data(req.http.X-SCP-Key-URL);
  return (lookup);

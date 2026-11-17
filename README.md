@@ -178,12 +178,10 @@ users open **Security → Cookie cache policies** for their own sites.
 
 The spreadsheet supports search, action/source filters, cell editing, new rows,
 Excel paste, bulk changes, CSV export and 20/50/100/500/All rows per page.
-Each row keeps its recommendation separate from the explicit choice. **Reset**
+Every bundled cookie has an active Shared, Variant or Private default. **Reset**
 removes the choice in the current scope: a site inherits central rules and a
-central row returns to the recommendation. Metadata updates preserve choices.
+central row returns to the bundled default. Metadata updates preserve choices.
 
-- **Automatic:** retain the existing policy; an explicit site choice can cancel
-  a matching central override.
 - **Shared HTML:** ignore this cookie's variation while preserving the cookie
   in the browser and origin request.
 - **Public variant:** use the cookie value to select separate cached content.
@@ -191,17 +189,23 @@ central row returns to the recommendation. Metadata updates preserve choices.
 
 Site rules take precedence over central rules; within a scope, exact names take
 precedence over the longest matching prefix. Core authentication/session/cart
-handling and application private/no-store responses remain authoritative. Row
-details show known precedence and the difference between a recommendation and
-the effective action. **Save & Apply** validates and activates real VCL rules.
+handling and application private/no-store responses remain authoritative.
+**Why / precedence** opens a full-width explanation of the actual behavior,
+source and applicable protections. Internal IDs are hidden. New recognition
+entries without a bundled rule are marked as proposals; **Use this proposal**
+adds an explicit choice to the draft. **Save & Apply** activates the rules.
 Only affected enabled sites are invalidated; ordinary policy changes do not
 restart Varnish. Rules saved while a site is disabled apply once it is enabled.
 
 For sites running UltraCache, the optional **UltraCache connection** also applies
 these choices inside WordPress. Configure the same site token in UltraCache,
-enable the connection and save. The connection uses only that site's control
+using a compatible build with bundled-cookie policy support, enable the
+connection and save. Ordinary HTTP purge is independent of this optional
+policy synchronization. The connection uses only that site's control
 endpoint; no panel password or Varnish administration key is needed. A retained
 panel can synchronize UltraCache even when its Varnish setup is disabled.
+Updating an already configured addon reapplies its current setup automatically;
+fresh installation still requires the administrator to set up the service.
 
 The panel shows the local Open Cookie Database revision, record count and last
 update results. **Update automatically every day** is enabled by default;

@@ -23,6 +23,10 @@ def default_version():
     return cookie_defaults.bundle()[1]['version']
 
 
+def default_digest():
+    return cookie_defaults.fingerprint()
+
+
 def administrator(request):
     return request.get('actor') == 'root' and request.get('admin') is True
 
@@ -66,7 +70,11 @@ def executable(config, site):
 
 def compile_recv(config, site):
     return cookie_admin.compile_vcl(normalize(config.get('cookie_policies')),
-                                    normalize(site.get('cookie_policies')))
+                                    normalize(site.get('cookie_policies')),chain_defaults=True)
+
+
+def defaults_vcl():
+    return cookie_admin.defaults_vcl()
 
 
 def explain_cart_precedence(metadata, match, profile, catalogue, selected_action=None):

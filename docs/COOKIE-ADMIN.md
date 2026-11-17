@@ -62,8 +62,10 @@ Legacy Automatic snapshots are displayed and executed as concrete decisions;
 reading the editor does not rewrite the stored snapshot. A new recognition-only
 row has a **Use this proposal** button to add its choice to the draft.
 
-Sites with identical local cookie snapshots share one compiled rule body in the
-native VCL. Their host and cache identities remain separate.
+The bundled rule body is emitted once per native VCL, including when sites have
+different overrides. Each site's explicit rules consume their matched cookies
+before invoking the shared defaults. Identical local snapshots also share one
+dispatch body. Host and cache identities remain separate.
 
 ## Optional WordPress connection
 

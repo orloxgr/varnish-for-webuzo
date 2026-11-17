@@ -20,8 +20,8 @@ def site(enabled=False,url=None):
 
 class NativeBridgePlan(unittest.TestCase):
     def test_defaults_upgrade_syncs_concrete_bundle_and_preserves_explicit_site_choice(self):
-        before={'cookie_defaults_version':'previous','sites':{'a'*32:site(True)}}
-        after=copy.deepcopy(before);after['cookie_defaults_version']='current'
+        before={'cookie_defaults_digest':'previous','sites':{'a'*32:site(True)}}
+        after=copy.deepcopy(before);after['cookie_defaults_digest']='current'
         operations=bridge.plan(before,after)
         self.assertEqual(len(operations),1)
         snapshot=operations[0]['policy']
@@ -29,6 +29,11 @@ class NativeBridgePlan(unittest.TestCase):
         self.assertGreater(len(snapshot['central']['rules']),2000)
         self.assertEqual(snapshot['site'],settings())
         self.assertTrue(all(rule['action'] in ('shared','variant','private') for scope in ('central','site') for rule in snapshot[scope]['rules']))
+
+    def test_editorial_bundle_version_change_does_not_resync_application(self):
+        before={'cookie_defaults_version':'old','cookie_defaults_digest':'same','sites':{'a'*32:site(True)}}
+        after=copy.deepcopy(before);after['cookie_defaults_version']='new'
+        self.assertEqual(bridge.plan(before,after),[])
 
     def test_disabled_connection_never_instantiates_an_http_client(self):
         before={'sites':{'a'*32:site()}}; after=copy.deepcopy(before);after['sites']['a'*32]['cookie_policies']=settings('variant')

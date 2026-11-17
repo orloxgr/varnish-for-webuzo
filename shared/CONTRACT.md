@@ -97,11 +97,18 @@ Empty internal pair/variant headers are unset after normalization: an empty
 header must not add a hash dimension that an authenticated soft purge cannot
 address. Anonymous and Shared-only visitors reuse the same public object.
 Prefix coverage uses a trie; bundled exact names compile into disjoint action
-groups and adjacent equal-action prefixes share a block. Adapters emit identical
-per-site rule bodies once rather than repeating the full bundle per domain.
+groups. Prefix action groups exclude more-specific overlapping selectors of
+a different action, preserving nested exceptions without per-record blocks. Adapters emit
+`defaults_vcl()` once at top level and call `compile_vcl(...,chain_defaults=True)`
+for explicit site/admin choices. The latter initializes a working header, consumes
+explicit pairs first, calls the common defaults on the remainder, then finalizes
+once. Thus even different per-site overrides never duplicate the entire bundle.
+Identical local dispatch bodies can additionally be grouped by site identity.
 
-Native state records `cookie_defaults_version`. A bundle upgrade synchronizes
-connected applications and invalidates affected site caches transactionally.
+Native state records `cookie_defaults_version` for display and a metadata-free
+`cookie_defaults_digest` from `cookie_defaults.fingerprint()` for execution.
+A changed executable bundle synchronizes connected applications and invalidates
+site caches transactionally; a text/version-only edit does not.
 Keep descriptions/IDs out of the effective digest. Upstream recognition updates
 still cannot change this version or activate new category-derived rules.
 

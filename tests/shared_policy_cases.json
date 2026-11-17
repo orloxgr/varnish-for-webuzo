@@ -722,5 +722,17 @@
       "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:provider-endpoint\"",
       "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:provider-endpoint\""
     ]
+  },
+  {
+    "name": "empty origin settings never approve an unconnected cookie policy",
+    "origin": [
+      "accept\nrxreq\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"Vary: Cookie\" -hdr \"X-UltraCache-Cookie-Settings:\" -hdr \"X-UltraCache-Cookie-Vary: policy-only\" -body {alice}",
+      "accept\nrxreq\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"Vary: Cookie\" -hdr \"X-UltraCache-Cookie-Settings:\" -hdr \"X-UltraCache-Cookie-Vary: policy-only\" -body {bob}"
+    ],
+    "requests": [
+      "txreq -url \"/empty-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: vendor_id=alice\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {alice}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/empty-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: vendor_id=bob\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {bob}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/empty-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: vendor_id=alice\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {alice}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
   }
 ]

@@ -35,7 +35,7 @@ def plan(previous, following, force_sites=()):
         if switched:
             # Disconnect explicitly restores the application's baseline first.
             operations.append(operation(old, before, cookie_control.snapshot(), 'disconnect'))
-        changed=(previous.get('cookie_defaults_version')!=following.get('cookie_defaults_version') or old is None or
+        changed=(previous.get('cookie_defaults_digest')!=following.get('cookie_defaults_digest') or old is None or
                  cookie_admin.executable(previous.get('cookie_policies'),old.get('cookie_policies'))!=cookie_admin.executable(following.get('cookie_policies'),site.get('cookie_policies')))
         if selected['enabled'] and (identity in force_sites or not before['enabled'] or switched or changed):
             operations.append(operation(site, selected, snapshot(following, site)))

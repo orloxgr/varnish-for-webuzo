@@ -34,6 +34,11 @@ def install():
             service.configure_esi()
     import recognition
     recognition.install()
+    if settings.get('installed'):
+        # An update must activate the shipped policy for existing sites. Run
+        # the normal recoverable apply after releasing the provisioning lock.
+        import engine
+        engine.action(dict(actor='root',admin=True,action='reconcile'))
 
 def native_read_tmp():
     state.trusted(TMP);return TMP.read_bytes()

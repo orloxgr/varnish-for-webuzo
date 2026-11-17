@@ -337,7 +337,7 @@ python3 tests/woocommerce_runtime.py --disposable --address TEST_SERVER_IP \
 
 The cookie-policy implementation passed its targeted Linux/root/native methods
 and all 89 shared native Varnish parity cases on both profiles. These cover
-current account ownership, central/site precedence, explicit automatic resets,
+current account ownership, central/site precedence, inherited resets,
 shared HTML, public variants, private handling, complete source composition,
 runtime drift, candidate rejection, application transaction rollback and
 preservation of newer application writes.
@@ -357,6 +357,7 @@ The integration runner restored its settings and VCL and removed its PHP fixture
 
 The optional signed UltraCache endpoint has separate application-level checks;
 the native transport tests do not substitute for testing that WordPress package.
+
 Runtime generation identity is covered by `tests/test_runtime_identity.py`.
 The native test starts an isolated Varnish with a policy exceeding its default
 CLI reply size, confirms the source dump is truncated, and performs two actual
@@ -364,3 +365,38 @@ engine applies. The first adopts the boot policy through compile/load/use;
 the second keeps the same generation without another load, source dump or
 restart. Owned generation names carry their source digest; missing, older or
 external identities are adopted through the normal transaction path.
+
+## Concrete bundled policies
+
+The current shared matrix passes 91 native HTTP cases. Both panel implementations
+use the same 25 shared files. It includes an unconnected origin returning empty
+policy settings: Alice and Bob must each fetch their own representation, then
+Alice must reuse only hers. An expected contract must be a real digest before
+origin policy-only variation can be trusted.
+
+The native Webuzo renderer was exercised with 48 different site overrides while
+emitting the bundled defaults once. Tracking values share HTML; consent and
+currency choices retain their public variants; private sessions remain private.
+Additional checks cover fingerprint-based invalidation and synchronization,
+editorial changes without unnecessary purge, recognition-only proposals,
+inherited Reset metadata, and current account ownership.
+
+An actual Webuzo panel run passed 28 checks using real administrator/hosting
+sessions, session CSRF, native inventory, panel-owned IPC and Nginx → Varnish →
+Apache/PHP. It verified central Private, site Shared, Reset back to central,
+currency variants, all bundled choices and refusal of a submitted actor. Original
+settings were restored, the PHP fixture removed and the native PID preserved.
+Browser inspection of that real panel confirmed three actions, hidden internal
+IDs, equal-height fields and the full-width explanation row.
+
+The v8 native lookup namespace retires objects produced by older admission
+behavior. A separate warm-object test deliberately models the historical empty
+header producer: a guard-only VCL replacement can still HIT an old merged object;
+v8 makes that object unreachable and restores Alice/Bob variation without purge
+or restart. Webuzo's normal unconnected wrapper already omits the empty header;
+the injected producer is explicitly a reproduction fixture.
+
+Addon activation now reconciles an existing service through the normal
+transaction after releasing the provisioning lock. A fresh activation provisions
+the panel without implicitly installing Varnish. Native lifecycle tests verify
+that separation, lock ordering and propagation of a failed existing-policy apply.

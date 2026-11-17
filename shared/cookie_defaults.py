@@ -5,6 +5,7 @@ are not read here and categories never become executable rules.
 """
 import copy
 from functools import lru_cache
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -104,6 +105,12 @@ def bundle():
 
 def defaults():
     return copy.deepcopy(bundle()[0])
+
+
+def fingerprint():
+    """Execution identity, unaffected by an editorial text/version-only edit."""
+    projection=sorted((row['match']['kind'],row['match']['value'],row['action']) for row in bundle()[0]['rules'])
+    return hashlib.sha256(json.dumps(projection,ensure_ascii=True,separators=(',',':')).encode()).hexdigest()
 
 
 def assessment(match):

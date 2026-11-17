@@ -32,14 +32,14 @@ sub scp_response_variants {
             "(?i)(^|,)[[:blank:]]*Accept[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Accept");
     }
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)") {
-        if (bereq.http.X-SCP-Cookie-Contract &&
+        if (bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
             beresp.http.X-UltraCache-Cookie-Settings ~ "^[0-9a-f]{64}$" &&
             beresp.http.X-UltraCache-Cookie-Settings != bereq.http.X-SCP-Cookie-Contract) {
             # The application has a different effective policy. Preserve its
             # complete Cookie Vary; the old Shared/tracking projection cannot
             # describe the HTML selected by the application's newer policy.
             # Standard native Vary still caches each actual representation.
-        } else if (bereq.http.X-SCP-Cookie-Contract &&
+        } else if (bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
             beresp.http.X-UltraCache-Cookie-Settings == bereq.http.X-SCP-Cookie-Contract &&
             beresp.http.X-UltraCache-Cookie-Vary == "policy-only") {
             # Only our explicitly connected matching policy owns this Vary.
