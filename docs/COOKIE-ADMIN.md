@@ -114,6 +114,15 @@ restored the original application root, settings and active/startup VCL, removed
 their temporary database tables and left no pending transaction. No Varnish
 restart was needed during these operations.
 
+A further 16-checkpoint native-worker run discarded a real authenticated
+WordPress commit reply and verified rollback of that same durable transaction.
+It also sent SIGKILL immediately after the actual native `vcl.use` completed:
+the application commit and activation intent remained journaled, the candidate
+was observable through HTTP, and the previous saved settings remained intact.
+A fresh account-owner panel Save recovered the previous VCL and signed
+application policy without restarting Varnish. The original application and
+all native state were restored afterward with no pending journal.
+
 Tar-only development deployments must invalidate the affected PHP-FPM OPcache
 entries: an overlay can change file contents while preserving an archive mtime.
 The fixture invalidated its plugin and drop-in files through PHP-FPM before
