@@ -41,6 +41,28 @@ class NativeBridgePlan(unittest.TestCase):
             self.assertEqual(bridge.plan(before,after),[])
         client.assert_not_called()
 
+    def test_disabled_connections_skip_full_projection_but_still_disconnect(self):
+        before={'sites':{'a'*32:site(True)}}
+        after=copy.deepcopy(before);after['sites']['a'*32]['cookie_integration']['enabled']=False
+        with patch.object(bridge.cookie_execution.cookie_admin,'executable',side_effect=AssertionError('Unneeded projection')):
+            planned=bridge.plan(before,after)
+            self.assertEqual([item['kind'] for item in planned],['disconnect'])
+            self.assertEqual(planned[0]['policy'],bridge.cookie_control.snapshot())
+            self.assertEqual(bridge.plan(after,copy.deepcopy(after)),[])
+
+    def test_connected_sites_reuse_identical_inputs_without_losing_scoped_changes(self):
+        sites={}
+        for index in range(48):
+            entry=site(True);entry['id']=format(index,'032x');sites[entry['id']]=entry
+        before={'sites':sites};after=copy.deepcopy(before)
+        after['sites'][format(17,'032x')]['cookie_policies']=settings('private')
+        actual=bridge.cookie_execution.cookie_admin.executable
+        with patch.object(bridge.cookie_execution.cookie_admin,'executable',wraps=actual) as projection:
+            planned=bridge.plan(before,after)
+        self.assertEqual(projection.call_count,2)
+        self.assertEqual([item['site'] for item in planned],[format(17,'032x')])
+        self.assertEqual(planned[0]['policy']['site'],settings('private'))
+
     def test_enable_and_disable_apply_then_restore_application_baseline(self):
         before={'sites':{'a'*32:site()}}; after={'sites':{'a'*32:site(True)}}
         enabled=bridge.plan(before,after)

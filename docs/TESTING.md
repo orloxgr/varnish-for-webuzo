@@ -400,3 +400,20 @@ Addon activation now reconciles an existing service through the normal
 transaction after releasing the provisioning lock. A fresh activation provisions
 the panel without implicitly installing Varnish. Native lifecycle tests verify
 that separation, lock ordering and propagation of a failed existing-policy apply.
+
+## Reconciliation projection reuse
+
+`tests/test_cookie_execution.py`, the native bridge tests and
+`PolicyTransactions` cover operation-local reuse of identical resolved cookie
+policies. Changed inputs, including in-place edits, receive a new projection;
+a later operation starts with an empty memo. Disabling a connection still queues
+its signed disconnect before skipping irrelevant apply projections. Existing
+scope, fingerprint, purge and rollback checks remain in place.
+
+An isolated same-VM comparison using 48 sites produced identical tuples for all
+96 projections: 2.610 seconds before and 0.026 seconds after. Disabled connection
+planning fell from 2.614 seconds to less than 0.001 seconds. The coordinator's
+unchanged-state comparison fell from 7.986 seconds to 0.049 seconds with VCL
+rendering and service operations mocked; these are comparison costs, not total
+panel opening times. Both versions performed no load or purge for that state.
+The targeted projection, bridge, transaction and lifecycle run passed 37 tests.

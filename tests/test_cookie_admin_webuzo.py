@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import cookie_views
+import cookie_admin
 import cookie_bridge
 import engine
 import native
@@ -296,6 +297,15 @@ class PolicyTransactions(unittest.TestCase):
         load,admin,purge=self.apply_settings(previous,following)
         load.assert_not_called();admin.assert_not_called();purge.assert_not_called()
         self.assertEqual(engine.settings()['cookie_defaults_digest'],previous['cookie_defaults_digest'])
+
+    def test_apply_reuses_cookie_projection_across_invalidation_stages(self):
+        previous=self.configuration();following=copy.deepcopy(previous)
+        service.ACTIVE.write_text(engine.policy.render(previous['sites'],previous['gateway'],previous['origin'],previous))
+        actual=cookie_admin.executable
+        with patch.object(cookie_admin,'executable',wraps=actual) as projection:
+            load,admin,purge=self.apply_settings(previous,following)
+        self.assertEqual(projection.call_count,1)
+        load.assert_not_called();admin.assert_not_called();purge.assert_not_called()
 
     def test_site_rule_invalidates_only_its_enabled_site(self):
         previous = self.configuration(); following = copy.deepcopy(previous)

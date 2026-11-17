@@ -20,6 +20,7 @@ import cookie_policy
 import recognition
 import cookie_views
 import cookie_bridge
+import cookie_execution
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -125,10 +126,11 @@ def apply(previous,next_config,cookie_force_sites=()):
     runtime_before=service.current_source()[1] if previous.get('installed') else None
     native_changed=runtime_before is None or content.rstrip('\n')!=runtime_before.rstrip('\n')
     cookie_purge_sites=[]
+    execution=cookie_execution.projections()
     for sid,site in next_config['sites'].items():
         old=previous.get('sites',{}).get(sid,{})
         changed=(previous.get('cookie_defaults_digest')!=next_config.get('cookie_defaults_digest') or
-                 cookie_views.executable(previous,old)!=cookie_views.executable(next_config,site))
+                 execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies')))
         changed=changed or cookie_bridge.configuration(old.get('cookie_integration'),old or site)!=cookie_bridge.configuration(site.get('cookie_integration'),site)
         if changed and site.get('enabled'):cookie_purge_sites.append(sid)
     journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None,
@@ -157,7 +159,7 @@ def apply(previous,next_config,cookie_force_sites=()):
                 old=previous.get('sites',{}).get(sid,{})
                 changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','bypass','names','recv_vcl','backend_vcl'))
                 changed=changed or cookie_policy.delivery_settings(old.get('cookie_delivery'),site,next_config['sites'])!=cookie_policy.delivery_settings(site.get('cookie_delivery'),site,next_config['sites'])
-                changed=changed or cookie_views.executable(previous,old)!=cookie_views.executable(next_config,site)
+                changed=changed or execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'))
                 changed=changed or sid in cookie_purge_sites
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
                 if site.get('enabled') and changed:service.purge(site)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
 import cookie_control
-import cookie_admin
+import cookie_execution
 
 
 def configuration(value, site):
@@ -25,6 +25,7 @@ def operation(site, integration, policy, kind='apply'):
 
 def plan(previous, following, force_sites=()):
     operations = []
+    execution = cookie_execution.projections()
     for identity, site in sorted(following['sites'].items()):
         old = previous.get('sites', {}).get(identity)
         selected = configuration(site.get('cookie_integration'), site)
@@ -35,9 +36,11 @@ def plan(previous, following, force_sites=()):
         if switched:
             # Disconnect explicitly restores the application's baseline first.
             operations.append(operation(old, before, cookie_control.snapshot(), 'disconnect'))
+        if not selected['enabled']:
+            continue
         changed=(previous.get('cookie_defaults_digest')!=following.get('cookie_defaults_digest') or old is None or
-                 cookie_admin.executable(previous.get('cookie_policies'),old.get('cookie_policies'))!=cookie_admin.executable(following.get('cookie_policies'),site.get('cookie_policies')))
-        if selected['enabled'] and (identity in force_sites or not before['enabled'] or switched or changed):
+                 execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(following.get('cookie_policies'),site.get('cookie_policies')))
+        if identity in force_sites or not before['enabled'] or switched or changed:
             operations.append(operation(site, selected, snapshot(following, site)))
     return operations
 
