@@ -91,9 +91,11 @@ matching pairs from internal Cookie variation, never the real origin Cookie.
 Variant selects actual cookie pairs, including every matched prefix pair, and
 `scp_cookie_hash` adds their values to lookup even without origin Vary. Call that
 helper only in `vcl_hash`, not from `scp_key` (also used by authenticated PURGE).
-Downstream deliveries advertise Vary: Cookie for configured explicit variants,
-including the no-cookie representation, without fragmenting the internal key by
-unrelated cookies. Private returns pass and marks downstream delivery no-store.
+Downstream deliveries advertise Vary: Cookie for configured public variants and
+private selectors, including the no-cookie public representation. An outer cache
+must not answer a later private-cookie request from the anonymous object before
+it reaches the native guard. This signal does not add unrelated cookies to the
+internal key. Private returns pass and marks downstream delivery no-store.
 
 `scp_init` rejects forged admin scratch. Backend hooks remove it before origin.
 Diagnostics expose rule ID, scope, action and cookie name, never a personal
@@ -109,7 +111,8 @@ to generic proxies. Our native adapter can avoid varying on unrelated automatic
 cookies only with a matching explicitly connected contract:
 
 - `cookie_control.cache_contract(configuration,host,aliases,central,site)` returns
-  the effective digest for a connected policy with public variant rules, or empty.
+  the effective digest for a connected policy with public variant or private
+  rules, or empty.
 - The native site route assigns that value to `X-SCP-Cookie-Contract` after init.
 - The origin emits `X-UltraCache-Cookie-Settings: <effective digest>` and
   `X-UltraCache-Cookie-Vary: policy-only` only when it owns the entire Cookie Vary

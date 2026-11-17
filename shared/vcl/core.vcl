@@ -145,6 +145,8 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-ESI-Opt-In;
     call scp_cookie_diagnostics;
     # Explicit public variants are keyed internally even without origin Vary.
+    # Private selectors require the same downstream signal for their absent
+    # public response, before an outer cache could skip our private guard.
     # Tell downstream caches about Cookie without adding unrelated Cookie
     # dimensions to Varnish's own lookup. Include the no-cookie representation.
     if (req.http.X-SCP-Admin-Has-Variant == "1" && resp.http.Vary != "*" &&

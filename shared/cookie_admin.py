@@ -238,7 +238,10 @@ def compile_vcl(central=None, site=None):
     if not rules:
         return ''
     code = ['set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Keep;']
-    if any(rule['action'] == 'variant' for rule in rules):
+    # Public responses also need downstream variation when an absent cookie
+    # would turn the same URL into a private request. Otherwise an outer cache
+    # can answer before the request reaches our private guard.
+    if any(rule['action'] in ('variant','private') for rule in rules):
         code.append('set req.http.X-SCP-Admin-Has-Variant = "1";')
     for rule in rules:
         name = _pattern(rule['match'])
