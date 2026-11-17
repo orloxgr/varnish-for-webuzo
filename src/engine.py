@@ -18,6 +18,8 @@ import browser_cache
 import repository
 import cookie_policy
 import recognition
+import cookie_views
+import cookie_bridge
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -33,6 +35,12 @@ def inventory(config):
         site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
         site['browser_cache']=browser_cache.validate(previous['browser_cache']) if previous.get('browser_cache') is not None else None
         site['cookie_delivery']=cookie_policy.delivery_settings(previous.get('cookie_delivery'),site,sites)
+        site['cookie_policies']=cookie_views.normalize(previous.get('cookie_policies'))
+        site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
+        if site['cookie_integration'] is not None:
+            site['cookie_integration'],revoked=cookie_bridge.cookie_control.reconcile_integration(site['cookie_integration'],site['domain'],site['names'])
+            if revoked or previous.get('cookie_integration_notice'):
+                site['cookie_integration_notice']='The previous WordPress endpoint is no longer assigned to this website. The connection was disabled.'
     return sites
 
 def status():
@@ -69,21 +77,37 @@ def plans(previous,next_config):
     return changes
 
 def restore(journal):
-    for change in reversed(journal['changes']):routing.replace(change,reverse=True)
-    if journal.get('active_before') is not None:service.write_vcl(service.ACTIVE,journal['active_before'])
-    if journal['previous'].get('installed'):
-        if not service.running():
-            if not service.UNIT.exists():
-                state.write(service.UNIT,service.unit().encode());service.UNIT.chmod(0o644);native.run('systemctl','daemon-reload')
-            elif native.read(service.UNIT).decode()!=service.unit():raise ValueError('The owned service unit was changed')
-            native.run('systemctl','enable','--now','varnish-for-webuzo');service.wait()
-        if journal.get('old_vcl'):
-            try:service.admin('vcl.use',journal['old_vcl'])
-            except RuntimeError:
-                # A service restart may have discarded the previous runtime name.
-                _,candidate=service.load(journal['active_before']);service.admin('vcl.use',candidate)
-    reload_servers()
-    if not journal['previous'].get('installed'):service.stop()
+    cookie_invalidations=set(journal.get('cookie_purge_sites',[])) if journal.get('cookie_activation_attempted') else set()
+    cookie_invalidations.update(item['site'] for item in journal.get('cookie_operations',[])
+        if item['phase'] in ('committing','committed') and item['base_digest']!=item['target_digest'])
+    if journal.get('local_started',True):
+        for change in reversed(journal['changes']):routing.replace(change,reverse=True)
+        if journal.get('active_before') is not None:service.write_vcl(service.ACTIVE,journal['active_before'])
+        if journal['previous'].get('installed'):
+            if not service.running():
+                if not service.UNIT.exists():
+                    state.write(service.UNIT,service.unit().encode());service.UNIT.chmod(0o644);native.run('systemctl','daemon-reload')
+                elif native.read(service.UNIT).decode()!=service.unit():raise ValueError('The owned service unit was changed')
+                native.run('systemctl','enable','--now','varnish-for-webuzo');service.wait()
+            if journal.get('old_vcl'):
+                try:service.admin('vcl.use',journal['old_vcl'])
+                except RuntimeError:
+                    # A service restart may have discarded the previous runtime name.
+                    _,candidate=service.load(journal.get('runtime_before') or journal['active_before']);service.admin('vcl.use',candidate)
+        if journal['changes']:reload_servers()
+        if not journal['previous'].get('installed'):service.stop()
+        journal['local_started']=False;state.save(JOURNAL,journal)
+    cookie_bridge.rollback(journal,lambda value:state.save(JOURNAL,value))
+    newer=cookie_bridge.preserved_newer(journal)
+    if newer:state.save(state.ROOT/'last-cookie-rollback.json',{'preserved_newer_application_policy':newer})
+    for identity in cookie_invalidations:
+        old=journal['previous'].get('sites',{}).get(identity)
+        if old and old.get('enabled') and journal['previous'].get('installed') and service.running():service.purge(old)
+    if journal.get('candidate') and service.running():
+        try:service.prune()
+        except (OSError,ValueError,RuntimeError):
+            import syslog
+            syslog.syslog(syslog.LOG_WARNING,'Varnish for Webuzo: unused candidate cleanup failed after rollback; the working policy was restored.')
     state.save(SETTINGS,journal['previous'])
 
 def recover():
@@ -92,40 +116,87 @@ def recover():
     if journal:
         restore(journal);JOURNAL.unlink()
 
-def apply(previous,next_config):
+def apply(previous,next_config,cookie_force_sites=()):
     if next_config.get('installed'):next_config['proxy_timeouts']=native.proxy_timeouts()
-    changes=plans(previous,next_config)
+    changes=[change for change in plans(previous,next_config) if change['before']!=change['after']]
     content=policy.render(next_config['sites'],next_config['gateway'],next_config['origin'],next_config)
-    journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None)
+    runtime_before=service.current_source()[1] if previous.get('installed') else None
+    native_changed=runtime_before is None or content.rstrip('\n')!=runtime_before.rstrip('\n')
+    cookie_purge_sites=[]
+    for sid,site in next_config['sites'].items():
+        old=previous.get('sites',{}).get(sid,{})
+        changed=cookie_views.executable(previous,old)!=cookie_views.executable(next_config,site)
+        changed=changed or cookie_bridge.configuration(old.get('cookie_integration'),old or site)!=cookie_bridge.configuration(site.get('cookie_integration'),site)
+        if changed and site.get('enabled'):cookie_purge_sites.append(sid)
+    journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None,
+                 cookie_operations=cookie_bridge.plan(previous,next_config,cookie_force_sites),cookie_purge_sites=cookie_purge_sites,cookie_activation_attempted=False,local_started=False,runtime_before=runtime_before)
     state.save(JOURNAL,journal)
     try:
+        cookie_bridge.prepare(journal,lambda value:state.save(JOURNAL,value))
+        journal['cookie_purge_sites']=sorted(set(journal['cookie_purge_sites'])|{item['site'] for item in journal['cookie_operations'] if item['base_digest']!=item['target_digest']})
+        cookie_purge_sites=journal['cookie_purge_sites'];state.save(JOURNAL,journal)
         if next_config.get('installed'):
             if previous.get('installed'):
-                journal['old_vcl'],candidate=service.load(content);state.save(JOURNAL,journal)
-                service.admin('vcl.use',candidate)
+                if native_changed:
+                    journal['old_vcl'],candidate=service.load(content);journal['candidate']=candidate;state.save(JOURNAL,journal)
+                cookie_bridge.commit(journal,lambda value:state.save(JOURNAL,value))
+                if native_changed:
+                    journal.update(cookie_activation_attempted=True,local_started=True);state.save(JOURNAL,journal)
+                    service.admin('vcl.use',candidate)
             else:
+                journal['local_started']=True;state.save(JOURNAL,journal)
                 service.write_vcl(service.ACTIVE,content)
+                cookie_bridge.commit(journal,lambda value:state.save(JOURNAL,value))
+                journal['cookie_activation_attempted']=True;state.save(JOURNAL,journal)
                 native.run('systemctl','enable','--now','varnish-for-webuzo')
                 service.wait()
             for sid,site in next_config['sites'].items():
                 old=previous.get('sites',{}).get(sid,{})
                 changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','bypass','names','recv_vcl','backend_vcl'))
                 changed=changed or cookie_policy.delivery_settings(old.get('cookie_delivery'),site,next_config['sites'])!=cookie_policy.delivery_settings(site.get('cookie_delivery'),site,next_config['sites'])
+                changed=changed or cookie_views.executable(previous,old)!=cookie_views.executable(next_config,site)
+                changed=changed or sid in cookie_purge_sites
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
                 if site.get('enabled') and changed:service.purge(site)
-        for change in changes:routing.replace(change)
-        reload_servers()
+        if changes:
+            journal['local_started']=True;state.save(JOURNAL,journal)
+            for change in changes:routing.replace(change)
+            reload_servers()
         if next_config.get('installed'):connections.wait(next_config)
-        if next_config.get('installed'):service.write_vcl(service.ACTIVE,content)
-        else:service.stop()
+        if next_config.get('installed'):
+            if content!=journal['active_before']:service.write_vcl(service.ACTIVE,content)
+        else:
+            journal['local_started']=True;state.save(JOURNAL,journal)
+            service.stop()
         state.save(SETTINGS,next_config);JOURNAL.unlink()
     except Exception:
-        restore(journal);JOURNAL.unlink();raise
+        restore(journal);JOURNAL.unlink()
+        if cookie_bridge.preserved_newer(journal):
+            raise cookie_bridge.cookie_control.ControlError('Cookie policy update failed. Newer WordPress cookie settings were preserved.') from None
+        raise
     if next_config.get('installed'):service.prune()
 
 def reload_servers():
     native.run(native.NGINX,'-t');native.run(native.APACHE,'-t')
     native.run(native.APACHE,'graceful');native.run(native.NGINX,'-s','reload')
+
+
+def apply_cookie_only(previous,config,cookie_force_sites=()):
+    """A retained panel can sync WordPress without installing/starting a proxy."""
+    operations=cookie_bridge.plan(previous,config,cookie_force_sites)
+    journal=dict(previous=previous,changes=[],active_before=None,old_vcl=None,
+                 cookie_operations=operations,local_started=False,cookie_purge_sites=[])
+    state.save(JOURNAL,journal)
+    try:
+        cookie_bridge.prepare(journal,lambda value:state.save(JOURNAL,value))
+        cookie_bridge.commit(journal,lambda value:state.save(JOURNAL,value))
+        state.save(SETTINGS,config);JOURNAL.unlink()
+    except Exception:
+        restore(journal);JOURNAL.unlink()
+        if cookie_bridge.preserved_newer(journal):
+            raise cookie_bridge.cookie_control.ControlError('Cookie policy update failed. Newer WordPress cookie settings were preserved.') from None
+        raise
+    return bool(operations)
 
 def validate_vcl(sites,config,sid=None):
     validation=copy.deepcopy(sites)
@@ -136,6 +207,8 @@ def validate_vcl(sites,config,sid=None):
     path=routing.CONFIG/'generations'/(candidate+'.vcl');state.trusted(path);path.unlink()
 
 def action(request):
+    if request.get('action') in ('cookie_policies_status','cookie_policies_save','cookie_integration_status'):
+        return cookie_policy_action(request)
     if request.get('actor')!='root' or request.get('admin') is not True:raise ValueError('Webuzo administrator access is required')
     operation=request.get('action')
     allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore','cookie_delivery','recognition_status','recognition_configure','recognition_update'}
@@ -230,6 +303,51 @@ def action(request):
         if operation=='configure':credentials.change(site,site['enabled'])
         apply(previous,config)
         return dict(status(),message={'install':'Varnish is ready. Enable the desired sites below.','configure':'Site profile and settings saved.','vcl':'Site VCL validated and applied.','reconcile':'Site list refreshed.','connection_setup':'Local HTTP connection saved. Show connection information in the site row for the application settings.','defaults':'Default profile saved. Existing sites keep their assigned profile.','profile_rules':'Central profile rules validated and applied to sites using this profile.','browser_defaults':'Browser cache defaults applied to sites using the central settings. Existing browser copies expire under their previous policy.','browser_site':'Browser cache settings saved for this site. Existing browser copies expire under their previous policy.','browser_restore':'Browser cache defaults restored and applied to all enabled sites: 30 days for ordinary assets and one year for versioned assets. Custom browser patterns and site overrides were cleared.','cookie_delivery':'Cookie delivery settings saved for this site.'}[operation])
+
+def cookie_policy_action(request):
+    cookie_views.allowed(request)
+    saving=request['action']=='cookie_policies_save'
+    permitted={'actor','admin','action','id'}|({'settings','integration'} if saving else {'integration'} if request['action']=='cookie_integration_status' else set())
+    if set(request)-permitted:raise ValueError('Unexpected cookie policy request field')
+    with state.locked():
+        if saving:recover()
+        previous=settings();sites=inventory(previous)
+        identity,_=cookie_views.scope(request,sites,saving=saving)
+        config=copy.deepcopy(previous);config['sites']=sites
+        if saving and not cookie_views.administrator(request):
+            # Ownership is checked against fresh inventory, but an account's
+            # cookie save is not a global domain-reconciliation operation.
+            config['sites']=copy.deepcopy(previous.get('sites',{}))
+            config['sites'][identity]=sites[identity]
+        if request['action']=='cookie_integration_status':
+            if identity is None:raise ValueError('Choose a site for its WordPress connection')
+            return dict(cookie_integration=cookie_bridge.status(sites[identity],request.get('integration'),config))
+        if saving:
+            if 'settings' not in request:raise ValueError('Cookie policy settings are required')
+            selected=cookie_views.normalize(request['settings'])
+            if identity is None:config['cookie_policies']=selected
+            else:sites[identity]['cookie_policies']=selected
+            if 'integration' in request:
+                if identity is None:raise ValueError('WordPress connections are configured per site')
+                sites[identity]['cookie_integration']=cookie_bridge.configuration(request['integration'],sites[identity])
+                sites[identity].pop('cookie_integration_notice',None)
+            try:
+                force_sites=tuple(config['sites']) if identity is None else (identity,)
+                if config.get('installed'):apply(previous,config,cookie_force_sites=force_sites)
+                else:apply_cookie_only(previous,config,cookie_force_sites=force_sites)
+            except Exception as error:
+                if cookie_views.administrator(request):raise
+                if isinstance(error,cookie_bridge.cookie_control.ControlError):raise
+                raise RuntimeError('The cookie policy could not be applied. The previous policy was restored; contact the hosting administrator.') from None
+        result=cookie_views.view(config,sites,dict(request,id=identity))
+        if saving:
+            active=result['cookie_policies']['enabled']
+            linked=any(row.get('cookie_integration',{}).get('enabled') for row in sites.values() if row.get('cookie_integration') and (identity is None or row['id']==identity))
+            result['message']=('Cookie policies validated and applied.' if active else
+                'Cookie policies saved through the configured UltraCache connection. Varnish is disabled for this scope.' if linked else
+                'Cookie policies saved. They will apply when Varnish is enabled for this scope.')
+        return result
+
 
 def remove():
     with state.locked():

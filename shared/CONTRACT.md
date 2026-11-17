@@ -1,7 +1,9 @@
 # Shared cache policy contract
 
-`cache-policy.vcl` is shipped byte-for-byte in each distribution. It contains
-Basic/UltraCache request, privacy, ESI, representation and key policy. It imports
+`cache-policy.vcl` and its explicit `vcl/*.vcl` source modules are shipped
+byte-for-byte in each distribution. `vcl_source.py` expands them into one complete
+runtime program before compilation (see `VCL-ARCHITECTURE.md`). They contain
+Basic/UltraCache request, privacy, ESI, representation and key policy. They import
 nothing from another checkout or network resource. The adapter imports `std`
 and `purge`, `header`, and `blob` in the complete VCL and defines
 host/backend/token isolation. `header` comes from the ABI-matching official
@@ -49,11 +51,80 @@ HTTP behavior. Removing tracking variation never removes those cookies from
 the origin request and never grants permission to replay personal Set-Cookie.
 
 `cookie-recognition/recognition.json` is an attributed, revision-pinned Open
-Cookie Database snapshot for recognition only. Its Apache-2.0 license is shipped
-alongside it. It is not read by the VCL compiler or during an HTTP request. Do
+Cookie Database snapshot. Its Apache-2.0 license is shipped alongside it. It is
+consumed by the cookie administrator table, together with the per-record
+`cookie-assessments.json`. It is not read during a visitor HTTP request. Only
+explicit validated match snapshots become generated VCL choices. Do
 not replace executable rules with a category-derived allowlist. All distributed
 copies of the reviewed catalogue and compiler must agree at release time;
 installed servers neither import another checkout nor contact a lookup service.
+
+### Explicit administrator choices (schema 1)
+
+`cookie_admin.py` is shared unchanged. Settings are
+`{"schemaVersion":1,"rules":[{"id":"ocd:source-id|policy:reviewed-id|custom:uuid",
+"match":{"kind":"exact|prefix","value":"literal-name"},
+"description":"plain text","action":"automatic|shared|variant|private"}]}`.
+Names are case-sensitive HTTP tokens; a prefix is literal, not arbitrary regex.
+Saved names/choices are snapshots: upstream metadata changes do not rewrite them.
+An upstream description is retained by the updater when available. Assessments
+are explicitly reviewed or inferred; external categories do not grant execution.
+
+The API is `normalize(value)`, `table(database,catalogue,central=None,site=None)`,
+`resolve(central=None,site=None)`, `executable(central=None,site=None)` and
+`compile_vcl(central=None,site=None)`. `table` includes the proposal separately
+from the actual action, origin/scope, inherited action, local snapshot, confidence
+and reason. Inferred proposals keep the existing automatic policy until a user
+explicitly chooses them. Reset removes a local snapshot. Explicit automatic
+restores baseline handling for its match even over a lower central rule.
+
+Site rules precede central rules; within a scope exact matches precede longest
+prefixes. Higher matches consume pairs from an internal copy so a lower broad
+prefix cannot undo a specific choice. Contradictory equal matches in one scope
+are rejected. Core authentication, cart/ESI contracts, request credentials and
+origin private/no-store/Set-Cookie admission remain authoritative.
+
+The adapter passes a site-scoped dispatcher body into
+`shared_policy(admin_rules='')` / `render_policy(source,catalogue,admin_rules='')`.
+It executes in `scp_admin_cookie_rules` after core request privacy. Shared removes
+matching pairs from internal Cookie variation, never the real origin Cookie.
+Variant selects actual cookie pairs, including every matched prefix pair, and
+`scp_cookie_hash` adds their values to lookup even without origin Vary. Call that
+helper only in `vcl_hash`, not from `scp_key` (also used by authenticated PURGE).
+Downstream deliveries advertise Vary: Cookie for configured explicit variants,
+including the no-cookie representation, without fragmenting the internal key by
+unrelated cookies. Private returns pass and marks downstream delivery no-store.
+
+`scp_init` rejects forged admin scratch. Backend hooks remove it before origin.
+Diagnostics expose rule ID, scope, action and cookie name, never a personal
+value. A matching later private rule reports its actual private cause. Adapters
+compare the metadata-free executable projection to invalidate changed site scope;
+description/ID-only edits do not require cache invalidation. They retain their
+native account authorization, CSRF and transactional load/use/rollback.
+
+### Application-owned public Cookie variation
+
+An independent WordPress cache must expose `Vary: Cookie` for its public variants
+to generic proxies. Our native adapter can avoid varying on unrelated automatic
+cookies only with a matching explicitly connected contract:
+
+- `cookie_control.cache_contract(configuration,host,aliases,central,site)` returns
+  the effective digest for a connected policy with public variant rules, or empty.
+- The native site route assigns that value to `X-SCP-Cookie-Contract` after init.
+- The origin emits `X-UltraCache-Cookie-Settings: <effective digest>` and
+  `X-UltraCache-Cookie-Vary: policy-only` only when it owns the entire Cookie Vary
+  decision. Pre-existing/third-party Cookie Vary must not receive that marker.
+
+For that exact match the internal Cookie Vary dimension is removed: explicit
+selected cookie pairs already participate in `scp_cookie_hash`. Downstream
+delivery still includes `Vary: Cookie`. Unknown/mixed provenance, mismatched
+digests, and Basic without the optional connection keep ordinary functional
+Cookie Vary. Origin private/no-store/Set-Cookie admission is unchanged, and the
+original request Cookie reaches the application unchanged. Incoming browser
+copies of all three contract headers are discarded by init. The application
+derives its markers from its stored signed policy and source-response provenance,
+never from a request header. Static deliveries must preserve the actual source's
+provenance; they cannot simply stamp every cached file as policy-only.
 
 ## Independent Meta cookie delivery
 

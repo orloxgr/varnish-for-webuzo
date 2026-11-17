@@ -32,3 +32,10 @@
 #wvw tr[hidden] { display: none; }
 #wvw tr[data-details-for] > td { max-width: none; }
 #wvw .wvw-cookie-delivery input[type=text] { display: block; box-sizing: border-box; width: 100%; max-width: 760px; margin-top: 6px; padding: 9px; border: 1px solid #b4bfd6; border-radius: 4px; font-family: monospace; }
+#wvw-cookie-admin input[type=text], #wvw-cookie-admin input[type=search] { box-sizing: border-box; padding: 8px; border: 1px solid #b4bfd6; border-radius: 4px; color: #172644; background: white; }
+#wvw-cookie-admin input[type=text] { width: 100%; min-width: 170px; }
+#wvw-cookie-admin input[type=search] { min-width: 280px; }
+#wvw-cookie-admin td:nth-child(2) { max-width: 140px; overflow-wrap: anywhere; }
+#wvw-cookie-admin textarea { box-sizing: border-box; min-width: 210px; }
+#wvw-cookie-admin td:last-child { min-width: 190px; }
+#wvw-cookie-admin .wvw-policy-error { color: #842020; white-space: pre-wrap; }

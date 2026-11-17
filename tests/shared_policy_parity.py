@@ -16,6 +16,8 @@ def main():
     args=parser.parse_args()
     cases=Path(__file__).with_name('shared_policy_cases.json')
     policy=Path(__file__).resolve().parents[1]/'shared/cache-policy.vcl'
+    sys.path.insert(0,str(policy.parent))
+    from vcl_source import manifest
     catalogue_version=json.loads(policy.with_name('cookie-policies.json').read_text(encoding='utf-8'))['version']
     results=[]
     for profile in ('basic','ultracache'):
@@ -46,6 +48,9 @@ def main():
                 raise SystemExit(1)
             results.append(dict(case=case['name'],profile=profile,result='passed'))
     report=dict(policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
+        policy_modules=manifest(),
+        source_loader_sha256=hashlib.sha256(policy.with_name('vcl_source.py').read_bytes()).hexdigest(),
+        admin_module_sha256=hashlib.sha256(policy.with_name('cookie_admin.py').read_bytes()).hexdigest(),
         catalogue_sha256=hashlib.sha256(policy.with_name('cookie-policies.json').read_bytes()).hexdigest(),
         compiler_sha256=hashlib.sha256(policy.with_name('cookie_catalogue.py').read_bytes()).hexdigest(),
         delivery_module_sha256=hashlib.sha256(policy.with_name('cookie_delivery.py').read_bytes()).hexdigest(),

@@ -40,6 +40,7 @@ class Boundaries(unittest.TestCase):
         self.patches += [patch.object(repository,'RECORD',self.root/'repository.json'),patch.object(repository,'KEY',self.config/'repo.gpg'),
             patch.object(repository,'SOURCE',self.config/'repo.list'),patch.object(repository,'PIN',self.config/'repo.pin')]
         self.patches += [patch.object(native,'proxy_timeouts',return_value=dict(connect=300000,read=300000,send=300000)),
+            patch.object(service,'current_source',side_effect=lambda:('old',service.ACTIVE.read_text() if service.ACTIVE.exists() else '')),
             patch.object(repository,'architecture',return_value='amd64'),patch.object(repository,'verify_release')]
         for p in self.patches:p.start()
     def tearDown(self):

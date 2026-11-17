@@ -332,3 +332,28 @@ python3 tests/woocommerce_runtime.py --disposable --address TEST_SERVER_IP \
   --sites first.example.test second.example.test \
   --php /path/to/site/php --wp /path/to/wp-cli
 ```
+
+## Cookie policy administration
+
+The cookie-policy implementation passed its targeted Linux/root/native methods
+and all 89 shared native Varnish parity cases on both profiles. These cover
+current account ownership, central/site precedence, explicit automatic resets,
+shared HTML, public variants, private handling, complete source composition,
+runtime drift, candidate rejection, application transaction rollback and
+preservation of newer application writes.
+
+The licensed Webuzo panel was also exercised through real administrator and
+hosting-account sessions, using its actual native inventory and panel-owned IPC.
+Checks included Excel paste, central Save, site override Save, reload, Reset,
+renamed-row metadata restoration, inherited-source display, and refusal of a
+foreign WordPress endpoint. Text edits are saved before field blur. Additional
+backend checks cover native hostname reassignment and recovery after a failed
+native rollback. Temporary choices were removed afterwards.
+
+Actual Nginx → Varnish → Apache/PHP requests confirmed shared-cookie traffic
+changing from MISS/MISS to MISS/HIT, separate public variants, private PASS with
+downstream no-store, failed candidate preservation and an unchanged Varnish PID.
+The integration runner restored its settings and VCL and removed its PHP fixtures.
+
+The optional signed UltraCache endpoint has separate application-level checks;
+the native transport tests do not substitute for testing that WordPress package.

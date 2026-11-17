@@ -7,6 +7,7 @@ HTTP request. Cookie values never enter this API.
 import json
 from pathlib import Path
 import re
+from vcl_source import expand
 
 CONSUMERS = ('varnishPrivate', 'varnishCart', 'varnishTrackingIgnore')
 NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
@@ -80,14 +81,16 @@ def cookie_pattern(catalogue, consumer):
     return '(^|;[[:blank:]]*)(' + '|'.join(names) + ')='
 
 
-def render_policy(source, catalogue):
+def render_policy(source, catalogue, admin_rules=''):
     """Expand only reviewed names; output remains a standalone native VCL."""
     validate(catalogue)
+    source = expand(source)
     def replace(match):
         return cookie_pattern(catalogue, match.group(1))
     # A version is a literal VCL string, not user-provided source code.
     version = json.dumps(catalogue['version'], ensure_ascii=True)[1:-1]
     rendered = MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)
+    rendered = rendered.replace('@@COOKIE_ADMIN_RULES@@', admin_rules)
     if '@@FBP_' not in rendered:
         return rendered
     fbp = next(policy for policy in catalogue['policies'] if policy['id'] == 'fbp')

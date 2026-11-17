@@ -21,7 +21,8 @@ class Settings(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(dir='/var/lib',prefix='wvw-settings-')
         self.root=Path(self.temp.name)
-        self.patches=[patch.object(state,'ROOT',self.root),patch.object(engine,'SETTINGS',self.root/'settings.json'),patch.object(service,'UNIT',self.root/'service.unit')]
+        self.patches=[patch.object(state,'ROOT',self.root),patch.object(engine,'SETTINGS',self.root/'settings.json'),patch.object(service,'UNIT',self.root/'service.unit'),
+            patch.object(service,'current_source',side_effect=lambda:('old',(self.root/'active.vcl').read_text() if (self.root/'active.vcl').exists() else 'old VCL'))]
         for p in self.patches:p.start()
         self.previous=dict(installed=True,memory_mb=256,sites={})
         state.save(engine.SETTINGS,self.previous);state.write(service.UNIT,service.unit(256).encode())

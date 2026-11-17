@@ -172,6 +172,37 @@ Disabling a domain restores its native routing. **Remove Varnish setup**, or dea
 
 ## Cookie recognition database
 
+Open **Cookie policies** to choose how individual cookies affect shared HTML.
+The administrator manages central rules and site overrides. Hosting account
+users open **Security → Cookie cache policies** for their own sites.
+
+The spreadsheet supports search, action/source filters, cell editing, new rows,
+Excel paste, bulk changes, CSV export and 20/50/100/500/All rows per page.
+Each row keeps its recommendation separate from the explicit choice. **Reset**
+removes the choice in the current scope: a site inherits central rules and a
+central row returns to the recommendation. Metadata updates preserve choices.
+
+- **Automatic:** retain the existing policy; an explicit site choice can cancel
+  a matching central override.
+- **Shared HTML:** ignore this cookie's variation while preserving the cookie
+  in the browser and origin request.
+- **Public variant:** use the cookie value to select separate cached content.
+- **Private:** bypass shared caching for requests carrying the cookie.
+
+Site rules take precedence over central rules; within a scope, exact names take
+precedence over the longest matching prefix. Core authentication/session/cart
+handling and application private/no-store responses remain authoritative. Row
+details show known precedence and the difference between a recommendation and
+the effective action. **Save & Apply** validates and activates real VCL rules.
+Only affected enabled sites are invalidated; ordinary policy changes do not
+restart Varnish. Rules saved while a site is disabled apply once it is enabled.
+
+For sites running UltraCache, the optional **UltraCache connection** also applies
+these choices inside WordPress. Configure the same site token in UltraCache,
+enable the connection and save. The connection uses only that site's control
+endpoint; no panel password or Varnish administration key is needed. A retained
+panel can synchronize UltraCache even when its Varnish setup is disabled.
+
 The panel shows the local Open Cookie Database revision, record count and last
 update results. **Update automatically every day** is enabled by default;
 **Update now** also works when automatic updates are off. The daily systemd timer

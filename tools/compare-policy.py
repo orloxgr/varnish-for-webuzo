@@ -14,10 +14,15 @@ def main():
     if bool(args.left_report)!=bool(args.right_report):parser.error('Supply both parity reports together')
     root=Path(__file__).resolve().parents[1]
     digests={}
-    for name in ('shared/cache-policy.vcl','shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_delivery.py','shared/cookie_recognition.py',
-                 'shared/CONTRACT.md','shared/cookie-recognition/recognition.json',
+    for name in ('shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
+                 'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
+                 'shared/vcl/representations.vcl','shared/vcl/ultracache-esi.vcl',
+                 'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
+                 'shared/cookie_admin.py','shared/cookie_control.py','shared/cookie-assessments.json',
+                 'shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_delivery.py','shared/cookie_recognition.py',
+                 'shared/CONTRACT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
-                 'tests/shared_policy_cases.json','tests/shared_policy_parity.py'):
+                 'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)
         digests[name]=hashlib.sha256(left).hexdigest()
@@ -29,8 +34,13 @@ def main():
         if any(left.get(field)!=digests[name] for field,name in (
             ('policy_sha256','shared/cache-policy.vcl'),('cases_sha256','tests/shared_policy_cases.json'),
             ('catalogue_sha256','shared/cookie-policies.json'),('compiler_sha256','shared/cookie_catalogue.py'),
+            ('source_loader_sha256','shared/vcl_source.py'),('admin_module_sha256','shared/cookie_admin.py'),
             ('delivery_module_sha256','shared/cookie_delivery.py'))):
             raise SystemExit('The reports do not test these source files')
+        modules = {name.removeprefix('shared/'): value for name, value in digests.items()
+                   if name == 'shared/cache-policy.vcl' or name.startswith('shared/vcl/')}
+        if left.get('policy_modules') != modules:
+            raise SystemExit('The reports do not test all current VCL source modules')
         cases=json.loads((root/'tests/shared_policy_cases.json').read_text(encoding='utf-8'))
         expected=[dict(case=case['name'],profile=profile,result='passed') for profile in ('basic','ultracache')
             for case in cases if profile in case.get('profiles',['basic','ultracache'])]

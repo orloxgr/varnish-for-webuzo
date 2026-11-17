@@ -5,6 +5,7 @@
   <p>Serve existing images, styles and scripts with Nginx. Cache public responses with Varnish and send private requests to the application.</p>
   <div id="wvw-error" role="alert" hidden></div><div id="wvw-notice" role="status" hidden></div>
   <div class="wvw-toolbar"><strong id="wvw-status">Checking service…</strong><button type="button" id="wvw-install" hidden>Install &amp; set up Varnish</button><button type="button" id="wvw-start" hidden>Start Varnish</button><button type="button" id="wvw-refresh">Refresh sites</button></div>
+  <details class="wvw-card" id="wvw-cookie-admin-panel"><summary>Cookie policies</summary><div id="wvw-cookie-admin"></div></details>
   <section class="wvw-card" id="wvw-recognition">
     <h3>Cookie recognition database</h3>
     <p>Recognize cookie providers using the <a href="https://github.com/jkwakman/Open-Cookie-Database" target="_blank" rel="noopener noreferrer">Open Cookie Database</a>. Updates refresh descriptions and recognition data; they do not change cache rules, consent decisions or cookie delivery.</p>
@@ -49,4 +50,5 @@
   <div class="wvw-scroll"><table><thead><tr><th>Site / Account</th><th>Profile</th><th>Varnish</th><th>Additional bypass paths</th><th>Actions</th></tr></thead><tbody id="wvw-sites"></tbody></table></div>
   <p><button type="button" id="wvw-remove" hidden>Remove Varnish setup</button></p>
 </section>
+<script><?php require __DIR__ . '/cookie-admin.js'; ?></script>
 <script><?php require __DIR__ . '/app.js'; ?></script>

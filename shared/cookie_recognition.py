@@ -84,6 +84,7 @@ def parse_csv(data):
             raise ValueError('Upstream CSV exceeds the 100,000-record input safety limit')
         cookies.append(dict(id=row['ID'], name=row['Cookie / Data Key name'], provider=row['Platform'],
                             category=row['Category'], domain=row['Domain'], retention=row['Retention period'],
+                            description=row.get('Description', ''),
                             wildcard=row['Wildcard match'] == '1'))
     if not cookies:
         raise ValueError('Upstream database is empty')

@@ -9,7 +9,7 @@ import stat
 import state
 
 
-def consume(identity, suffix='.json', limit=1024 * 1024):
+def consume(identity, suffix='.json', limit=None):
     if not isinstance(identity, str) or not re.fullmatch('[0-9a-f]{64}', identity): raise ValueError('Invalid panel request')
     panel = pwd.getpwnam('webuzo')
     fd = os.open(state.RUN, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -21,11 +21,11 @@ def consume(identity, suffix='.json', limit=1024 * 1024):
         try:
             info = os.fstat(handle)
             if (not stat.S_ISREG(info.st_mode) or info.st_uid != panel.pw_uid or info.st_nlink != 1
-                    or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > limit):
+                    or stat.S_IMODE(info.st_mode) != 0o600 or (limit is not None and info.st_size > limit)):
                 raise ValueError('Untrusted panel upload')
             with os.fdopen(handle, 'rb') as stream:
-                handle = None; raw = stream.read(limit + 1)
-            if len(raw) > limit: raise ValueError('Request exceeds the permitted size')
+                handle = None; raw = stream.read() if limit is None else stream.read(limit + 1)
+            if limit is not None and len(raw) > limit: raise ValueError('Request exceeds the permitted size')
             os.unlink(identity + suffix, dir_fd=fd)
             return raw
         finally:

@@ -7,6 +7,8 @@ import fragments
 import profiles
 import timeouts
 import cookie_policy
+import cookie_views
+import cookie_bridge
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
 
@@ -38,7 +40,12 @@ import blob;
             '.connect_timeout = '+timeouts.seconds(allowances['connect'])+'; '+
             '.first_byte_timeout = '+timeouts.seconds(timeouts.first_byte(allowances))+'; '+
             '.between_bytes_timeout = '+timeouts.seconds(allowances['read'])+'; }')
-    text += [profiles.program(),'''
+    admin_rules=[]
+    for site in sorted(sites.values(),key=lambda s:s['id']):
+        if site.get('enabled') and not site.get('error'):
+            body=cookie_views.compile_recv(config,site)
+            if body:admin_rules.append('if (req.http.X-WV-Site == '+quoted(site['id'])+') {\n'+body+'\n}')
+    text += [profiles.program('\n'.join(admin_rules)),'''
 sub vcl_recv {
  call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';
@@ -79,8 +86,10 @@ sub vcl_recv {
             names.add(name)
         cond=' || '.join('req.http.host == '+quoted(n) for n in site['names'])
         profile=profiles.selected(site)
+        cookie_contract=cookie_bridge.cookie_control.cache_contract(site.get('cookie_integration'),site['domain'],site['names'],config.get('cookie_policies'),site.get('cookie_policies'))
         text.append(' if ('+cond+') {\n set req.http.X-WV-Site = '+quoted(site['id'])+';\n'+
             ' set req.http.X-WV-Profile = '+quoted(profile)+';\n set req.http.X-SCP-Profile = '+quoted(profile)+';\n'+
+            (' set req.http.X-SCP-Cookie-Contract = '+quoted(cookie_contract)+';\n' if cookie_contract else '')+
             (' set req.http.X-WV-Disabled = "1";\n' if not site.get('enabled') else '')+
             ' if (req.method == "HEAD" && req.http.X-WV-Control-Discovery == "1" && local.socket == "public") { return (synth(405, "HTTP cache control endpoint")); }\n'+
             ' if (req.method == "PURGE" || req.method == "BAN") {\n'+
@@ -119,7 +128,7 @@ sub vcl_recv {
  if (req.http.X-WV-Disabled) { set req.http.X-WV-Reason = "site-disabled"; return (pass); }
 ''')
     for profile in profiles.NAMES:
-        fragment=fragments.validate(profiles.rules(config,profile)['recv_vcl'],'recv',mark_pass=True)
+        fragment=fragments.validate(profiles.rules(config,profile)['recv_vcl'],'recv',mark_pass=True,pass_reason='central-profile-vcl')
         if fragment:text.append(' if (req.http.X-WV-Profile == '+quoted(profile)+') { '+fragment+' }')
     for site in sites.values():
         if not site.get('enabled') or site.get('error'):continue
@@ -128,7 +137,7 @@ sub vcl_recv {
             # Literal prefix; no caller-supplied VCL or regular expression.
             pattern='(?i)^('+re.escape(path).replace('\\.','[.]')+'|'+literal_bytes(unquote(path))+')'
             text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+' && req.url ~ '+quoted(pattern)+') { set req.http.X-WV-Reason = "site-bypass-path"; set req.http.X-WV-Mode = "PASS"; return (pass); }')
-        fragment=fragments.validate(site.get('recv_vcl',''),'recv',mark_pass=True)
+        fragment=fragments.validate(site.get('recv_vcl',''),'recv',mark_pass=True,pass_reason='site-request-vcl')
         if fragment:text.append(' if (req.http.X-WV-Site == '+quoted(site['id'])+') { '+fragment+' }')
     text.append('''
  call scp_recv;
@@ -137,6 +146,7 @@ sub vcl_recv {
 sub vcl_pass { call scp_pass; }
 sub vcl_hash {
  call scp_key;
+ call scp_cookie_hash;
  hash_data("webuzo-shared-policy-v7");
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
  hash_data(req.http.X-SCP-Key-URL);

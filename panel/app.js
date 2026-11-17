@@ -241,5 +241,6 @@
     if (counters.length) box.append(node('p', counters.join(' · ')));
     box.append(node('small', 'Snapshot taken at ' + new Date().toLocaleTimeString() + '. Counters are for this Varnish service since its last restart.')); box.hidden = false;
   });
+  window.WebuzoCookiePolicies.mount(byId('cookie-admin'), call, {lazy: byId('cookie-admin-panel')});
   call('status');
 })();

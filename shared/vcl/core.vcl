@@ -1,0 +1,156 @@
+# Shared core policy. GPL-3.0-or-later.
+
+sub scp_init {
+    unset req.http.X-SCP-Cookie-Contract;
+    unset req.http.X-UltraCache-Cookie-Settings;
+    unset req.http.X-UltraCache-Cookie-Vary;
+    unset req.http.X-SCP-Admin-Remaining;
+    unset req.http.X-SCP-Admin-Keep;
+    unset req.http.X-SCP-Admin-Matched;
+    unset req.http.X-SCP-Admin-Filtered;
+    unset req.http.X-SCP-Admin-Variant;
+    unset req.http.X-SCP-Admin-Has-Variant;
+    unset req.http.X-SCP-Admin-Rule;
+    unset req.http.X-SCP-Admin-Scope;
+    unset req.http.X-SCP-Admin-Action;
+    unset req.http.X-SCP-Profile;
+    unset req.http.X-SCP-Reason;
+    unset req.http.X-SCP-Pass;
+    unset req.http.X-SCP-Key-URL;
+    unset req.http.X-SCP-Query;
+    unset req.http.X-SCP-Key-Path;
+    unset req.http.X-SCP-Key-Query;
+    unset req.http.X-SCP-Vary-Cookie;
+    unset req.http.X-SCP-Vary-ESI-Cookie;
+    unset req.http.X-SCP-Vary-Accept;
+    unset req.http.X-SCP-Vary-Accept-Language;
+    unset req.http.X-SCP-Normalize-Value;
+    unset req.http.X-SCP-HTML-Accept;
+    unset req.http.X-SCP-Fbp-Enabled;
+    unset req.http.X-SCP-Fbp-Consent;
+    unset req.http.X-SCP-Fbp-Domain;
+    unset req.http.X-SCP-Fbp-Index;
+    unset req.http.X-SCP-Fbp-New;
+    unset req.http.X-SCP-Cookie-Name;
+    unset req.http.X-SCP-Cookie-Role;
+    unset req.http.X-UltraCache-Cookie-Policy;
+    unset req.http.X-UltraCache-Cookie-Delivery;
+    unset req.http.X-SCP-Accept-Check;
+    unset req.http.X-ESI-Private-Request;
+    unset req.http.X-ESI-Request-Level;
+    unset req.http.X-ESI-Original-Cookie;
+    unset req.http.X-UltraCache-ESI-Candidate;
+    unset req.http.X-UltraCache-ESI-Cookie-Check;
+    unset req.http.X-UltraCache-ESI-Opt-In;
+    unset req.http.X-UltraCache-ESI-Shared-Parent;
+}
+
+# Normalize a COPY for hashing/invalidation. Never change req.url.
+sub scp_recv {
+    std.collect(req.http.Cookie, "; ");
+    if (req.url ~ "[?]") { set req.http.X-SCP-Query = regsub(req.url, "^[^?]*[?]", ""); }
+    if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
+    call scp_common_recv;
+}
+sub scp_pass { set req.http.X-SCP-Pass = "1"; }
+sub scp_hit {
+    if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
+}
+sub scp_backend_fetch {
+    unset bereq.http.X-SCP-Admin-Remaining;
+    unset bereq.http.X-SCP-Admin-Keep;
+    unset bereq.http.X-SCP-Admin-Matched;
+    unset bereq.http.X-SCP-Admin-Filtered;
+    unset bereq.http.X-SCP-Admin-Variant;
+    unset bereq.http.X-SCP-Admin-Has-Variant;
+    unset bereq.http.X-SCP-Admin-Rule;
+    unset bereq.http.X-SCP-Admin-Scope;
+    unset bereq.http.X-SCP-Admin-Action;
+    unset bereq.http.Surrogate-Capability;
+    unset bereq.http.X-SCP-Fbp-Enabled;
+    unset bereq.http.X-SCP-Fbp-Consent;
+    unset bereq.http.X-SCP-Fbp-Domain;
+    unset bereq.http.X-SCP-Fbp-Index;
+    unset bereq.http.X-SCP-Fbp-New;
+    unset bereq.http.X-SCP-Cookie-Name;
+    unset bereq.http.X-SCP-Cookie-Role;
+    if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_fetch; }
+}
+sub scp_backend_response {
+    unset beresp.http.X-SCP-Reason;
+    unset beresp.http.X-SCP-Client-Vary;
+    unset beresp.http.X-SCP-Result;
+    unset beresp.http.X-SCP-Result-Reason;
+    std.collect(beresp.http.Cache-Control);
+    std.collect(beresp.http.Surrogate-Control);
+    std.collect(beresp.http.Vary);
+    if (beresp.http.Vary != "*") {
+        if (!beresp.http.Vary) { set beresp.http.Vary = "X-Forwarded-Proto"; }
+        else if (beresp.http.Vary !~ "(?i)(^|,)[[:blank:]]*X-Forwarded-Proto[[:blank:]]*(,|$)") {
+            set beresp.http.Vary = beresp.http.Vary + ", X-Forwarded-Proto";
+        }
+    }
+    call scp_response_privacy;
+    if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
+    # Static and dynamic responses both retain functional Cookie variation.
+    # Only known analytics IDs are omitted from the internal Cookie key.
+    call scp_representation_response;
+    call scp_response_variants;
+}
+sub scp_deliver {
+    if (req.http.X-SCP-Pass == "1" || obj.uncacheable) {
+        set resp.http.X-SCP-Result = "PASS";
+        if (req.http.X-SCP-Reason) { set resp.http.X-SCP-Result-Reason = req.http.X-SCP-Reason; }
+        else if (resp.http.X-SCP-Reason) { set resp.http.X-SCP-Result-Reason = resp.http.X-SCP-Reason; }
+        else { set resp.http.X-SCP-Result-Reason = "origin-uncacheable"; }
+    } else if (obj.hits > 0) {
+        set resp.http.X-SCP-Result = "HIT";
+        set resp.http.X-SCP-Result-Reason = "cached-response";
+    } else {
+        set resp.http.X-SCP-Result = "MISS";
+        set resp.http.X-SCP-Result-Reason = "fetch-required";
+    }
+    set resp.http.X-Cache = resp.http.X-SCP-Result;
+    call scp_cookie_delivery;
+    if (req.http.X-SCP-Profile == "ultracache" &&
+        (resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" ||
+         (!resp.http.X-UltraCache-ESI-Private-Count && resp.http.X-UltraCache-ESI-Shared-Parent == "1"))) {
+        # The object is a reusable ESI template, but this assembled delivery
+        # contains private fragments. Only its downstream response is private.
+        call scp_private_delivery;
+    }
+    unset resp.http.X-Cache-Hits;
+    if (resp.http.X-Cache == "HIT") { set resp.http.X-Cache-Hits = obj.hits; }
+    if (resp.http.X-SCP-Client-Vary) { set resp.http.Vary = resp.http.X-SCP-Client-Vary; }
+    set resp.http.Vary = regsuball(resp.http.Vary,
+        "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Cookie[[:blank:]]*(?=,|$)", "\1Cookie");
+    set resp.http.Vary = regsuball(resp.http.Vary,
+        "(?i)(^|,)[[:blank:]]*X-SCP-Vary-ESI-Cookie[[:blank:]]*(?=,|$)", "\1Cookie");
+    set resp.http.Vary = regsuball(resp.http.Vary,
+        "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Accept[[:blank:]]*(?=,|$)", "\1Accept");
+    set resp.http.Vary = regsuball(resp.http.Vary,
+        "(?i)(^|,)[[:blank:]]*X-SCP-Vary-Accept-Language[[:blank:]]*(?=,|$)", "\1Accept-Language");
+    unset resp.http.X-SCP-Vary-Accept;
+    unset resp.http.X-SCP-Vary-Accept-Language;
+    unset resp.http.X-SCP-Normalize-Value;
+    unset resp.http.X-SCP-Client-Vary;
+    unset resp.http.X-SCP-Reason;
+    unset resp.http.X-SCP-Key-URL;
+    unset resp.http.X-SCP-Profile;
+    unset resp.http.X-SCP-Vary-Cookie;
+    unset resp.http.X-SCP-Vary-ESI-Cookie;
+    unset resp.http.X-SCP-HTML-Accept;
+    unset resp.http.X-UltraCache-ESI-Shared-Parent;
+    unset resp.http.X-UltraCache-ESI-Candidate;
+    unset resp.http.X-UltraCache-ESI-Opt-In;
+    call scp_cookie_diagnostics;
+    # Explicit public variants are keyed internally even without origin Vary.
+    # Tell downstream caches about Cookie without adding unrelated Cookie
+    # dimensions to Varnish's own lookup. Include the no-cookie representation.
+    if (req.http.X-SCP-Admin-Has-Variant == "1" && resp.http.Vary != "*" &&
+        resp.http.Vary !~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)") {
+        if (resp.http.Vary) { set resp.http.Vary = resp.http.Vary + ", Cookie"; }
+        else { set resp.http.Vary = "Cookie"; }
+    }
+    if (req.http.X-SCP-Admin-Action == "private") { call scp_private_delivery; }
+}

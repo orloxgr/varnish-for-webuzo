@@ -4,6 +4,7 @@ function register_activation_hook(...$args) {}
 function register_deactivation_hook(...$args) {}
 function add_filter(...$args) {}
 function admin_act(...$args) {}
+function enduser_act(...$args) {}
 require dirname(__DIR__) . '/varnish-for-webuzo.php';
 function rejects(callable $callback, string $message): void {
     try { $callback(); } catch (Throwable $error) {

@@ -34,4 +34,4 @@ def rules(config,profile):
 def catalog(config):
     return [dict(name=value,label=LABELS[value],description=DESCRIPTIONS[value],source=cookie_policy.shared_policy(),**rules(config,value)) for value in NAMES]
 
-def program():return cookie_policy.shared_policy()+'\n'+(ROOT/'control.vcl').read_text(encoding='utf-8')
+def program(admin_rules=''):return cookie_policy.shared_policy(admin_rules)+'\n'+(ROOT/'control.vcl').read_text(encoding='utf-8')

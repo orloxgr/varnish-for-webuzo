@@ -26,6 +26,16 @@ def running():
 
 def admin(*args):return native.run('/usr/bin/varnishadm','-T','127.0.0.1:6086','-S',ADMIN_SECRET,'-t','10',*args)
 
+def current_source():
+    """Private runtime proof; callers must never expose VCL source in responses."""
+    try:
+        active=next(line.split()[-1] for line in admin('vcl.list').splitlines() if line.strip().startswith('active'))
+        source=admin('vcl.show',active)
+        return active,source.rstrip('\n')+'\n'
+    except Exception:
+        # CLI errors can contain a partial VCL listing, including site tokens.
+        raise RuntimeError('The running VCL source could not be verified; existing policy was left unchanged') from None
+
 def wait():
     deadline=time.monotonic()+15
     while time.monotonic()<deadline:

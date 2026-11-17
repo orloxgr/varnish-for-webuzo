@@ -120,10 +120,14 @@ class Parser:
         raise FragmentError('Unterminated VCL expression')
 
 
-def validate(source, stage, mark_pass=False):
+def validate(source, stage, mark_pass=False, pass_reason=None):
+    if pass_reason not in (None,'site-request-vcl','central-profile-vcl'):
+        raise FragmentError('Unknown custom request rule diagnostic')
     parser = Parser(source, stage)
     parser.block()
     # Re-render only parsed tokens. Comments and unrecognized syntax never reach
     # the native compiler, while Varnish remains the authority on types/regexes.
-    return ' '.join('set req.http.X-WV-Mode = "PASS"; return' if mark_pass and stage=='recv' and kind=='name' and value=='return' else value
+    prefix=('set req.http.X-WV-Reason = "'+pass_reason+'"; ') if pass_reason else ''
+    prefix+='set req.http.X-WV-Mode = "PASS"; '
+    return ' '.join(prefix+'return' if mark_pass and stage=='recv' and kind=='name' and value=='return' else value
                     for kind,value in parser.tokens)

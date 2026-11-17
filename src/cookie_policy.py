@@ -48,9 +48,9 @@ def vcl_pattern(rules):
     return '{"' + pattern(rules) + '"}'
 
 
-def shared_policy():
+def shared_policy(admin_rules=''):
     source = Path(__file__).resolve().parents[1] / "shared/cache-policy.vcl"
-    return render_policy(source.read_text(encoding="utf-8"), load_catalogue())
+    return render_policy(source.read_text(encoding="utf-8"), load_catalogue(), admin_rules=admin_rules)
 
 
 def owned_domains(site, sites):
