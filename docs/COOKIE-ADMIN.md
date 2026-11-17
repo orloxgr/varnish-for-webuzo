@@ -81,3 +81,36 @@ caches recheck the cookie before reusing public HTML. Requests with that private
 cookie still pass to the application with private/no-store responses. Mixed,
 unconnected or mismatched origin policies retain their existing handling, and
 visitor-supplied contract headers are cleared before native scope is assigned.
+
+## Native WordPress integration verification
+
+The development integration was exercised through authenticated native Webuzo
+admin and account-owner sessions, the plugin's registered WordPress control
+endpoint, and Nginx → Varnish → Apache/PHP. The WordPress runtime advertised its
+actual selected consumers; the fixture did not register a replacement endpoint
+or override capabilities. Native LiteSpeed and Nginx HTML caching were not used.
+
+- Central and site Saves produced matching native and signed application snapshots.
+- EUR and USD HTML each gave MISS → HIT across different visitor and unrelated
+  cookie values. Returning to EUR reused its existing object.
+- A private-only selector retained public HIT and downstream `Vary: Cookie` when
+  absent; its presence gave PASS with private/no-store delivery.
+- The real owner CLI status/reset cleared managed application rules and invalidated
+  an already warm native object. Explicit panel Save reapplied unchanged choices.
+- A real filesystem permission failure during HTML retirement reported its
+  authenticated error code, retained the recovery journal, and kept the previous
+  runtime, settings and process. Restoring permissions and saving from a fresh
+  native owner session completed the product's recovery and retired the old HTML.
+- Native ZIP reinstallation while connected preserved settings, runtime, signed
+  application state and the Varnish process. Disconnect cleared the application
+  snapshot.
+
+The connected functional and recovery runs passed 21 and 15 checkpoints. They
+restored the original application root, settings and active/startup VCL, removed
+their temporary database tables and left no pending transaction. No Varnish
+restart was needed during these operations.
+
+Tar-only development deployments must invalidate the affected PHP-FPM OPcache
+entries: an overlay can change file contents while preserving an archive mtime.
+The fixture invalidated its plugin and drop-in files through PHP-FPM before
+testing the normal endpoint; it did not modify endpoint or capability behavior.
