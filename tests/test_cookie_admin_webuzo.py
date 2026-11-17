@@ -146,6 +146,33 @@ class NativeScope(unittest.TestCase):
         self.assertIn('woocommerce-cart-hash',row['reset_metadata']['core_precedence'])
         self.assertIn('Basic passes',row['inherited']['core_precedence'])
 
+    def test_ultracache_explicit_private_cart_passes_entire_request_and_reset_restores_esi_metadata(self):
+        previous=engine.settings();previous['sites'][self.first['id']]['profile']='ultracache'
+        state.save(engine.SETTINGS,previous)
+        self.request('cookie_policies_save',id=self.first['id'],settings=choices('private','woocommerce_cart_hash',identity='policy:woocommerce-cart-hash'))
+        before=engine.SETTINGS.read_bytes()
+        row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='policy:woocommerce-cart-hash')
+        self.assertEqual((row['action'],row['effective_action']),('private','private'))
+        self.assertIn('passes the entire request',row['core_precedence'])
+        self.assertEqual(row['reset_metadata']['effective_action'],'application-contract')
+        self.assertEqual(row['inherited']['effective_action'],'application-contract')
+        self.assertIn('approved ESI parent',row['reset_metadata']['core_precedence'])
+        self.assertEqual(engine.SETTINGS.read_bytes(),before)
+
+    def test_ultracache_cart_inherits_explicit_central_private_until_site_automatic_override(self):
+        previous=engine.settings();previous['sites'][self.first['id']]['profile']='ultracache'
+        previous['cookie_policies']=choices('private','woocommerce_cart_hash')
+        state.save(engine.SETTINGS,previous)
+        inherited=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='custom:campaign')
+        self.assertEqual(inherited['effective_action'],'private')
+        self.assertEqual(inherited['reset_metadata']['effective_action'],'private')
+        self.assertIn('passes the entire request',inherited['core_precedence'])
+        self.request('cookie_policies_save',id=self.first['id'],settings=choices('automatic','woocommerce_cart_hash'))
+        override=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='custom:campaign')
+        self.assertEqual(override['effective_action'],'application-contract')
+        self.assertEqual(override['reset_metadata']['effective_action'],'private')
+        self.assertEqual(override['inherited']['effective_action'],'private')
+
     def test_malformed_snapshot_does_not_reach_native_apply(self):
         previous = engine.settings(); previous['installed'] = True; state.save(engine.SETTINGS, previous)
         malformed = choices(); malformed['rules'][0]['match']['value'] = 'x"; return(pass);'

@@ -64,7 +64,7 @@ def compile_recv(config, site):
                                     normalize(site.get('cookie_policies')))
 
 
-def explain_cart_precedence(metadata, match, profile, catalogue):
+def explain_cart_precedence(metadata, match, profile, catalogue, selected_action=None):
     cart=next((entry for entry in catalogue['policies'] if entry['consumers']['varnishCart']
                and cookie_admin._matches(entry['match'],match)),None)
     if not cart:return
@@ -72,6 +72,9 @@ def explain_cart_precedence(metadata, match, profile, catalogue):
     if profile=='basic':
         metadata['effective_action']='private'
         metadata['core_precedence']+='Basic passes this cart/session request to the application.'
+    elif selected_action=='private':
+        metadata['effective_action']='private'
+        metadata['core_precedence']='The explicit Private choice passes the entire request before optional UltraCache ESI sharing.'
     else:
         metadata['effective_action']='application-contract'
         metadata['core_precedence']+='Basic passes this cart/session request. UltraCache shares only an approved ESI parent with private fragments; without that application contract it also passes.'
@@ -88,8 +91,9 @@ def view(config, sites, request):
     rows = cookie_admin.table(database, catalogue, central, local)
     inherited = cookie_admin.table(database, catalogue, central if site else None, None)
     for row in rows+inherited:
-        explain_cart_precedence(row,row['match'],profile,catalogue)
-        explain_cart_precedence(row['reset_metadata'],row['reset_match'],profile,catalogue)
+        explain_cart_precedence(row,row['match'],profile,catalogue,row.get('action') if row.get('override') else None)
+        explain_cart_precedence(row['reset_metadata'],row['reset_match'],profile,catalogue,
+                                row['inherited_action'] if row['inherited_scope']=='central' else None)
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])
