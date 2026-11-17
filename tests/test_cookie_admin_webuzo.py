@@ -117,6 +117,35 @@ class NativeScope(unittest.TestCase):
         self.assertEqual(inherited['effective_action'],'private')
         self.assertEqual(inherited['reason'],original['reason'])
 
+    def test_basic_cart_shared_choice_explains_the_reviewed_private_rule(self):
+        self.request('cookie_policies_save',id=self.first['id'],settings=choices('shared','woocommerce_cart_hash'))
+        before=engine.SETTINGS.read_bytes()
+        view=self.request()['cookie_policies']
+        row=next(row for row in view['rows'] if row['id']=='custom:campaign')
+        self.assertEqual((row['action'],row['effective_action']),('shared','private'))
+        self.assertIn('woocommerce-cart-hash',row['core_precedence'])
+        self.assertIn('Basic passes',row['core_precedence'])
+        self.assertEqual(engine.SETTINGS.read_bytes(),before)
+
+    def test_ultracache_and_central_cart_metadata_explain_the_application_contract(self):
+        previous=engine.settings();previous['sites'][self.first['id']]['profile']='ultracache'
+        state.save(engine.SETTINGS,previous)
+        for actor in ('account_a','root'):
+            with self.subTest(actor=actor):
+                row=next(row for row in self.request(actor=actor)['cookie_policies']['rows'] if row['name']=='woocommerce_cart_hash')
+                self.assertEqual(row['effective_action'],'application-contract')
+                self.assertIn('approved ESI parent with private fragments',row['core_precedence'])
+                self.assertIn('without that application contract it also passes',row['core_precedence'])
+
+    def test_saved_cart_rename_reset_keeps_the_inherited_profile_explanation(self):
+        self.request('cookie_policies_save',id=self.first['id'],settings=choices('shared','campaign_id',identity='policy:woocommerce-cart-hash'))
+        row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='policy:woocommerce-cart-hash')
+        self.assertEqual(row['effective_action'],'shared')
+        self.assertEqual(row['reset_metadata']['effective_action'],'private')
+        self.assertEqual(row['inherited']['effective_action'],'private')
+        self.assertIn('woocommerce-cart-hash',row['reset_metadata']['core_precedence'])
+        self.assertIn('Basic passes',row['inherited']['core_precedence'])
+
     def test_malformed_snapshot_does_not_reach_native_apply(self):
         previous = engine.settings(); previous['installed'] = True; state.save(engine.SETTINGS, previous)
         malformed = choices(); malformed['rules'][0]['match']['value'] = 'x"; return(pass);'

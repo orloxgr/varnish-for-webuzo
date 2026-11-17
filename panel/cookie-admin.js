@@ -123,7 +123,7 @@
         for (const [value, [label, explanation]] of Object.entries(ACTIONS)) { const option = new Option(label, value); option.title = explanation; choice.append(option); }
         choice.value = row.action || 'automatic'; choice.title = ACTIONS[choice.value][1]; choice.addEventListener('change', () => { edit(row, {action:choice.value}); choice.title = ACTIONS[choice.value][1]; renderCount(); }); actionCell.append(choice);
         actionCell.append(element('small', 'Proposal: ' + (ACTIONS[row.proposal] || [row.proposal || 'Automatic'])[0])); tr.append(actionCell);
-        if (row.effective_action && row.effective_action !== row.action) actionCell.append(element('small', 'Effective: ' + (ACTIONS[row.effective_action] || [row.effective_action])[0] + '. ' + row.core_precedence));
+        if (row.effective_action && row.effective_action !== row.action) actionCell.append(element('small', 'Effective: ' + (row.effective_action === 'application-contract' ? 'Depends on the application ESI contract' : (ACTIONS[row.effective_action] || [row.effective_action])[0]) + '. ' + row.core_precedence));
         const meta = element('td'); meta.append(element('strong', drafts.has(row.id) ? 'Override in this scope' : row.override ? 'Matched '+row.scope+' rule' : row.confidence === 'reviewed' ? 'Reviewed recommendation' : 'Recognition assessment'));
         const details = element('details'); details.append(element('summary', 'Cookie details'));
         for (const [label, value] of [['Applied rule',row.rule_id],['Provider', row.provider],['Category',row.category],['HTML effect',row.htmlEffect],['Confidence',row.confidence],['Reason',row.reason],['Precedence',row.core_precedence]]) if (value) details.append(element('p', label + ': ' + value));

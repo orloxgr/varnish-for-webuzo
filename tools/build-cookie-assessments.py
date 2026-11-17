@@ -79,7 +79,7 @@ def main():
                   sourceSha256=hashlib.sha256(raw).hexdigest(),
                   method='Every source record evaluated individually by explicit description/name cues. Inferences are not verified execution policies; categories are not inputs. No visitor values or runtime network lookup.',
                   records=records)
-    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
     print(json.dumps({'assessed': len(records), 'confidence': dict(collections.Counter(row['confidence'] for row in records.values())),
                       'suggestions': dict(collections.Counter(row['proposal'] for row in records.values()))}))
 

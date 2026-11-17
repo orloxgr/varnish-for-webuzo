@@ -2,7 +2,7 @@
   'use strict';
   const root = document.getElementById('wvw'), byId = id => document.getElementById('wvw-' + id);
   document.title = 'Varnish Cache';
-  let busy = false, snapshot, editingProfile = 'basic', defaultBrowserEditor;
+  let busy = false, snapshot, editingProfile = 'basic', defaultBrowserEditor, requestDone = Promise.resolve();
   const node = (tag, text) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; return el; };
   function controls() { root.querySelectorAll('button,input,textarea,select').forEach(el => { el.disabled = busy || el.dataset.unavailable === '1'; }); }
   function options(select, value) {
@@ -96,7 +96,14 @@
     if (data.updating) pollRecognition();
   }
   async function call(action, values = {}) {
-    if (busy) return;
+    const cookieRequest = ['cookie_policies_status','cookie_policies_save','cookie_integration_status'].includes(action);
+    if (busy) {
+      if (!cookieRequest) return;
+      await requestDone;
+      return call(action, values);
+    }
+    let finishRequest;
+    requestDone = new Promise(resolve => { finishRequest = resolve; });
     busy = true; controls(); byId('error').hidden = true; byId('notice').hidden = true;
     try {
       const body = new URLSearchParams({token: root.dataset.token, payload: JSON.stringify({action, ...values})});
@@ -107,8 +114,8 @@
       if (data.cookie_recognition) recognitionStatus(data.cookie_recognition);
       if (data.message) { byId('notice').textContent = data.message; byId('notice').hidden = false; }
       return data;
-    } catch (error) { byId('error').textContent = error.message; byId('error').hidden = false; }
-    finally { busy = false; controls(); }
+    } catch (error) { byId('error').textContent = error.message; byId('error').hidden = false; if (cookieRequest) throw error; }
+    finally { busy = false; controls(); finishRequest(); }
   }
   function render() {
     byId('status').textContent = !snapshot.installed ? 'Varnish service is not set up.' : snapshot.running ? 'Varnish is running.' : 'Varnish is stopped. Public page requests fall back to Apache.';

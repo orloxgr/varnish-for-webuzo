@@ -64,6 +64,19 @@ def compile_recv(config, site):
                                     normalize(site.get('cookie_policies')))
 
 
+def explain_cart_precedence(metadata, match, profile, catalogue):
+    cart=next((entry for entry in catalogue['policies'] if entry['consumers']['varnishCart']
+               and cookie_admin._matches(entry['match'],match)),None)
+    if not cart:return
+    metadata['core_precedence']='Reviewed WooCommerce rule '+cart['id']+' takes precedence over the table choice. '
+    if profile=='basic':
+        metadata['effective_action']='private'
+        metadata['core_precedence']+='Basic passes this cart/session request to the application.'
+    else:
+        metadata['effective_action']='application-contract'
+        metadata['core_precedence']+='Basic passes this cart/session request. UltraCache shares only an approved ESI parent with private fragments; without that application contract it also passes.'
+
+
 def view(config, sites, request):
     identity, visible = scope(request, sites)
     site = visible[identity] if identity is not None else None
@@ -71,8 +84,12 @@ def view(config, sites, request):
     local = normalize(site.get('cookie_policies')) if site else None
     admin = administrator(request)
     database = recognition.cookie_recognition.database(recognition.DIRECTORY, recognition.BUNDLED)
-    rows = cookie_admin.table(database, load_catalogue(), central, local)
-    inherited = cookie_admin.table(database, load_catalogue(), central if site else None, None)
+    catalogue=load_catalogue();profile=site.get('profile','basic') if site else None
+    rows = cookie_admin.table(database, catalogue, central, local)
+    inherited = cookie_admin.table(database, catalogue, central if site else None, None)
+    for row in rows+inherited:
+        explain_cart_precedence(row,row['match'],profile,catalogue)
+        explain_cart_precedence(row['reset_metadata'],row['reset_match'],profile,catalogue)
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])
