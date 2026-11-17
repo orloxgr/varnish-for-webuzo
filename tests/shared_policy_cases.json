@@ -626,8 +626,8 @@
     ]
   },
   {
-    "name": "cookie delivery uses one public object and preserves existing provider IDs",
-    "cookie_delivery": {
+    "name": "legacy provider settings cannot mint cookies on MISS or HIT",
+    "legacy_cookie_delivery": {
       "fbp": {
         "enabled": true
       }
@@ -636,14 +636,14 @@
       "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"X-UltraCache-Cookie-Policy: @@CATALOGUE_VERSION@@\" -hdr \"X-UltraCache-Cookie-Delivery: proxy-fbp\" -hdr \"X-UltraCache-Cacheable: 1\" -body {public}"
     ],
     "requests": [
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow; _fbp=fb.1.1700000000000.123.AQECAQMC\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:existing-preserved\""
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Cache-Control == \"public,max-age=120\"\nexpect resp.http.Surrogate-Control == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Cache-Control == \"public,max-age=120\"\nexpect resp.http.Surrogate-Control == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow; _fbp=fb.1.1700000000000.123.AQECAQMC\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == <undef>"
     ]
   },
   {
-    "name": "cookie delivery follows consent variants and keeps website isolation",
-    "cookie_delivery": {
+    "name": "consent variants and website isolation use normal cookie policy without issuance",
+    "legacy_cookie_delivery": {
       "fbp": {
         "enabled": true
       }
@@ -657,7 +657,7 @@
     "requests": [
       "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>",
       "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=deny\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>",
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Cache-Control == \"public,max-age=120\"\nexpect resp.http.Surrogate-Control == <undef>",
       "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=deny\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>",
       "txreq -url \"/cookie-policy\" -hdr \"Host: other.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>",
       "txreq -url \"/cookie-policy\" -hdr \"Host: other.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>"
@@ -692,8 +692,8 @@
     ]
   },
   {
-    "name": "actual provider hold keeps HTML HIT without creating an ID",
-    "cookie_delivery": {
+    "name": "provider state cookies use common cache variation without native issuance",
+    "legacy_cookie_delivery": {
       "fbp": {
         "enabled": true
       }
@@ -704,13 +704,13 @@
     ],
     "requests": [
       "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>",
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow; wc_facebook_signals_state=held\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:provider-held\"\nexpect resp.http.X-Cache-Cookie-Names == \"wc_facebook_signals_state\"",
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie ~ \"^_fbp=fb[.]1[.][0-9]{13}[.][0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\""
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow; wc_facebook_signals_state=held\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Cache-Control == \"public,max-age=120\"\nexpect resp.http.Surrogate-Control == <undef>"
     ]
   },
   {
-    "name": "both presets honor an authoritative application provider endpoint",
-    "cookie_delivery": {
+    "name": "legacy provider ownership headers do not enable native issuance",
+    "legacy_cookie_delivery": {
       "fbp": {
         "enabled": true
       }
@@ -719,8 +719,8 @@
       "accept\nrxreq\nexpect req.http.X-SCP-Fbp-Enabled == <undef>\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public,max-age=120\" -hdr \"X-UltraCache-Cookie-Policy: @@CATALOGUE_VERSION@@\" -hdr \"X-UltraCache-Cookie-Delivery: provider-endpoint-fbp\" -hdr \"X-UltraCache-Cacheable: 1\" -body {public}"
     ],
     "requests": [
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:provider-endpoint\"",
-      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == \"fbp:provider-endpoint\""
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == <undef>",
+      "txreq -url \"/cookie-policy\" -hdr \"Host: example.test\" -hdr \"X-Forwarded-Proto: https\" @@GET_HEADERS@@ -hdr \"Cookie: cmplz_marketing=allow\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Delivery == <undef>"
     ]
   },
   {

@@ -25,10 +25,10 @@ def main():
         for case in json.loads(cases.read_text(encoding='utf-8')):
             if profile not in case.get('profiles',['basic','ultracache']):continue
             if args.case and not any(value.lower() in case['name'].lower() for value in args.case):continue
-            configuration=json.dumps(case.get('cookie_delivery'),sort_keys=True)
+            configuration=json.dumps(case.get('legacy_cookie_delivery'),sort_keys=True)
             if configuration not in programs:
                 command=[sys.executable,str(args.adapter),'--profile',profile]
-                if 'cookie_delivery' in case:command.extend(['--cookie-delivery',configuration])
+                if 'legacy_cookie_delivery' in case:command.extend(['--legacy-cookie-delivery',configuration])
                 programs[configuration]=json.loads(subprocess.run(command,capture_output=True,text=True,check=True).stdout)
             rendered=programs[configuration]
             server='\n'.join(case['origin']).removeprefix('accept\n')
@@ -55,7 +55,6 @@ def main():
         admin_module_sha256=hashlib.sha256(policy.with_name('cookie_admin.py').read_bytes()).hexdigest(),
         catalogue_sha256=hashlib.sha256(policy.with_name('cookie-policies.json').read_bytes()).hexdigest(),
         compiler_sha256=hashlib.sha256(policy.with_name('cookie_catalogue.py').read_bytes()).hexdigest(),
-        delivery_module_sha256=hashlib.sha256(policy.with_name('cookie_delivery.py').read_bytes()).hexdigest(),
         cases_sha256=hashlib.sha256(cases.read_bytes()).hexdigest(),results=results)
     encoded=json.dumps(report,indent=2)+'\n'
     if args.output:args.output.write_text(encoded,encoding='utf-8')

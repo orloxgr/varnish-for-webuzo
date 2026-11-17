@@ -1,7 +1,7 @@
 # Modular source, self-contained runtime
 
 `cache-policy.vcl` is the source coordinator. It explicitly lists six modules:
-core entry points, request cookies/diagnostics, independent cookie delivery,
+core entry points, request cookies/diagnostics, downstream response privacy,
 HTTP admission/privacy, representations and UltraCache ESI. Existing subroutines
 keep their responsibilities and explicit call order. `profiles/control.vcl`
 continues to own the native control protocol.

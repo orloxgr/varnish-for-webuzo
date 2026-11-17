@@ -77,7 +77,7 @@ The source currently adds these decisions beyond numeric engine defaults:
 | Rule | Effect and reason |
 | --- | --- |
 | Status below 200 or standalone 206/304 | Body-integrity exclusions remain. The addon no longer imposes a blanket 400+ veto: origin/native freshness applies. Native Varnish 9.1 still assigns a non-positive TTL to 500/503 unless an administrator explicitly changes it. |
-| Origin `Set-Cookie` on the response | Uncacheable; prevents replaying one visitor's cookie to another. Independent Meta delivery appends a visitor-specific field after cache lookup; that field is never stored in the shared object. |
+| Origin `Set-Cookie` on the response | Uncacheable; prevents replaying one visitor's cookie to another. Cookie creation belongs to the application/provider; the panel does not mint identifiers. |
 | Origin `private`, `no-store`, `no-cache`, `Pragma: no-cache`, `Surrogate-Control: no-store`, `Vary: *`, or non-positive TTL | Uncacheable. These are origin instructions/representation boundaries, not subscription restrictions. |
 | Authorization, private WordPress cookies, WooCommerce session/cart cookies and private application actions | PASS. An UltraCache-approved shared ESI parent is the explicit exception for supported cart/session handling. |
 | Site bypass paths and administrator VCL | May explicitly force PASS or set TTL/grace/keep. They are administrator configuration, not hidden addon quotas. |

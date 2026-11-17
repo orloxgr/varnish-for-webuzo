@@ -99,10 +99,6 @@ sub scp_cookie_diagnostics {
         set resp.http.X-Cache-Cookie-Names = regsub(req.http.Cookie, {"^.*?@@COOKIE_PATTERN_varnishTrackingIgnore@@.*$"}, "\2");
         set resp.http.X-Cache-Cookie-Role = "tracking-ignored-for-variation";
     }
-    if (resp.http.X-Cache-Cookie-Delivery && !resp.http.X-Cache-Cookie-Names) {
-        set resp.http.X-Cache-Cookie-Names = "_fbp";
-        set resp.http.X-Cache-Cookie-Role = "independent-cookie";
-    }
     if (resp.http.X-Cache-Cookie-Names) {
         set resp.http.X-Cache-Cookie-Policy = "@@COOKIE_POLICY_VERSION@@";
     }

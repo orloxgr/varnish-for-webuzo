@@ -307,6 +307,13 @@ class PolicyTransactions(unittest.TestCase):
         self.assertEqual(projection.call_count,1)
         load.assert_not_called();admin.assert_not_called();purge.assert_not_called()
 
+    def test_removing_old_provider_state_does_not_change_policy_or_invalidate(self):
+        previous=self.configuration();following=copy.deepcopy(previous)
+        previous['sites']['a'*32]['cookie_delivery']={'fbp':{'enabled':True}}
+        service.ACTIVE.write_text(engine.policy.render(previous['sites'],previous['gateway'],previous['origin'],previous))
+        load,admin,purge=self.apply_settings(previous,following)
+        load.assert_not_called();admin.assert_not_called();purge.assert_not_called()
+
     def test_site_rule_invalidates_only_its_enabled_site(self):
         previous = self.configuration(); following = copy.deepcopy(previous)
         following['sites']['a'*32]['cookie_policies'] = choices()

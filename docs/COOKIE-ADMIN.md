@@ -8,7 +8,7 @@
 | Response admission and Set-Cookie | `scp_backend_response`, preserving origin private/no-store decisions |
 | URL and representation keys | `scp_key`, called from native `vcl_hash` |
 | Private fragments and nonces | UltraCache shared ESI subroutines; Basic remains independent |
-| Independent Meta delivery | `shared/cookie_delivery.py` generates per-host settings; common delivery subroutines execute them |
+| Cookie creation and consent | Owned by the origin application/provider; the common table controls cache variation |
 | Concrete bundled defaults | `shared/cookie_defaults.py`, `shared/cookie-assessments.json` and generated `shared/cookie-defaults.json` |
 | Core login/cart roles | `shared/cookie-policies.json`, validated by `shared/cookie_catalogue.py` |
 | Recognition metadata | `shared/cookie_recognition.py`, local persistent snapshot and bundled fallback |

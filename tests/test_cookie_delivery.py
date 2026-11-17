@@ -15,7 +15,7 @@ from test_profiles import program
 
 
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None, delivery=None):
+def proxy(profile, respond, transform=None, configuration=None):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -43,7 +43,7 @@ def proxy(profile, respond, transform=None, delivery=None):
     try:
         with tempfile.TemporaryDirectory(prefix='wvw-cookie-http-') as folder:
             root = Path(folder)
-            source = program(profile, cookie_delivery=delivery).replace('${s1_port}', str(origin.server_port))
+            source = program(profile, config=configuration).replace('${s1_port}', str(origin.server_port))
             if transform is not None:
                 source = transform(source)
             (root / 'policy.vcl').write_text(source)

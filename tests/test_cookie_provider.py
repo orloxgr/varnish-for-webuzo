@@ -1,15 +1,41 @@
-"""Common independent _fbp behaviour through the Webuzo native adapter."""
+"""Generic cookie rules and private ESI; providers own cookie creation."""
 import shutil
 import unittest
 from test_cookie_delivery import proxy, cookies
-from cookie_catalogue import load_catalogue
-POLICY_VERSION = load_catalogue()['version']
-
-ENABLED = {'fbp': {'enabled': True}}
 
 
 @unittest.skipUnless(shutil.which('varnishd'), 'Native varnishd required')
-class NativeFbpProvider(unittest.TestCase):
+class NativeCookieProvider(unittest.TestCase):
+    def test_fbp_uses_the_same_scoped_actions_without_native_cookie_creation(self):
+        for profile in ('basic','ultracache'):
+            for action in ('shared','variant','private'):
+                calls=[]
+                def origin(path,headers):
+                    calls.append(headers.get('Cookie'))
+                    return 'public', [('Cache-Control','public, max-age=120'),('Vary','Cookie')]
+                choice={'schemaVersion':1,'rules':[dict(id='custom:fbp',match=dict(kind='exact',value='_fbp'),
+                    description='Local choice',action=action)]}
+                with self.subTest(profile=profile,action=action),proxy(profile,origin,configuration={'cookie_policies':choice}) as get:
+                    expected={'shared':['MISS','HIT','HIT'],'variant':['MISS','MISS','HIT'],'private':['PASS']*3}[action]
+                    for visitor,result in zip(('A','B','A'),expected):
+                        _,fields,body=get('/page','_fbp='+visitor)
+                        self.assertEqual(body,'public')
+                        self.assertEqual(dict(fields)['X-Cache'],result)
+                        self.assertEqual(cookies(fields),[])
+                    self.assertEqual(calls,['_fbp=A'] if action=='shared' else ['_fbp=A','_fbp=B'] if action=='variant' else ['_fbp=A','_fbp=B','_fbp=A'])
+
+    def test_consent_and_old_provider_headers_cannot_mint_an_identifier(self):
+        for profile in ('basic','ultracache'):
+            def origin(path,headers):
+                return 'public', [('Cache-Control','public, max-age=120'),
+                    ('X-UltraCache-Cookie-Delivery','proxy-fbp'),('X-UltraCache-Cacheable','1')]
+            with self.subTest(profile=profile),proxy(profile,origin) as get:
+                for expected in ('MISS','HIT'):
+                    _,fields,_=get('/page','cmplz_marketing=allow',{'X-SCP-Fbp-Enabled':'1','X-SCP-Fbp-Consent':'1'})
+                    self.assertEqual(dict(fields)['X-Cache'],expected)
+                    self.assertEqual(cookies(fields),[])
+                    self.assertNotIn('X-Cache-Cookie-Delivery',dict(fields))
+
     def test_private_esi_visitors_share_parent_without_downstream_personal_caching(self):
         parents, fragments = [], []
 
@@ -33,109 +59,6 @@ class NativeFbpProvider(unittest.TestCase):
             self.assertEqual(parents, ['/parent'])
             self.assertEqual(fragments, ['A', 'B', 'A'])
 
-    def test_two_new_visitors_share_html_with_different_cookies_and_keep_existing(self):
-        calls = []
-        def origin(path, headers):
-            calls.append(dict(headers))
-            return '<html>same-public-page</html>', [('Cache-Control','public, max-age=120')]
-        with proxy('basic', origin, delivery=ENABLED) as get:
-            minted = []
-            for expected in ('MISS','HIT'):
-                status, fields, body = get('/page', 'cmplz_marketing=allow')
-                self.assertEqual((status,body), (200,'<html>same-public-page</html>'))
-                self.assertEqual(dict(fields)['X-Cache'], expected)
-                self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'], 'fbp:independent')
-                self.assertEqual(dict(fields)['Cache-Control'], 'private, no-store')
-                self.assertEqual(dict(fields)['Surrogate-Control'], 'no-store')
-                emitted = cookies(fields)
-                self.assertEqual(len(emitted), 1)
-                self.assertRegex(emitted[0], r'^_fbp=fb\.1\.[0-9]{13}\.[0-9]+; Max-Age=7776000; Path=/; SameSite=Lax; Secure$')
-                minted.append(emitted[0].split(';')[0])
-            self.assertNotEqual(*minted)
-            _, fields, _ = get('/page','cmplz_marketing=allow; _fbp=')
-            self.assertEqual(dict(fields)['X-Cache'], 'HIT')
-            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:independent')
-            self.assertEqual(len(cookies(fields)),1)
-            _, fields, _ = get('/page', 'cmplz_marketing=allow; ' + minted[0])
-            self.assertEqual(dict(fields)['X-Cache'], 'HIT')
-            self.assertEqual(cookies(fields), [])
-            self.assertEqual(dict(fields)['Cache-Control'], 'public, max-age=120')
-            self.assertNotIn('Surrogate-Control',dict(fields))
-            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'], 'fbp:existing-preserved')
-            self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0]['Cookie'], 'cmplz_marketing=allow')
-            self.assertFalse(any(name.lower().startswith('x-scp-fbp-') for name in calls[0]))
-
-    def test_consent_unknown_accept_reject_revoke_and_revisit(self):
-        calls = []
-        def origin(path, headers):
-            calls.append(headers.get('Cookie'))
-            return 'public', [('Cache-Control','public, max-age=120')]
-        with proxy('basic', origin, delivery=ENABLED) as get:
-            for consent, allowed, expected in [(None,False,'MISS'), ('allow',True,'MISS'), ('deny',False,'MISS'),
-                                               ('allow',True,'HIT'), ('deny',False,'HIT'), (None,False,'HIT')]:
-                _, fields, _ = get('/page', 'cmplz_marketing='+consent if consent else None)
-                self.assertEqual(dict(fields)['X-Cache'],expected)
-                self.assertEqual(bool(cookies(fields)), allowed)
-            self.assertEqual(calls, [None,'cmplz_marketing=allow','cmplz_marketing=deny'])
-
-    def test_origin_renewals_deletions_and_other_cookie_fields_win_unchanged(self):
-        def origin(path, headers):
-            values = [
-                '_fbp=provider-normalized; Path=/; Max-Age=7776000; Domain=example.test; Secure; SameSite=Lax',
-                'session=private; Path=/account; HttpOnly; Secure; SameSite=Strict',
-                'obsolete=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/',
-                '_fbp=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/legacy']
-            return 'private-response', [('Cache-Control','public, max-age=120'),
-                                       *[('Set-Cookie',value) for value in values]]
-        with proxy('basic', origin, delivery=ENABLED) as get:
-            for cookie in ('cmplz_marketing=allow', 'cmplz_marketing=allow; _fbp=existing'):
-                _, fields, _ = get('/page', cookie)
-                self.assertEqual(dict(fields)['X-Cache'], 'PASS')
-                self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'], 'fbp:origin-provider')
-                self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
-                self.assertEqual(dict(fields)['Surrogate-Control'],'no-store')
-                self.assertEqual(cookies(fields), [value for name,value in origin('',{})[1] if name=='Set-Cookie'])
-
-    def test_browser_headers_cannot_enable_delivery_or_approve_ultracache_objects(self):
-        def origin(path, headers):
-            self.assertIsNone(headers.get('X-UltraCache-Cookie-Delivery'))
-            return 'public', [('Cache-Control','public, max-age=120')]
-        forged = {'X-SCP-Fbp-Enabled':'1', 'X-SCP-Fbp-Consent':'1',
-                  'X-SCP-Fbp-New':'_fbp=forged', 'X-UltraCache-Cookie-Delivery':'proxy-fbp',
-                  'X-UltraCache-Cookie-Policy':POLICY_VERSION}
-        for profile, config in [('basic',None), ('ultracache',ENABLED)]:
-            with self.subTest(profile=profile), proxy(profile, origin, delivery=config) as get:
-                for expected in ('MISS','HIT'):
-                    _, fields, _ = get('/page','cmplz_marketing=allow',forged)
-                    self.assertEqual(dict(fields)['X-Cache'], expected)
-                    self.assertEqual(cookies(fields), [])
-
-    def test_ultracache_requires_current_origin_policy_and_proxy_ownership(self):
-        for ownership, version, allowed in [('proxy-fbp',POLICY_VERSION,True),
-                                             ('provider-endpoint-fbp',POLICY_VERSION,False),
-                                             ('proxy-fbp','old-policy',False)]:
-            def origin(path, headers):
-                return 'public', [('Cache-Control','public, max-age=120'),
-                    ('X-UltraCache-Cookie-Policy',version), ('X-UltraCache-Cookie-Delivery',ownership),
-                    ('X-UltraCache-Cacheable','1')]
-            with self.subTest(owner=ownership,version=version), proxy('ultracache', origin, delivery=ENABLED) as get:
-                for expected in ('MISS','HIT'):
-                    _, fields, _ = get('/page','cmplz_marketing=allow')
-                    self.assertEqual(dict(fields)['X-Cache'], expected)
-                    self.assertEqual(bool(cookies(fields)), allowed)
-
-    def test_private_and_non_html_responses_never_trigger_issuance(self):
-        for profile in ('basic','ultracache'):
-            def origin(path, headers):
-                return 'origin', [('Cache-Control','private, no-store' if path=='/private' else 'public, max-age=120'),
-                    ('Content-Type','application/json' if path=='/json' else 'text/html'),
-                    ('X-UltraCache-Cookie-Policy',POLICY_VERSION),
-                    ('X-UltraCache-Cookie-Delivery','proxy-fbp'), ('X-UltraCache-Cacheable','1')]
-            with self.subTest(profile=profile), proxy(profile, origin, delivery=ENABLED) as get:
-                for path in ('/private','/json','/wp-admin/'):
-                    _, fields, _ = get(path,'cmplz_marketing=allow')
-                    self.assertEqual(cookies(fields), [])
 
     def test_public_only_esi_keeps_public_response_caching(self):
         calls = []
@@ -155,34 +78,7 @@ class NativeFbpProvider(unittest.TestCase):
                 self.assertNotEqual(dict(fields).get('Surrogate-Control'),'no-store')
             self.assertEqual(calls,['/public-parent','/fragment'])
 
-    def test_actual_provider_hold_prevents_new_cookie_without_bypassing_public_html(self):
-        def origin(path, headers):
-            return 'public', [('Cache-Control','public, max-age=120')]
-        with proxy('basic', origin, delivery=ENABLED) as get:
-            get('/page')
-            _, fields, _ = get('/page','cmplz_marketing=allow; wc_facebook_signals_state=held')
-            self.assertEqual(dict(fields)['X-Cache'],'MISS')
-            self.assertEqual(cookies(fields),[])
-            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:provider-held')
-            self.assertEqual(dict(fields)['X-Cache-Cookie-Names'],'wc_facebook_signals_state')
-            self.assertEqual(dict(fields)['Cache-Control'],'public, max-age=120')
-            _,fields,_=get('/page','cmplz_marketing=allow')
-            self.assertEqual(dict(fields)['X-Cache'],'HIT')
-            self.assertEqual(len(cookies(fields)),1)
-            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:independent')
-
-    def test_basic_respects_an_available_authoritative_provider_endpoint(self):
-        def origin(path, headers):
-            return 'public', [('Cache-Control','public, max-age=120'),
-                ('X-UltraCache-Cookie-Policy',POLICY_VERSION),
-                ('X-UltraCache-Cookie-Delivery','provider-endpoint-fbp'), ('X-UltraCache-Cacheable','1')]
-        with proxy('basic', origin, delivery=ENABLED) as get:
-            for expected in ('MISS','HIT'):
-                _, fields, _ = get('/page','cmplz_marketing=allow')
-                self.assertEqual(dict(fields)['X-Cache'],expected)
-                self.assertEqual(cookies(fields),[])
-                self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:provider-endpoint')
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -91,45 +91,4 @@ def render_policy(source, catalogue, admin_rules=''):
     version = json.dumps(catalogue['version'], ensure_ascii=True)[1:-1]
     rendered = MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)
     rendered = rendered.replace('@@COOKIE_ADMIN_RULES@@', admin_rules)
-    if '@@FBP_' not in rendered:
-        return rendered
-    fbp = next(policy for policy in catalogue['policies'] if policy['id'] == 'fbp')
-    held = []
-    conditions = fbp['delivery'].get('transports', {}).get('proxy-fbp', {}).get('holdWhen', [])
-    if not isinstance(conditions,list) or any(not isinstance(item,dict) for item in conditions):
-        raise ValueError('Provider hold policy needs a list of conditions')
-    for condition in conditions:
-        name, expected = condition.get('cookie'), condition.get('value')
-        if not isinstance(name,str) or not NAME.fullmatch(name) or not isinstance(expected,str) or not VALUE.fullmatch(expected):
-            raise ValueError('Provider hold policy needs an exact cookie name/value')
-        expression = '(^|;[[:blank:]]*)' + re.escape(name) + '=' + re.escape(expected) + '(;|$)'
-        held.append('if (req.http.Cookie ~ {"' + expression + '"}) {\n' +
-            '        set req.http.X-SCP-Cookie-Name = ' + json.dumps(name) + ';\n' +
-            '        set req.http.X-SCP-Cookie-Role = "provider-consent";\n' +
-            '        set resp.http.X-Cache-Cookie-Delivery = "fbp:provider-held";\n' +
-            '        return;\n    }')
-    rendered = rendered.replace('@@FBP_PROVIDER_HOLD@@', '\n    '.join(held))
-    attributes = fbp['attributes']
-    age, path, same_site = (attributes.get(key) for key in ('maxAgeSeconds','path','sameSite'))
-    if type(age) is not int or age <= 0:
-        raise ValueError('Native Meta cookie policy needs a positive Max-Age')
-    if not isinstance(path, str) or not path.startswith('/') or re.search(r'[\x00-\x20\x7f;"\\]', path):
-        raise ValueError('Native Meta cookie policy needs a literal cookie path')
-    if same_site not in ('Lax','Strict','None') or type(attributes.get('httpOnly')) is not bool:
-        raise ValueError('Native Meta cookie policy needs explicit SameSite and HttpOnly attributes')
-    secure = attributes.get('secure')
-    if secure == 'site-scheme':
-        secure_vcl = '''if (req.http.X-Forwarded-Proto ~ "(?i)^https$") {
-        set req.http.X-SCP-Fbp-New = req.http.X-SCP-Fbp-New + "; Secure";
-    }'''
-    elif secure is True:
-        secure_vcl = 'set req.http.X-SCP-Fbp-New = req.http.X-SCP-Fbp-New + "; Secure";'
-    elif secure is False:
-        secure_vcl = ''
-    else:
-        raise ValueError('Native Meta cookie policy needs a known Secure attribute policy')
-    for marker, value in {'MAX_AGE':str(age), 'PATH':path, 'SAME_SITE':same_site,
-                           'HTTP_ONLY':'; HttpOnly' if attributes['httpOnly'] else '',
-                           'SECURE_VCL':secure_vcl}.items():
-        rendered = rendered.replace('@@FBP_' + marker + '@@', value)
     return rendered

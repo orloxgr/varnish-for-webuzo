@@ -29,28 +29,22 @@ Public responses with a positive cache lifetime are eligible regardless of conte
 
 ## Cookies and shared HTML
 
-Open a site's **VCL & connection β†’ Independent cookie delivery** to configure
-Meta `_fbp` delivery separately from public cached HTML. Enable it only for a
-site using Meta, enter its exact consent cookie name and accepted value, and
-save. The option starts disabled. A blank cookie domain uses the current
-hostname; an explicit parent domain must belong to the same hosting account.
+Use **Cookie policies** to choose **Shared**, **Variant** or **Private** for a
+cookie, centrally or per site. This includes `_fbp`, with the same controls as
+other cookies. The table controls cache variation; it does not generate cookies.
+The website or its provider owns cookie creation, consent, renewal and deletion.
 
-New consenting visitors can receive the same cached public page with different
-personal Meta cookies. Existing cookies, provider renewals and cookie deletions
-are preserved. Login, cart and other personal content retain their own handling.
-Basic works without a WordPress companion. With UltraCache, the origin declares
-whether the proxy or the application's provider endpoint delivers the cookie;
-service-specific consent managers such as Real Cookie Banner use their actual
-application API, including provider-specific WordPress Consent API decisions.
-A provider hold prevents new cookie issuance without preventing a public-page HIT.
+Origin `Set-Cookie` fields retain their separate values and attributes and are
+not stored in a shared cached object. UltraCache private ESI fragments retain
+the existing session and downstream privacy handling.
 
 The shared cookie catalogue also supplies value-free response diagnostics:
-`X-Cache-Cookie-Names`, `X-Cache-Cookie-Role`, `X-Cache-Cookie-Policy`, and
-`X-Cache-Cookie-Delivery`. They identify the applied rule and delivery decision
-without exposing cookie values. Unknown cookies keep the existing HTTP policy.
+`X-Cache-Cookie-Names`, `X-Cache-Cookie-Role` and `X-Cache-Cookie-Policy`.
+They identify the applied rule without exposing cookie values.
+Unknown cookies keep the existing HTTP policy.
 See the [shared contract](shared/CONTRACT.md) for integration details.
-The [validation results](docs/COOKIE-VALIDATION.md) describe the native and actual
-WordPress integration tests.
+The [validation results](docs/COOKIE-VALIDATION.md) describe the native cookie
+and ESI checks.
 
 ## VCL profiles and new sites
 

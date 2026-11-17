@@ -6,7 +6,6 @@ import native
 import fragments
 import profiles
 import timeouts
-import cookie_policy
 import cookie_views
 import cookie_bridge
 
@@ -33,7 +32,6 @@ def render(sites,gateway,origin_secret,config=None):
 import std;
 import purge;
 import header;
-import blob;
 ''']
     for scheme,name in (('http','plain'),('https','secure')):
         text.append('backend '+name+' { .path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock"; '+
@@ -103,8 +101,6 @@ sub vcl_recv {
             ' if (req.http.X-UltraCache-Token == '+quoted(site['token'])+') { call wvw_http_control; }\n'+
             ' if (req.method != "PURGE") { return (synth(403)); }\n'+
             ' ban("obj.http.X-WV-Site == '+site['id']+'"); return (synth(200, "Site cache cleared")); }\n }')
-        delivery=cookie_policy.delivery_configuration(site,sites)
-        if delivery:text.append(' if ('+cond+') {\n'+delivery+'\n }')
     text.append('''
  if (req.method == "PURGE" || req.method == "BAN") { return (synth(403)); }
  if (!req.http.X-WV-Site) { return (synth(421)); }

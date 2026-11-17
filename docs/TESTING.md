@@ -369,7 +369,7 @@ external identities are adopted through the normal transaction path.
 ## Concrete bundled policies
 
 The current shared matrix passes 91 native HTTP cases. Both panel implementations
-use the same 25 shared files. It includes an unconnected origin returning empty
+use the same 24 shared files. It includes an unconnected origin returning empty
 policy settings: Alice and Bob must each fetch their own representation, then
 Alice must reuse only hers. An expected contract must be a real digest before
 origin policy-only variation can be trusted.
@@ -417,3 +417,21 @@ unchanged-state comparison fell from 7.986 seconds to 0.049 seconds with VCL
 rendering and service operations mocked; these are comparison costs, not total
 panel opening times. Both versions performed no load or purge for that state.
 The targeted projection, bridge, transaction and lifecycle run passed 37 tests.
+
+## Common cookie table without a provider issuer
+
+The provider-specific form, native action, stored-setting consumption and VCL
+issuer are removed. The common private-delivery helper remains for original
+Set-Cookie responses and private ESI assembly. A focused native run passed 55
+projection, bridge, transaction, lifecycle, catalogue, legacy-state, response
+field and provider-boundary tests. The `_fbp` cases exercise all three ordinary
+actions on Basic and UltraCache: Shared reuses HTML across values, Variant
+separates values and Private passes to the origin. Original request cookies and
+response cookie fields retain their values and attributes. No native issuer is
+activated by old enabled state, consent cookies or former provider headers.
+The complete shared HTTP matrix also passed all 91 runs on that source,
+including the four replacement cases for ignored historical provider state.
+
+The shared parity fixture's `--legacy-cookie-delivery` flag injects a retired
+field into raw test site state only. It is not a production configuration option
+or a compatibility path.

@@ -111,7 +111,9 @@ sub scp_deliver {
         set resp.http.X-SCP-Result-Reason = "fetch-required";
     }
     set resp.http.X-Cache = resp.http.X-SCP-Result;
-    call scp_cookie_delivery;
+    unset resp.http.X-Cache-Cookie-Delivery;
+    # Original provider fields reach only this visitor, regardless of name.
+    if (resp.http.Set-Cookie) { call scp_private_delivery; }
     if (req.http.X-SCP-Profile == "ultracache" &&
         (resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" ||
          (!resp.http.X-UltraCache-ESI-Private-Count && resp.http.X-UltraCache-ESI-Shared-Parent == "1"))) {

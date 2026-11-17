@@ -57,29 +57,6 @@ class CookieCatalogue(unittest.TestCase):
         self.assertIn('_reviewed_fixture', result)
         self.assertNotIn('|_fbp|', result)
 
-    def test_native_attributes_are_generated_from_the_reviewed_provider_policy(self):
-        source = (ROOT/'shared/cache-policy.vcl').read_text(encoding='utf-8')
-        attributes = self.catalogue['policies'][0]['attributes']
-        attributes.update(maxAgeSeconds=3600,path='/shop',sameSite='Strict',httpOnly=True,secure=True)
-        result = render_policy(source,self.catalogue)
-        self.assertIn('; Max-Age=3600; Path=/shop; SameSite=Strict; HttpOnly',result)
-        self.assertNotIn('@@FBP_',result)
-        attributes['path'] = '/; other=cookie'
-        with self.assertRaises(ValueError):
-            render_policy(source,self.catalogue)
-
-    def test_provider_hold_uses_reviewed_exact_cookie_condition_and_name_only_diagnostics(self):
-        source = (ROOT/'shared/cache-policy.vcl').read_text(encoding='utf-8')
-        transport = self.catalogue['policies'][0]['delivery'].setdefault('transports',{}).setdefault('proxy-fbp',{})
-        transport['holdWhen'] = [{'cookie':'provider_state','value':'held'}]
-        result = render_policy(source,self.catalogue)
-        self.assertIn('provider_state=held(;|$)',result)
-        self.assertIn('X-SCP-Cookie-Name = "provider_state"',result)
-        self.assertIn('X-Cache-Cookie-Delivery = "fbp:provider-held"',result)
-        transport['holdWhen'][0]['value'] = 'held; other=1'
-        with self.assertRaises(ValueError):
-            render_policy(source,self.catalogue)
-
     def test_malformed_or_contradictory_catalogue_is_not_generated(self):
         changes = [lambda c: c.update(schemaVersion=2),
                    lambda c: c.update(unknownCookies='pass'),

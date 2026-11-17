@@ -17,9 +17,10 @@ import profiles
 def site(identity='a',domain='example.test',profile='basic',token='b'):
     return dict(id=identity*32,domain=domain,names=[domain],enabled=True,error='',token=token*64,bypass=[],recv_vcl='',backend_vcl='',profile=profile)
 
-def program(profile='basic',config=None,cookie_delivery=None):
+def program(profile='basic',config=None,legacy_cookie_delivery=None):
     first=site(profile=profile);second=site('c','other.test',profile,'d')
-    if cookie_delivery is not None:first['cookie_delivery']=cookie_delivery
+    # Test-only raw historical state: production must ignore this removed field.
+    if legacy_cookie_delivery is not None:first['cookie_delivery']=legacy_cookie_delivery
     source=policy.render({first['id']:first,second['id']:second},'e'*64,'f'*64,config)
     for scheme in ('http','https'):
         source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
