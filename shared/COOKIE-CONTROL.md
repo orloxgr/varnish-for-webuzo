@@ -64,6 +64,10 @@ A reply identifies `ok`, integer `protocol`, `operation`, `requestId`, `host`,
 and the actual `activeDigest`; prepare/commit also identify `targetDigest`.
 Errors identify their concrete stage without echoing tokens or private values.
 Status capabilities describe actual available consumers.
+An authenticated error may include a literal `code` (lowercase letters, digits,
+underscores or hyphens, starting with a letter). The native error retains that
+specific cause with the stage and HTTP status; it does not echo free-form origin
+messages or malformed codes that could contain visitor values or credentials.
 
 The exact response JSON bytes have two authentication headers:
 

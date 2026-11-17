@@ -170,7 +170,11 @@ class Client:
                 stage = result.get('stage', 'application')
                 if not isinstance(stage, str) or not re.fullmatch('[a-z][a-z-]*', stage):
                     stage = 'application'
-                raise ControlError('WordPress cookie control failed at ' + stage + ' (HTTP ' + str(status) + ')')
+                code=result.get('code')
+                detail='; '+code if isinstance(code,str) and re.fullmatch('[a-z][a-z0-9_-]*',code) else ''
+                # Preserve a specific authenticated machine-readable cause,
+                # never an arbitrary origin message containing private values.
+                raise ControlError('WordPress cookie control failed at ' + stage + ' (HTTP ' + str(status) + detail + ')')
             active = result.get('activeDigest')
             if not isinstance(active, str) or not re.fullmatch('[0-9a-f]{64}', active):
                 raise ControlError('WordPress cookie control did not identify its active snapshot')
