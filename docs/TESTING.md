@@ -357,3 +357,10 @@ The integration runner restored its settings and VCL and removed its PHP fixture
 
 The optional signed UltraCache endpoint has separate application-level checks;
 the native transport tests do not substitute for testing that WordPress package.
+Runtime generation identity is covered by `tests/test_runtime_identity.py`.
+The native test starts an isolated Varnish with a policy exceeding its default
+CLI reply size, confirms the source dump is truncated, and performs two actual
+engine applies. The first adopts the boot policy through compile/load/use;
+the second keeps the same generation without another load, source dump or
+restart. Owned generation names carry their source digest; missing, older or
+external identities are adopted through the normal transaction path.

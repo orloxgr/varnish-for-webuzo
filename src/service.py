@@ -1,12 +1,14 @@
 """Own a separate systemd instance; never alter Webuzo or vendor service units."""
 from pathlib import Path
 import grp
+import hashlib
 import json
 import os
 import secrets
 import socket
 import time
 import pwd
+import re
 import stat
 import repository
 import native
@@ -27,11 +29,20 @@ def running():
 def admin(*args):return native.run('/usr/bin/varnishadm','-T','127.0.0.1:6086','-S',ADMIN_SECRET,'-t','10',*args)
 
 def current_source():
-    """Private runtime proof; callers must never expose VCL source in responses."""
+    """Read an owned content-addressed generation without a CLI source dump.
+
+    Boot, external and older random generations are adopted through load/use
+    once. Their active name remains available for transaction rollback.
+    """
     try:
         active=next(line.split()[-1] for line in admin('vcl.list').splitlines() if line.strip().startswith('active'))
-        source=admin('vcl.show',active)
-        return active,source.rstrip('\n')+'\n'
+        match=re.fullmatch(r'wvw_([0-9a-f]{64})_[0-9a-f]{32}',active)
+        if not match:return active,None
+        path=routing.CONFIG/'generations'/(active+'.vcl')
+        if not path.exists():return active,None
+        source=native.read(path).decode()
+        if hashlib.sha256(source.encode()).hexdigest()!=match[1]:return active,None
+        return active,source
     except Exception:
         # CLI errors can contain a partial VCL listing, including site tokens.
         raise RuntimeError('The running VCL source could not be verified; existing policy was left unchanged') from None
@@ -153,7 +164,7 @@ def write_vcl(path,content):
     state.write(path,content.encode());os.chown(path,0,grp.getgrnam(DAEMON).gr_gid);path.chmod(0o640)
 
 def load(content):
-    name='wvw_'+secrets.token_hex(16)
+    name='wvw_'+hashlib.sha256(content.encode()).hexdigest()+'_'+secrets.token_hex(16)
     path=routing.CONFIG/'generations'/(name+'.vcl');write_vcl(path,content)
     try:admin('vcl.load',name,str(path))
     except Exception:
