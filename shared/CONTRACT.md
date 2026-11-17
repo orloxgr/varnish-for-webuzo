@@ -111,8 +111,8 @@ to generic proxies. Our native adapter can avoid varying on unrelated automatic
 cookies only with a matching explicitly connected contract:
 
 - `cookie_control.cache_contract(configuration,host,aliases,central,site)` returns
-  the effective digest for a connected policy with public variant or private
-  rules, or empty.
+  the effective digest for every explicitly connected policy, including
+  Shared-only, Automatic-only and empty policies; disabled connections return empty.
 - The native site route assigns that value to `X-SCP-Cookie-Contract` after init.
 - The origin emits `X-UltraCache-Cookie-Settings: <effective digest>` and
   `X-UltraCache-Cookie-Vary: policy-only` only when it owns the entire Cookie Vary
@@ -120,9 +120,12 @@ cookies only with a matching explicitly connected contract:
 
 For that exact match the internal Cookie Vary dimension is removed: explicit
 selected cookie pairs already participate in `scp_cookie_hash`. Downstream
-delivery still includes `Vary: Cookie`. Unknown/mixed provenance, mismatched
-digests, and Basic without the optional connection keep ordinary functional
-Cookie Vary. Origin private/no-store/Set-Cookie admission is unchanged, and the
+delivery still includes the origin's `Vary: Cookie`. A valid different origin
+digest retains literal native `Vary: Cookie`: an older Shared or tracking-ignore
+projection cannot describe a newer application policy. These representations
+still cache normally. Unknown/mixed provenance and Basic without the optional
+connection retain the existing functional Cookie Vary handling.
+Origin private/no-store/Set-Cookie admission is unchanged, and the
 original request Cookie reaches the application unchanged. Incoming browser
 copies of all three contract headers are discarded by init. The application
 derives its markers from its stored signed policy and source-response provenance,

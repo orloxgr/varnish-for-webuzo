@@ -85,7 +85,7 @@ def reconcile_integration(value, host, aliases=()):
 def cache_contract(value, host, aliases=(), central=None, site=None):
     """Expected origin Vary provenance, not visitor-provided public approval."""
     configured=integration(value,host,aliases)
-    if not configured['enabled'] or not any(row['action'] in ('variant','private') for row in resolve(central,site)):
+    if not configured['enabled']:
         return ''
     return effective_digest(urllib.parse.urlsplit(configured['url']).hostname,snapshot(central,site))
 

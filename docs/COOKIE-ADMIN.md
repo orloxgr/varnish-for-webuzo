@@ -72,14 +72,18 @@ a fresh base digest and prepares the new one; both URLs may belong to the same
 WordPress installation. If Varnish setup is disabled, the retained panel performs
 the application transaction without starting Varnish or changing routing.
 
-The shared `cache_contract` helper binds a connected public-variant or private-selector policy to
-the expected application digest. An origin `Vary: Cookie` marked as coming only
+The shared `cache_contract` helper binds every explicitly connected policy,
+including Shared-only and empty policies, to the expected application digest.
+An origin `Vary: Cookie` marked as coming only
 from that matching policy uses the explicit policy internally; unrelated
 cookie values do not fragment it. Public responses include downstream `Vary: Cookie`
 for private selectors even when the selected cookie is absent, so downstream
 caches recheck the cookie before reusing public HTML. Requests with that private
 cookie still pass to the application with private/no-store responses. Mixed,
-unconnected or mismatched origin policies retain their existing handling, and
+unconnected or unknown origin policies retain their existing handling. A valid
+different origin policy digest preserves literal Cookie Vary, so an older
+Shared or tracking-ignore rule cannot merge newer application variants. These
+responses remain cacheable with ordinary MISS/HIT behavior. Incoming
 visitor-supplied contract headers are cleared before native scope is assigned.
 
 ## Native WordPress integration verification

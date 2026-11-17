@@ -33,12 +33,23 @@ sub scp_response_variants {
     }
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)") {
         if (bereq.http.X-SCP-Cookie-Contract &&
+            beresp.http.X-UltraCache-Cookie-Settings ~ "^[0-9a-f]{64}$" &&
+            beresp.http.X-UltraCache-Cookie-Settings != bereq.http.X-SCP-Cookie-Contract) {
+            # The application has a different effective policy. Preserve its
+            # complete Cookie Vary; the old Shared/tracking projection cannot
+            # describe the HTML selected by the application's newer policy.
+            # Standard native Vary still caches each actual representation.
+        } else if (bereq.http.X-SCP-Cookie-Contract &&
             beresp.http.X-UltraCache-Cookie-Settings == bereq.http.X-SCP-Cookie-Contract &&
             beresp.http.X-UltraCache-Cookie-Vary == "policy-only") {
             # Only our explicitly connected matching policy owns this Vary.
             # Public cookie variants are already in scp_cookie_hash. Do not
             # turn unrelated automatic/tracking cookies into new variants.
-            # scp_deliver retains Cookie in downstream Vary for these rules.
+            # Retain the origin's downstream Vary even for Shared-only rules,
+            # which do not independently add a public cookie hash dimension.
+            if (!beresp.http.X-SCP-Client-Vary) {
+                set beresp.http.X-SCP-Client-Vary = beresp.http.Vary;
+            }
             set beresp.http.Vary = regsuball(beresp.http.Vary,
                 "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(?=,|$)", "");
             set beresp.http.Vary = regsuball(beresp.http.Vary, ",[[:blank:]]*,", ",");

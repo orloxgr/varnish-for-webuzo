@@ -392,6 +392,59 @@ class PolicyTransactions(unittest.TestCase):
 class NativeCookieRules(unittest.TestCase):
     run_policy = http.NativeProfiles.run_policy
 
+    def test_connected_old_shared_policy_keeps_origin_cookie_vary_when_digest_changes(self):
+        original=http.site;rules=choices('shared','site_currency')
+        connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
+        drift=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.snapshot(choices('variant','site_currency')))
+        def connected(*args,**kwargs):
+            row=original(*args,**kwargs)
+            if row['domain']=='example.test':row['cookie_integration']=connection
+            return row
+        headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+drift,'X-UltraCache-Cookie-Vary: policy-only']
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                self.run_policy(profile,[http.origin('/page','EUR',headers=headers),http.origin('/page','USD',headers=headers)],
+                    [http.get('/page','EUR',['Cookie: site_currency=EUR'],cache='MISS'),
+                     http.get('/page','EUR',['Cookie: site_currency=EUR'],cache='HIT'),
+                     http.get('/page','USD',['Cookie: site_currency=USD'],cache='MISS'),
+                     http.get('/page','USD',['Cookie: site_currency=USD'],cache='HIT'),
+                     'expect resp.http.Vary ~ "Cookie"'],config={'cookie_policies':rules})
+
+    def test_connected_matching_shared_policy_has_a_digest_and_reuses_shared_html(self):
+        original=http.site;rules=choices('shared','site_currency')
+        connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
+        expected=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.snapshot(rules))
+        self.assertEqual(cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules),expected)
+        def connected(*args,**kwargs):
+            row=original(*args,**kwargs)
+            if row['domain']=='example.test':row['cookie_integration']=connection
+            return row
+        headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+expected,'X-UltraCache-Cookie-Vary: policy-only']
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                self.run_policy(profile,[http.origin('/page','public',headers=headers)],
+                    [http.get('/page','public',['Cookie: site_currency=EUR'],cache='MISS'),
+                     http.get('/page','public',['Cookie: site_currency=USD'],cache='HIT'),
+                     'expect resp.http.Vary ~ "Cookie"'],config={'cookie_policies':rules})
+
+    def test_connected_empty_policy_keeps_new_origin_tracking_cookie_variants_separate(self):
+        original=http.site
+        connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
+        drift=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.snapshot(choices('variant','_ga')))
+        def connected(*args,**kwargs):
+            row=original(*args,**kwargs)
+            if row['domain']=='example.test':row['cookie_integration']=connection
+            return row
+        headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+drift,'X-UltraCache-Cookie-Vary: policy-only']
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                self.run_policy(profile,[http.origin('/page','first',headers=headers),http.origin('/page','second',headers=headers)],
+                    [http.get('/page','first',['Cookie: _ga=first'],cache='MISS'),
+                     http.get('/page','first',['Cookie: _ga=first'],cache='HIT'),
+                     http.get('/page','second',['Cookie: _ga=second'],cache='MISS'),
+                     http.get('/page','second',['Cookie: _ga=second'],cache='HIT'),
+                     'expect resp.http.Vary ~ "Cookie"'])
+
     def test_absent_private_cookie_keeps_public_hits_and_downstream_cookie_vary(self):
         for profile in ('basic','ultracache'):
             with self.subTest(profile=profile):
