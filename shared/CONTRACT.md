@@ -53,8 +53,8 @@ the origin request and never grants permission to replay personal Set-Cookie.
 `cookie-recognition/recognition.json` is an attributed, revision-pinned Open
 Cookie Database snapshot. Its Apache-2.0 license is shipped alongside it. It is
 consumed by the cookie administrator table, together with the per-record
-`cookie-assessments.json`. It is not read during a visitor HTTP request. Only
-explicit validated match snapshots become generated VCL choices. Do
+`cookie-assessments.json`. It is not read during a visitor HTTP request. Versioned editorial defaults and validated explicit snapshots become generated
+VCL choices; newly downloaded recognition rows cannot change executable defaults. Do
 not replace executable rules with a category-derived allowlist. All distributed
 copies of the reviewed catalogue and compiler must agree at release time;
 installed servers neither import another checkout nor contact a lookup service.
@@ -64,8 +64,11 @@ installed servers neither import another checkout nor contact a lookup service.
 `cookie_admin.py` is shared unchanged. Settings are
 `{"schemaVersion":1,"rules":[{"id":"ocd:source-id|policy:reviewed-id|custom:uuid",
 "match":{"kind":"exact|prefix","value":"literal-name"},
-"description":"plain text","action":"automatic|shared|variant|private"}]}`.
-Names are case-sensitive HTTP tokens; a prefix is literal, not arbitrary regex.
+"description":"plain text","action":"shared|variant|private"}]}`.
+Names are case-sensitive escaped literals; a prefix is not arbitrary regex.
+Legacy literal colon/slash/brackets/Unicode/internal spaces are supported.
+Reject empty names, leading/trailing whitespace, controls/DEL and ; = " { }.
+These are Cookie/VCL injection boundaries, not limits on work size.
 Saved names/choices are snapshots: upstream metadata changes do not rewrite them.
 An upstream description is retained by the updater when available. Assessments
 are explicitly reviewed or inferred; external categories do not grant execution.
@@ -74,11 +77,35 @@ The API is `normalize(value)`, `table(database,catalogue,central=None,site=None)
 `resolve(central=None,site=None)`, `executable(central=None,site=None)` and
 `compile_vcl(central=None,site=None)`. `table` includes the proposal separately
 from the actual action, origin/scope, inherited action, local snapshot, confidence
-and reason. Inferred proposals keep the existing automatic policy until a user
-explicitly chooses them. Reset removes a local snapshot. Explicit automatic
-restores baseline handling for its match even over a lower central rule.
+and reason. Missing daily upstream rows do not hide bundled executable rules.
+New names outside the versioned bundle are `scope=recognition, active_rule=false`
+with a concrete proposal, never falsely labelled as applied. A local choice
+activates them through the ordinary save transaction.
+All bundled rows have concrete executable decisions; confidence is
+an evidence label, not an activation switch. Reset removes the local snapshot.
+Legacy stored `automatic` is accepted for rollback compatibility, but `concrete`
+resolves it to an identical/covering default, otherwise Variant. A prefix never
+uses its first child's decision. New editors offer only the three concrete actions.
 
-Site rules precede central rules; within a scope exact matches precede longest
+`cookie_defaults.py` builds the defaults from pinned `cookie-assessments.json`
+and the reviewed catalogue. The generated `cookie-defaults.json` is the identical
+schema-1 rule snapshot for independent consumers, with version/sourceRevision
+metadata outside the inner settings. `materialize(central)` flattens admin choices
+above defaults; `active(central,site)` resolves site above that snapshot. Within
+scope sort exact first, longest UTF-8 byte length first, literal name then ID.
+Empty internal pair/variant headers are unset after normalization: an empty
+header must not add a hash dimension that an authenticated soft purge cannot
+address. Anonymous and Shared-only visitors reuse the same public object.
+Prefix coverage uses a trie; bundled exact names compile into disjoint action
+groups and adjacent equal-action prefixes share a block. Adapters emit identical
+per-site rule bodies once rather than repeating the full bundle per domain.
+
+Native state records `cookie_defaults_version`. A bundle upgrade synchronizes
+connected applications and invalidates affected site caches transactionally.
+Keep descriptions/IDs out of the effective digest. Upstream recognition updates
+still cannot change this version or activate new category-derived rules.
+
+Site rules precede central choices, which precede bundled defaults; within a scope exact matches precede longest
 prefixes. Higher matches consume pairs from an internal copy so a lower broad
 prefix cannot undo a specific choice. Contradictory equal matches in one scope
 are rejected. Core authentication, cart/ESI contracts, request credentials and
@@ -112,7 +139,7 @@ cookies only with a matching explicitly connected contract:
 
 - `cookie_control.cache_contract(configuration,host,aliases,central,site)` returns
   the effective digest for every explicitly connected policy, including
-  Shared-only, Automatic-only and empty policies; disabled connections return empty.
+  the materialized defaults and all admin/site choices; disabled connections return empty.
 - The native site route assigns that value to `X-SCP-Cookie-Contract` after init.
 - The origin emits `X-UltraCache-Cookie-Settings: <effective digest>` and
   `X-UltraCache-Cookie-Vary: policy-only` only when it owns the entire Cookie Vary

@@ -50,7 +50,7 @@
     actionFilter.append(new Option('All actions', ''));
     for (const [value, [label]] of Object.entries(ACTIONS)) actionFilter.append(new Option(label, value));
     const sourceFilter = element('select'); sourceFilter.setAttribute('aria-label', 'Filter cookie policy source');
-    for (const [value, label] of [['','All rows'],['overrides','Overrides in this scope'],['bundled','Bundled defaults'],['central','Central choices'],['custom','Custom rows'],['recognition','Recognition database']]) sourceFilter.append(new Option(label, value));
+    for (const [value, label] of [['','All rows'],['overrides','Overrides in this scope'],['bundled','Bundled defaults'],['central','Central choices'],['custom','Custom rows'],['proposals','New recognition proposals'],['recognition','Recognition database']]) sourceFilter.append(new Option(label, value));
     const size = element('select'); size.setAttribute('aria-label', 'Cookie policies per page');
     for (const value of ['20','50','100','500','all']) size.append(new Option(value === 'all' ? 'All' : value, value));
     filters.append(search, actionFilter, sourceFilter, element('span', 'Show per page'), size);
@@ -83,9 +83,11 @@
       const base = resetRows.has(row.id) && row.inherited ? {...row, ...row.inherited, pending_behavior:true} : row;
       const draft = drafts.get(row.id) || [...drafts.values()].find(value => nameOf(value.match) === nameOf(base.match));
       if (draft) {
-        const value = {...base, ...draft, id:row.id, name: nameOf(draft.match), override: true, scope: model.scope, rule_id:draft.id};
+        const value = {...base, ...draft, id:row.id, name: nameOf(draft.match), override: true, active_rule:true, scope: model.scope, rule_id:draft.id};
         const renamed = nameOf(draft.match) !== nameOf(base.match);
-        value.pending_behavior = Boolean(row.unsaved_new) || renamed || draft.action !== base.action;
+        value.pending_behavior = Boolean(row.unsaved_new) || base.active_rule === false || renamed || draft.action !== base.action;
+        value.from_proposal = base.active_rule === false;
+        if (base.active_rule === false) { value.effective_action=draft.action; value.policy_behavior=ACTIONS[draft.action]?.[1] || ''; }
         if (renamed) Object.assign(value, {provider:'', category:'Custom cookie', proposal:null, confidence:'', sources:[], htmlEffect:'site-dependent', valid_match:undefined,
           reason:'This name was edited in this scope. Save & Apply resolves its matching default and protection rules.',
           policy_behavior:ACTIONS[draft.action]?.[1] || '', core_precedence:'Login, private sessions, cart contracts and origin private/no-store remain authoritative.', effective_action:draft.action});
@@ -105,6 +107,7 @@
         if (source === 'overrides' && !(row.override && row.scope === model.scope)) return false;
         if (source === 'bundled' && row.scope !== 'bundled') return false;
         if (source === 'central' && row.scope !== 'central') return false;
+        if (source === 'proposals' && row.active_rule !== false && !row.from_proposal) return false;
         if (source === 'custom' && !row.id.startsWith('custom:')) return false;
         if (source === 'recognition' && !row.id.startsWith('ocd:')) return false;
         return (!actionFilter.value || row.action === actionFilter.value) && (!term || [row.id, row.name, row.description, row.provider, row.category].join(' ').toLowerCase().includes(term));
@@ -144,6 +147,8 @@
         const statusLabel = element('small'); actionCell.append(statusLabel);
         const meta = element('td'), sourceLabel = element('strong'); meta.append(sourceLabel);
         const why = element('button', 'Why / precedence'); why.type = 'button'; why.className = 'wvw-cookie-why';
+        const activate = element('button', 'Use this proposal'); activate.type = 'button'; activate.title = 'Add this rule to the draft, then use Save & Apply to activate it.';
+        activate.addEventListener('click', () => { edit(row,{action:row.action}); render(); });
         const detailRow = element('tr'); detailRow.className = 'wvw-cookie-detail-row'; detailRow.hidden = !expanded.has(row.id);
         const detailsCell = element('td'); detailsCell.colSpan = 5;
         const details = element('div'); details.className = 'wvw-cookie-explanation'; details.id = 'wvw-cookie-explanation-' + rows.findIndex(value => value.id === row.id);
@@ -151,30 +156,33 @@
         why.addEventListener('click', () => { refreshExplanation(effective(rows.find(value => value.id === row.id))); detailRow.hidden = !detailRow.hidden; detailRow.hidden ? expanded.delete(row.id) : expanded.add(row.id); why.setAttribute('aria-expanded', String(!detailRow.hidden)); });
         function refreshExplanation(current) {
           sourceLabel.textContent = sourceName(current);
+          activate.hidden = current.active_rule !== false;
           why.setAttribute('aria-label', 'Why / precedence for ' + current.name);
           choice.setAttribute('aria-label', 'Cache action for ' + current.name);
           check.setAttribute('aria-label', 'Select cookie ' + current.name);
-          statusLabel.textContent = current.pending_behavior ? 'Unsaved choice' : current.effective_action && current.effective_action !== current.action ? 'Effective: ' + actionName(current.effective_action) : '';
+          statusLabel.textContent = current.pending_behavior ? 'Unsaved choice' : current.active_rule === false ? 'Proposal · save to activate' : current.effective_action && current.effective_action !== current.action ? 'Effective: ' + actionName(current.effective_action) : '';
           statusLabel.hidden = !statusLabel.textContent;
           details.replaceChildren(element('strong', current.name + ' · ' + actionName(current.action)));
-          details.append(element('p', 'Selected behavior: ' + (ACTIONS[current.action]?.[1] || current.policy_behavior || '')));
+          if (current.pending_behavior || current.active_rule === false || !current.policy_behavior || current.effective_action && current.effective_action !== current.action)
+            details.append(element('p', (current.active_rule === false ? 'Proposed behavior: ' : 'Selected behavior: ') + (ACTIONS[current.action]?.[1] || current.policy_behavior || '')));
           if (current.pending_behavior) details.append(element('p', 'This choice is not active yet. Save & Apply resolves its matching protections and applies it.'));
+          else if (current.active_rule === false) details.append(element('p', 'No table rule is active for this new recognition entry. Existing application and cache handling continues. Use this proposal or choose an action, then Save & Apply to activate a rule.'));
           else if (current.policy_behavior) details.append(element('p', 'Applied behavior: ' + current.policy_behavior));
-          for (const [label, value] of [['Source',sourceName(current)],['Effective behavior',current.pending_behavior ? null : actionName(current.effective_action || current.action)],['Provider', current.provider],['Category',current.category],['HTML effect',current.htmlEffect],['Assessment',current.confidence],['Reason',current.reason],['Precedence',current.core_precedence],['Default policy version',current.default_version]]) if (value) details.append(element('p', label + ': ' + value));
+          for (const [label, value] of [['Source',sourceName(current)],['Effective behavior',!current.pending_behavior && current.effective_action !== current.action ? actionName(current.effective_action) : null],['Provider', current.provider],['Category',current.category],['HTML effect',current.htmlEffect],['Assessment',current.confidence],[current.active_rule === false ? 'Proposal rationale' : 'Reason',current.reason],['Precedence',current.core_precedence],['Default policy version',current.default_version]]) if (value) details.append(element('p', label + ': ' + value));
           if (current.valid_match === false) details.append(element('p', 'This upstream pattern is recognition metadata. Edit it to a literal cookie name or trailing-star prefix before saving an explicit rule.'));
           for (const source of current.sources || []) { const text = typeof source === 'string' ? source : JSON.stringify(source); if (/^https?:\/\//i.test(text)) { const link = element('a', text); link.href = text; link.target = '_blank'; link.rel = 'noopener noreferrer'; details.append(link); } else details.append(element('p', text)); }
           const resetOne = element('button', 'Reset to inherited rule'); resetOne.type = 'button'; resetOne.title = reset.title; resetOne.addEventListener('click', () => { resetRow(row.id); render(); }); details.append(resetOne);
         }
         refreshExplanation(row);
-        meta.append(why); tr.append(meta); detailsCell.append(details); detailRow.append(detailsCell); body.append(tr, detailRow);
+        meta.append(why,activate); tr.append(meta); detailsCell.append(details); detailRow.append(detailsCell); body.append(tr, detailRow);
       }
       pageInfo.textContent = `${all.length} rows · Page ${page}/${pages}`;
       previous.disabled = page === 1; next.disabled = page === pages;
       previous.dataset.unavailable = page === 1 ? '1' : '0'; next.dataset.unavailable = page === pages ? '1' : '0';
       selectPage.checked = visible.length > 0 && visible.every(row => selected.has(row.id)); renderCount();
     }
-    function actionName(action) { return action === 'application-contract' ? 'Public HTML with verified private fragments; otherwise PASS' : ACTIONS[action]?.[0] || action || ''; }
-    function sourceName(row) { return row.scope === 'bundled' ? 'Bundled default' : row.scope === 'central' ? 'Central choice' : row.scope === 'site' ? 'Site choice' : row.override ? 'Saved override' : 'Bundled default'; }
+    function actionName(action) { return action === 'application-contract' ? 'Public HTML with verified private fragments; otherwise PASS' : action === 'existing-policy' ? 'Existing handling; no active table rule' : ACTIONS[action]?.[0] || action || ''; }
+    function sourceName(row) { return row.active_rule === false ? 'Recognition only · proposal' : row.scope === 'bundled' ? 'Bundled default' : row.scope === 'central' ? 'Central choice' : row.scope === 'site' ? 'Site choice' : row.override ? 'Saved override' : 'Bundled default'; }
     function renderCount() { count.textContent = selected.size + ' selected'; const visible = pagination().visible; selectPage.checked = visible.length > 0 && visible.every(row => selected.has(row.id)); }
     async function load(id, saving = false) {
       if (busy) return;

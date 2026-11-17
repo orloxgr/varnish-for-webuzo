@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from cookie_admin import normalize, resolve
+from cookie_admin import normalize, resolve, materialize, concrete
 
 PATH = '/wp-json/ultracache/v1/cookie-policy-control'
 HEADER = 'X-UltraCache-Cookie-Control-Signature'
@@ -32,6 +32,15 @@ def canonical(value):
 
 def snapshot(central=None, site=None):
     return {'schemaVersion': 1, 'central': normalize(central), 'site': normalize(site)}
+
+
+def materialized_snapshot(central=None, site=None):
+    """A connected target receives the exact native defaults plus overrides.
+
+    snapshot() intentionally remains an empty clear/rollback snapshot when
+    called without choices. Do not change that disconnect protocol.
+    """
+    return snapshot(materialize(central),concrete(site))
 
 
 def effective_digest(host, policy):
@@ -87,7 +96,7 @@ def cache_contract(value, host, aliases=(), central=None, site=None):
     configured=integration(value,host,aliases)
     if not configured['enabled']:
         return ''
-    return effective_digest(urllib.parse.urlsplit(configured['url']).hostname,snapshot(central,site))
+    return effective_digest(urllib.parse.urlsplit(configured['url']).hostname,materialized_snapshot(central,site))
 
 
 def request_signature(token, body, host, request_id, expires):

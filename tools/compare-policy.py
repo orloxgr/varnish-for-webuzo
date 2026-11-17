@@ -18,7 +18,7 @@ def main():
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
                  'shared/vcl/representations.vcl','shared/vcl/ultracache-esi.vcl',
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
-                 'shared/cookie_admin.py','shared/cookie_control.py','shared/cookie-assessments.json',
+                 'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
                  'shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_delivery.py','shared/cookie_recognition.py',
                  'shared/CONTRACT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
@@ -34,7 +34,8 @@ def main():
         if any(left.get(field)!=digests[name] for field,name in (
             ('policy_sha256','shared/cache-policy.vcl'),('cases_sha256','tests/shared_policy_cases.json'),
             ('catalogue_sha256','shared/cookie-policies.json'),('compiler_sha256','shared/cookie_catalogue.py'),
-            ('source_loader_sha256','shared/vcl_source.py'),('admin_module_sha256','shared/cookie_admin.py'),
+            ('source_loader_sha256','shared/vcl_source.py'),('admin_module_sha256','shared/cookie_admin.py'),('defaults_sha256','shared/cookie-defaults.json'),
+            ('defaults_module_sha256','shared/cookie_defaults.py'),
             ('delivery_module_sha256','shared/cookie_delivery.py'))):
             raise SystemExit('The reports do not test these source files')
         modules = {name.removeprefix('shared/'): value for name, value in digests.items()

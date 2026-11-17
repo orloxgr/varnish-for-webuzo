@@ -13,7 +13,7 @@ def configuration(value, site):
 
 
 def snapshot(config, site):
-    return cookie_control.snapshot(config.get('cookie_policies'), site.get('cookie_policies'))
+    return cookie_control.materialized_snapshot(config.get('cookie_policies'), site.get('cookie_policies'))
 
 
 def operation(site, integration, policy, kind='apply'):
@@ -35,7 +35,8 @@ def plan(previous, following, force_sites=()):
         if switched:
             # Disconnect explicitly restores the application's baseline first.
             operations.append(operation(old, before, cookie_control.snapshot(), 'disconnect'))
-        changed=old is None or cookie_admin.executable(previous.get('cookie_policies'),old.get('cookie_policies'))!=cookie_admin.executable(following.get('cookie_policies'),site.get('cookie_policies'))
+        changed=(previous.get('cookie_defaults_version')!=following.get('cookie_defaults_version') or old is None or
+                 cookie_admin.executable(previous.get('cookie_policies'),old.get('cookie_policies'))!=cookie_admin.executable(following.get('cookie_policies'),site.get('cookie_policies')))
         if selected['enabled'] and (identity in force_sites or not before['enabled'] or switched or changed):
             operations.append(operation(site, selected, snapshot(following, site)))
     return operations

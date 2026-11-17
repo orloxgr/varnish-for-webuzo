@@ -69,14 +69,15 @@ class NativeFbpProvider(unittest.TestCase):
     def test_consent_unknown_accept_reject_revoke_and_revisit(self):
         calls = []
         def origin(path, headers):
-            calls.append(path)
+            calls.append(headers.get('Cookie'))
             return 'public', [('Cache-Control','public, max-age=120')]
         with proxy('basic', origin, delivery=ENABLED) as get:
-            for consent, allowed in [(None,False), ('allow',True), ('deny',False),
-                                     ('allow',True), ('deny',False), (None,False)]:
+            for consent, allowed, expected in [(None,False,'MISS'), ('allow',True,'MISS'), ('deny',False,'MISS'),
+                                               ('allow',True,'HIT'), ('deny',False,'HIT'), (None,False,'HIT')]:
                 _, fields, _ = get('/page', 'cmplz_marketing='+consent if consent else None)
+                self.assertEqual(dict(fields)['X-Cache'],expected)
                 self.assertEqual(bool(cookies(fields)), allowed)
-            self.assertEqual(calls, ['/page'])
+            self.assertEqual(calls, [None,'cmplz_marketing=allow','cmplz_marketing=deny'])
 
     def test_origin_renewals_deletions_and_other_cookie_fields_win_unchanged(self):
         def origin(path, headers):
@@ -160,11 +161,15 @@ class NativeFbpProvider(unittest.TestCase):
         with proxy('basic', origin, delivery=ENABLED) as get:
             get('/page')
             _, fields, _ = get('/page','cmplz_marketing=allow; wc_facebook_signals_state=held')
-            self.assertEqual(dict(fields)['X-Cache'],'HIT')
+            self.assertEqual(dict(fields)['X-Cache'],'MISS')
             self.assertEqual(cookies(fields),[])
             self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:provider-held')
             self.assertEqual(dict(fields)['X-Cache-Cookie-Names'],'wc_facebook_signals_state')
             self.assertEqual(dict(fields)['Cache-Control'],'public, max-age=120')
+            _,fields,_=get('/page','cmplz_marketing=allow')
+            self.assertEqual(dict(fields)['X-Cache'],'HIT')
+            self.assertEqual(len(cookies(fields)),1)
+            self.assertEqual(dict(fields)['X-Cache-Cookie-Delivery'],'fbp:independent')
 
     def test_basic_respects_an_available_authoritative_provider_endpoint(self):
         def origin(path, headers):

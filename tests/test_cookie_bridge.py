@@ -19,6 +19,17 @@ def site(enabled=False,url=None):
 
 
 class NativeBridgePlan(unittest.TestCase):
+    def test_defaults_upgrade_syncs_concrete_bundle_and_preserves_explicit_site_choice(self):
+        before={'cookie_defaults_version':'previous','sites':{'a'*32:site(True)}}
+        after=copy.deepcopy(before);after['cookie_defaults_version']='current'
+        operations=bridge.plan(before,after)
+        self.assertEqual(len(operations),1)
+        snapshot=operations[0]['policy']
+        self.assertEqual(snapshot,bridge.cookie_control.materialized_snapshot(None,settings()))
+        self.assertGreater(len(snapshot['central']['rules']),2000)
+        self.assertEqual(snapshot['site'],settings())
+        self.assertTrue(all(rule['action'] in ('shared','variant','private') for scope in ('central','site') for rule in snapshot[scope]['rules']))
+
     def test_disabled_connection_never_instantiates_an_http_client(self):
         before={'sites':{'a'*32:site()}}; after=copy.deepcopy(before);after['sites']['a'*32]['cookie_policies']=settings('variant')
         with patch.object(bridge.cookie_control,'Client') as client:

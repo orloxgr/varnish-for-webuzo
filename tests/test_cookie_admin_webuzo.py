@@ -54,13 +54,44 @@ class NativeScope(unittest.TestCase):
     def request(self, action='cookie_policies_status', actor='account_a', **extra):
         return engine.action(dict(actor=actor, admin=actor == 'root', action=action, **extra))
 
+    def row_id(self,name):
+        return next(row['id'] for row in self.request()['cookie_policies']['rows'] if row['name']==name)
+
+    def test_bundled_rules_remain_active_when_recognition_snapshot_has_no_rows(self):
+        view=self.request()['cookie_policies']
+        self.assertGreater(len(view['rows']),2000)
+        self.assertTrue(all(row['active_rule'] and row['scope']=='bundled' and row['action'] in ('shared','variant','private') for row in view['rows']))
+        self.assertEqual(view['settings']['rules'],[])
+
+    def test_new_recognition_metadata_is_visible_without_claiming_an_executed_rule(self):
+        database={'revision':'new','records':[dict(id='new',name='new_unbundled_cookie_17',provider='',wildcard=False)]}
+        with patch.object(cookie_views.recognition.cookie_recognition,'database',return_value=database):
+            rows=self.request()['cookie_policies']['rows']
+        row=next(row for row in rows if row['name']=='new_unbundled_cookie_17')
+        self.assertEqual((row['action'],row['scope'],row['active_rule'],row['effective_action']),('variant','recognition',False,'existing-policy'))
+        self.assertGreater(len(rows),2000)
+
+    def test_legacy_automatic_is_concrete_in_editor_without_rewriting_saved_snapshot(self):
+        previous=engine.settings();previous['sites'][self.first['id']]['cookie_policies']=choices('automatic','unknown_legacy_cookie_17')
+        state.save(engine.SETTINGS,previous);before=engine.SETTINGS.read_bytes()
+        view=self.request()['cookie_policies']
+        self.assertEqual(view['settings']['rules'][0]['action'],'variant')
+        self.assertEqual(engine.SETTINGS.read_bytes(),before)
+
     def test_owner_sees_only_native_owned_sites_and_no_credentials(self):
         value = self.request()['cookie_policies']
         self.assertEqual([s['id'] for s in value['sites']], [self.first['id']])
         self.assertEqual(value['id'], self.first['id'])
         self.assertEqual(value['scope'], 'site')
         self.assertFalse(value['administrator'])
-        self.assertNotIn('token', json.dumps(value))
+        def assert_public_fields(item):
+            if isinstance(item,dict):
+                self.assertTrue(set(item).isdisjoint({'token','home','uid','gid','credential_roots','custom_domains'}))
+                for entry in item.values():assert_public_fields(entry)
+            elif isinstance(item,list):
+                for entry in item:assert_public_fields(entry)
+        assert_public_fields(value)
+        self.assertNotIn(self.first['token'],json.dumps(value))
         with self.assertRaisesRegex(ValueError, 'not available'):
             self.request(id=self.second['id'])
 
@@ -138,8 +169,9 @@ class NativeScope(unittest.TestCase):
                 self.assertIn('without that application contract it also passes',row['core_precedence'])
 
     def test_saved_cart_rename_reset_keeps_the_inherited_profile_explanation(self):
-        self.request('cookie_policies_save',id=self.first['id'],settings=choices('shared','campaign_id',identity='policy:woocommerce-cart-hash'))
-        row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='policy:woocommerce-cart-hash')
+        identity=self.row_id('woocommerce_cart_hash')
+        self.request('cookie_policies_save',id=self.first['id'],settings=choices('shared','campaign_id',identity=identity))
+        row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']==identity)
         self.assertEqual(row['effective_action'],'shared')
         self.assertEqual(row['reset_metadata']['effective_action'],'private')
         self.assertEqual(row['inherited']['effective_action'],'private')
@@ -149,9 +181,10 @@ class NativeScope(unittest.TestCase):
     def test_ultracache_explicit_private_cart_passes_entire_request_and_reset_restores_esi_metadata(self):
         previous=engine.settings();previous['sites'][self.first['id']]['profile']='ultracache'
         state.save(engine.SETTINGS,previous)
-        self.request('cookie_policies_save',id=self.first['id'],settings=choices('private','woocommerce_cart_hash',identity='policy:woocommerce-cart-hash'))
+        identity=self.row_id('woocommerce_cart_hash')
+        self.request('cookie_policies_save',id=self.first['id'],settings=choices('private','woocommerce_cart_hash',identity=identity))
         before=engine.SETTINGS.read_bytes()
-        row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='policy:woocommerce-cart-hash')
+        row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']==identity)
         self.assertEqual((row['action'],row['effective_action']),('private','private'))
         self.assertIn('passes the entire request',row['core_precedence'])
         self.assertEqual(row['reset_metadata']['effective_action'],'application-contract')
@@ -245,7 +278,15 @@ class PolicyTransactions(unittest.TestCase):
 
     def configuration(self):
         sites = {row['id']:row for row in (account(),account('c','other.test','account_b'))}
-        return dict(installed=True,sites=sites,gateway='e'*64,origin='f'*64,proxy_timeouts=native.proxy_timeouts())
+        return dict(installed=True,sites=sites,gateway='e'*64,origin='f'*64,proxy_timeouts=native.proxy_timeouts(),
+                    cookie_defaults_version=cookie_views.default_version())
+
+    def test_bundle_upgrade_invalidates_enabled_sites_and_records_current_version(self):
+        previous=self.configuration();previous['cookie_defaults_version']='previous-bundle'
+        following=copy.deepcopy(previous);service.ACTIVE.write_text('previous VCL')
+        _,_,purge=self.apply_settings(previous,following)
+        self.assertEqual({call.args[0]['id'] for call in purge.call_args_list},set(previous['sites']))
+        self.assertEqual(engine.settings()['cookie_defaults_version'],cookie_views.default_version())
 
     def test_site_rule_invalidates_only_its_enabled_site(self):
         previous = self.configuration(); following = copy.deepcopy(previous)
@@ -392,6 +433,21 @@ class PolicyTransactions(unittest.TestCase):
 class NativeCookieRules(unittest.TestCase):
     run_policy = http.NativeProfiles.run_policy
 
+    def test_bundled_defaults_share_tracking_vary_consent_and_pass_private_session(self):
+        for profile in ('basic','ultracache'):
+            with self.subTest(profile=profile):
+                self.run_policy(profile,
+                    [http.origin('/page','public',expect=['expect req.http.Cookie == <undef>']),
+                     http.origin('/page','consent-a'),http.origin('/page','consent-b'),
+                     http.origin('/page','private-session')],
+                    [http.get('/page','public',cache='MISS'),
+                     http.get('/page','public',['Cookie: __hstc=one'],cache='HIT'),
+                     http.get('/page','public',['Cookie: __hstc=two'],cache='HIT'),
+                     http.get('/page','consent-a',['Cookie: __hstc=three; cookieyes-consent=A'],cache='MISS'),
+                     http.get('/page','consent-b',['Cookie: __hstc=four; cookieyes-consent=B'],cache='MISS'),
+                     http.get('/page','consent-a',['Cookie: __hstc=five; cookieyes-consent=A'],cache='HIT'),
+                     http.get('/page','private-session',['Cookie: JSESSIONID=private'],cache='PASS')])
+
     def test_connected_old_shared_policy_keeps_origin_cookie_vary_when_digest_changes(self):
         original=http.site;rules=choices('shared','site_currency')
         connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
@@ -413,7 +469,7 @@ class NativeCookieRules(unittest.TestCase):
     def test_connected_matching_shared_policy_has_a_digest_and_reuses_shared_html(self):
         original=http.site;rules=choices('shared','site_currency')
         connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
-        expected=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.snapshot(rules))
+        expected=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.materialized_snapshot(rules))
         self.assertEqual(cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules),expected)
         def connected(*args,**kwargs):
             row=original(*args,**kwargs)
@@ -498,7 +554,7 @@ class NativeCookieRules(unittest.TestCase):
 
     def test_client_cannot_forge_a_policy_contract_on_an_unconnected_site(self):
         rules=choices('variant','site_currency')
-        digest=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.snapshot(rules))
+        digest=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.materialized_snapshot(rules))
         headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+digest,'X-UltraCache-Cookie-Vary: policy-only']
         for profile in ('basic','ultracache'):
             with self.subTest(profile=profile):

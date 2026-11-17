@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
 import cookie_admin
+import cookie_defaults
 from cookie_catalogue import load_catalogue
 import recognition
 import state
@@ -16,6 +17,10 @@ EMPTY = {'schemaVersion': 1, 'rules': []}
 
 def normalize(value):
     return cookie_admin.normalize(EMPTY if value is None else value)
+
+
+def default_version():
+    return cookie_defaults.bundle()[1]['version']
 
 
 def administrator(request):
@@ -49,7 +54,7 @@ def scope(request, sites, saving=False):
 
 
 def rules(config, site=None):
-    return cookie_admin.resolve(normalize(config.get('cookie_policies')),
+    return cookie_admin.active(normalize(config.get('cookie_policies')),
                                 normalize(site.get('cookie_policies')) if site else None)
 
 
@@ -72,12 +77,15 @@ def explain_cart_precedence(metadata, match, profile, catalogue, selected_action
     if profile=='basic':
         metadata['effective_action']='private'
         metadata['core_precedence']+='Basic passes this cart/session request to the application.'
+        metadata['policy_behavior']='Basic sends requests carrying this WooCommerce cart/session cookie to the application (PASS).'
     elif selected_action=='private':
         metadata['effective_action']='private'
         metadata['core_precedence']='The explicit Private choice passes the entire request before optional UltraCache ESI sharing.'
+        metadata['policy_behavior']='The explicit Private choice sends the entire request, including its HTML, to the application (PASS).'
     else:
         metadata['effective_action']='application-contract'
         metadata['core_precedence']+='Basic passes this cart/session request. UltraCache shares only an approved ESI parent with private fragments; without that application contract it also passes.'
+        metadata['policy_behavior']='Basic uses PASS. UltraCache shares the HTML only with a verified private-fragment contract; otherwise it also uses PASS.'
 
 
 def view(config, sites, request):
@@ -97,7 +105,7 @@ def view(config, sites, request):
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])
-        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior') if key in fallback})
+        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior','active_rule') if key in fallback})
                             if fallback else None)
     integration=None; integration_error=site.get('cookie_integration_notice','') if site else ''
     precedence=[]
@@ -114,7 +122,7 @@ def view(config, sites, request):
         administrator=admin, id=identity, scope='central' if identity is None and admin else 'site',
         sites=[{key: row[key] for key in ('id', 'domain', 'owner', 'enabled', 'profile', 'error')}
                for row in visible.values()],
-        settings=copy.deepcopy(central if identity is None and admin else local or EMPTY),
+        settings=cookie_admin.concrete(central if identity is None and admin else local or EMPTY),
         rows=rows if site is not None or admin else [],
         enabled=bool(config.get('installed')) and (bool(site.get('enabled')) if site else admin),
         profile=site.get('profile') if site else None,

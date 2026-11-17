@@ -117,6 +117,7 @@ def recover():
         restore(journal);JOURNAL.unlink()
 
 def apply(previous,next_config,cookie_force_sites=()):
+    next_config['cookie_defaults_version']=cookie_views.default_version()
     if next_config.get('installed'):next_config['proxy_timeouts']=native.proxy_timeouts()
     changes=[change for change in plans(previous,next_config) if change['before']!=change['after']]
     content=policy.render(next_config['sites'],next_config['gateway'],next_config['origin'],next_config)
@@ -125,7 +126,8 @@ def apply(previous,next_config,cookie_force_sites=()):
     cookie_purge_sites=[]
     for sid,site in next_config['sites'].items():
         old=previous.get('sites',{}).get(sid,{})
-        changed=cookie_views.executable(previous,old)!=cookie_views.executable(next_config,site)
+        changed=(previous.get('cookie_defaults_version')!=next_config.get('cookie_defaults_version') or
+                 cookie_views.executable(previous,old)!=cookie_views.executable(next_config,site))
         changed=changed or cookie_bridge.configuration(old.get('cookie_integration'),old or site)!=cookie_bridge.configuration(site.get('cookie_integration'),site)
         if changed and site.get('enabled'):cookie_purge_sites.append(sid)
     journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None,
@@ -183,6 +185,7 @@ def reload_servers():
 
 def apply_cookie_only(previous,config,cookie_force_sites=()):
     """A retained panel can sync WordPress without installing/starting a proxy."""
+    config['cookie_defaults_version']=cookie_views.default_version()
     operations=cookie_bridge.plan(previous,config,cookie_force_sites)
     journal=dict(previous=previous,changes=[],active_before=None,old_vcl=None,
                  cookie_operations=operations,local_started=False,cookie_purge_sites=[])

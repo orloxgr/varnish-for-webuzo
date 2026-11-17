@@ -9,14 +9,19 @@
 | URL and representation keys | `scp_key`, called from native `vcl_hash` |
 | Private fragments and nonces | UltraCache shared ESI subroutines; Basic remains independent |
 | Independent Meta delivery | `shared/cookie_delivery.py` generates per-host settings; common delivery subroutines execute them |
-| Reviewed recommendations | `shared/cookie-policies.json`, validated by `shared/cookie_catalogue.py` |
+| Concrete bundled defaults | `shared/cookie_defaults.py`, `shared/cookie-assessments.json` and generated `shared/cookie-defaults.json` |
+| Core login/cart roles | `shared/cookie-policies.json`, validated by `shared/cookie_catalogue.py` |
 | Recognition metadata | `shared/cookie_recognition.py`, local persistent snapshot and bundled fallback |
 | Native site ownership | `src/native.py::collect`, Webuzo users/domains inventory and Unix identity |
 | Settings and rollback | `src/engine.py`, root-private settings and transaction journal |
 | Deployment | `src/service.py`, complete candidate VCL, native load/use, retained active startup VCL |
 
 Recognition categories alone do not grant a cache rule or a cookie issuer.
-The spreadsheet uses shared assessed recommendations and explicit saved choices.
+Every bundled cookie has a concrete Shared, Variant or Private rule. Explicit
+central and site choices override these defaults within the existing core
+privacy checks. Daily recognition updates cannot silently change executable
+rules: missing upstream entries retain their bundled rules, and newly discovered
+names without a bundled match are labelled as proposals until explicitly saved.
 
 ## Native account boundary
 
@@ -53,6 +58,9 @@ Reset removes the choice from the current scope and restores its inherited rule.
 CSV exports Cookie, Description and Action columns, which can be pasted back
 without exposing internal IDs. Pasting an existing literal match updates its
 existing local choice rather than creating conflicting duplicate rules.
+Legacy Automatic snapshots are displayed and executed as concrete decisions;
+reading the editor does not rewrite the stored snapshot. A new recognition-only
+row has a **Use this proposal** button to add its choice to the draft.
 
 Sites with identical local cookie snapshots share one compiled rule body in the
 native VCL. Their host and cache identities remain separate.
@@ -65,6 +73,17 @@ aliases and the fixed `/wp-json/ultracache/v1/cookie-policy-control` path. The
 existing site purge token authenticates both request and response. Normal
 inventory reads do not contact WordPress; an explicit Save also checks for
 application drift when the local snapshot is unchanged.
+
+The optional connection requires a compatible UltraCache consumer for the full
+bundled snapshot and literal cookie matches. Advertising the older scoped-policy
+capability alone does not establish that compatibility. The native Varnish
+profiles continue to work independently of this optional connection.
+
+The application receives the concrete bundled rules plus central/site choices
+in the existing signed snapshot schema. Disconnect still sends an empty snapshot
+to restore the application baseline. A successful bundled-policy upgrade records
+its version, resynchronizes connected targets and invalidates the affected site
+caches through the existing transaction.
 
 If the native inventory removes a connection's hostname from the site, that
 persisted connection is disabled without contacting its former endpoint. A new

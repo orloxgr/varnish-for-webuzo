@@ -50,6 +50,8 @@ def main():
     report=dict(policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
         policy_modules=manifest(),
         source_loader_sha256=hashlib.sha256(policy.with_name('vcl_source.py').read_bytes()).hexdigest(),
+        defaults_sha256=hashlib.sha256(policy.with_name('cookie-defaults.json').read_bytes()).hexdigest(),
+        defaults_module_sha256=hashlib.sha256(policy.with_name('cookie_defaults.py').read_bytes()).hexdigest(),
         admin_module_sha256=hashlib.sha256(policy.with_name('cookie_admin.py').read_bytes()).hexdigest(),
         catalogue_sha256=hashlib.sha256(policy.with_name('cookie-policies.json').read_bytes()).hexdigest(),
         compiler_sha256=hashlib.sha256(policy.with_name('cookie_catalogue.py').read_bytes()).hexdigest(),

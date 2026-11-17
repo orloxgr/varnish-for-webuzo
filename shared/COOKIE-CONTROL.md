@@ -52,6 +52,28 @@ a fresh expiry/MAC; the transaction request ID remains stable across retries.
 No visitor cookie values, issuance permission or public-cache approval comes
 from this transport. Public browser headers cannot impersonate it.
 
+## Materialized defaults without a wire-schema change
+
+For connected apply, native adapters call `materialized_snapshot(central,site)`:
+`central` contains versioned bundled defaults underneath explicit admin choices;
+`site` contains concrete site choices. Rule fields and schema 1 are unchanged.
+Descriptions and provenance remain outside execution/digest semantics. The same
+resolved rule list is compiled natively and executed by the application.
+`shared/cookie-defaults.json` supplies the standalone application's identical
+bundled rules. A panel-managed committed snapshot remains authoritative until
+the next ordinary signed commit, even if application code has newer defaults.
+
+`automatic` remains accepted for old snapshots/recovery. New native targets
+materialize it to an identical/covering bundled match or Variant, never the first
+child of a prefix. New editors offer Shared/Variant/Private only. Unicode match
+lengths sort by UTF-8 bytes in all consumers. Literal names must be nonempty,
+trimmed and exclude controls/DEL, ; = double quotes and braces; every consumer
+escapes literals for its own language (including Apache argument whitespace).
+
+`snapshot()` with no choices still means an actual empty clear/disconnect;
+never inject bundled rules into that recovery operation. Standalone behavior
+resumes according to the application's normal unmanaged rules after a clear.
+
 ## Digests and authenticated replies
 
 The effective digest is SHA256 of canonical JSON with sorted keys, compact
