@@ -74,20 +74,18 @@ discovery. SQL runs under the hosting UID, using application credentials.
 Failed metadata refreshes retain previously discovered routes for the same
 document root and display a notice. Additional bypass paths cover custom routes.
 
-Joomla's opaque session is checked against its current guest/authenticated state
-before aggressive warm lookup. The owned local resolver drops to the hosting
-UID for every configuration/SQL read and does not cache authentication results.
-Core `csrf.token` JSON fields are delivered privately through a local ESI fragment
-while the common parent HTML can HIT. The first fetching visitor receives its
-original token/cookies; subsequent visitors obtain their own token through
-Joomla's native component endpoint on the native Apache bridge. Provider cookies
-are handed to that request only. Actual token-bearing forms retain their origin
-response (`joomla-session-form`). A token-provider failure falls back to the
-original origin HTML (`joomla-token-unavailable` or the precise helper reason).
-No session identifiers are fabricated, no application database writes are made
-by the addon, and the helper does not expose Varnish administration to the site.
-The assembled personal token/cookie delivery is private; the cached template
-contains no visitor's token or response cookie values.
+Aggressive public HIT executes entirely inside Varnish. There is no CMS helper
+service, request-time database lookup, PHP token provider or Joomla HTML filter.
+The recognized Joomla session-cookie name is read statically on panel refresh.
+Its opaque value does not force PASS in aggressive mode; known login markers,
+private actions and explicit administrator Private/Variant choices still apply.
+HTML, including Joomla token values, is left unchanged. This is an explicit
+best-effort public-page override, without per-session token/auth reconstruction.
+Application-specific corrections remain explicit site choices. The separate
+Joomla application plugin is not part of this server addon.
+
+Upgrading retires the addon-owned former CMS service/configuration and removed
+runtime sources after the helper-free VCL has been successfully activated.
 
 Each site has one profile selected in its own row:
 

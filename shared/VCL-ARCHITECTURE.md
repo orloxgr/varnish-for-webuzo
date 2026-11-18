@@ -9,10 +9,10 @@ continues to own the native control protocol.
 
 `vcl_source.expand()` resolves these owned files during generation, before
 reviewed cookie-name substitution. Both panel adapters publish a single complete
-VCL program. There are no runtime VCL file references. Opt-in Joomla aggressive
-mode uses the owned local CMS helper for fresh session classification and,
-when needed, per-visitor native application token delivery. SQL/config reads
-run as the hosting UID; the helper never caches authentication results.
+VCL program. There are no runtime VCL file references. Aggressive admission,
+cookie keys and CMS route matching run inside Varnish. Its public HIT has no
+CMS service, session SQL, token provider, body filter or additional HTTP calls.
+Static cookie/CMS discovery is performed by the panel adapter during refresh.
 
 This choice preserves the existing transactional deployment: the content digest
 covers all expanded module bytes, `vcl.load` compiles the whole program before

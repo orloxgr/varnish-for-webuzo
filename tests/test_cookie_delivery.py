@@ -90,6 +90,10 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None):
                         connection.close()
 
                 get.endpoint=('127.0.0.1',port)
+                def stop_origin():
+                    origin.shutdown();origin.server_close();thread.join(timeout=5)
+                get.stop_origin=stop_origin
+                get.origin_endpoint=('127.0.0.1',origin.server_port)
                 try:
                     yield get
                 finally:

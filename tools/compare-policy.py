@@ -14,11 +14,11 @@ def main():
     if bool(args.left_report)!=bool(args.right_report):parser.error('Supply both parity reports together')
     root=Path(__file__).resolve().parents[1]
     digests={}
-    for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native/joomla_forms.h','shared/native_build.py',
+    for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native_build.py',
                  'shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
                  'shared/vcl/aggressive.vcl','shared/vcl/cms-routes.vcl',
-                 'shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py','shared/cms_sessions.py','shared/cms_session_server.py',
+                 'shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py','shared/cms_cookies.py',
                  'shared/vcl/representations.vcl','shared/vcl/ultracache-esi.vcl',
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
                  'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
@@ -49,7 +49,7 @@ def main():
         if left.get('handoff_sources') != handoff:
             raise SystemExit('The reports do not test the current native cookie handoff')
         cms={name.removeprefix('shared/'):value for name,value in digests.items() if name in
-             ('shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py','shared/cms_sessions.py','shared/cms_session_server.py')}
+             ('shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py','shared/cms_cookies.py')}
         if left.get('cms_sources')!=cms:raise SystemExit('The reports do not test the current CMS policy sources')
         cases=json.loads((root/'tests/shared_policy_cases.json').read_text(encoding='utf-8'))
         expected=[dict(case=case['name'],profile=profile,result='passed') for profile in ('basic','ultracache')

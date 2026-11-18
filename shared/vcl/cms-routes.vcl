@@ -21,15 +21,5 @@ sub scp_cms_recv {
         set req.http.X-SCP-Reason = "joomla-authenticated-session";
         return (pass);
     }
-    if (req.http.X-SCP-CMS == "joomla" && req.http.X-SCP-Aggressive == "1" &&
-        req.http.Cookie ~ "(^|;[[:blank:]]*)[0-9a-fA-F]{32}=") {
-        set req.http.X-SCP-Session-State = cookie_handoff.session_state(
-            req.http.X-SCP-Session-Socket, req.http.X-SCP-Session-Site, req.url,
-            req.http.Cookie, std.duration(req.http.X-SCP-Session-Timeout, 0s));
-        if (req.http.X-SCP-Session-State !~ "^guest[[:blank:]]") {
-            set req.http.X-SCP-Reason = regsub(req.http.X-SCP-Session-State, "^[^[:blank:]]+[[:blank:]]", "");
-            return (pass);
-        }
-    }
 }
 @@CMS_NORMALIZATION@@

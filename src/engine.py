@@ -23,7 +23,6 @@ import cookie_execution
 import cms_discovery
 import aggressive
 import cms_inventory
-import cms_resolver
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -42,11 +41,11 @@ def inventory(config,discover=False,discover_id=None):
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
         site.update(aggressive.settings(previous))
         if (discover or sid==discover_id) and site.get('path'):
-            site['cms_installations'],site['cms_discovery_notices'],site['cms_sessions']=cms_inventory.discover(site,previous)
+            site['cms_installations'],site['cms_discovery_notices'],site['cms_cookies']=cms_inventory.discover(site,previous)
         else:
             site['cms_installations']=copy.deepcopy(previous.get('cms_installations',[]))
             site['cms_discovery_notices']=copy.deepcopy(previous.get('cms_discovery_notices',[]))
-            site['cms_sessions']=copy.deepcopy(previous.get('cms_sessions',[]))
+            site['cms_cookies']=copy.deepcopy(previous.get('cms_cookies',[]))
         if site['cookie_integration'] is not None:
             site['cookie_integration'],revoked=cookie_bridge.cookie_control.reconcile_integration(site['cookie_integration'],site['domain'],site['names'])
             if revoked or previous.get('cookie_integration_notice'):
@@ -107,7 +106,6 @@ def restore(journal):
         if journal['changes']:reload_servers()
         if not journal['previous'].get('installed'):service.stop()
         journal['local_started']=False;state.save(JOURNAL,journal)
-    if journal.get('cms_resolver_before') is not None:cms_resolver.restore(journal['cms_resolver_before'])
     cookie_bridge.rollback(journal,lambda value:state.save(JOURNAL,value))
     newer=cookie_bridge.preserved_newer(journal)
     if newer:state.save(state.ROOT/'last-cookie-rollback.json',{'preserved_newer_application_policy':newer})
@@ -145,10 +143,8 @@ def apply(previous,next_config,cookie_force_sites=()):
         if changed and site.get('enabled'):cookie_purge_sites.append(sid)
     journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None,
                  cookie_operations=cookie_bridge.plan(previous,next_config,cookie_force_sites),cookie_purge_sites=cookie_purge_sites,cookie_activation_attempted=False,local_started=False,runtime_before=runtime_before)
-    if cms_resolver.selected(previous) or cms_resolver.selected(next_config):journal['cms_resolver_before']=cms_resolver.snapshot()
     state.save(JOURNAL,journal)
     try:
-        cms_resolver.prepare(next_config)
         cookie_bridge.prepare(journal,lambda value:state.save(JOURNAL,value))
         journal['cookie_purge_sites']=sorted(set(journal['cookie_purge_sites'])|{item['site'] for item in journal['cookie_operations'] if item['base_digest']!=item['target_digest']})
         cookie_purge_sites=journal['cookie_purge_sites'];state.save(JOURNAL,journal)
@@ -171,7 +167,7 @@ def apply(previous,next_config,cookie_force_sites=()):
                 old=previous.get('sites',{}).get(sid,{})
                 changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','bypass','names','recv_vcl','backend_vcl'))
                 changed=changed or old.get('cms_installations',[])!=site.get('cms_installations',[])
-                changed=changed or old.get('cms_sessions',[])!=site.get('cms_sessions',[])
+                changed=changed or old.get('cms_cookies',[])!=site.get('cms_cookies',[])
                 changed=changed or aggressive.settings(old)!=aggressive.settings(site)
                 changed=changed or execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'))
                 changed=changed or sid in cookie_purge_sites
@@ -187,7 +183,6 @@ def apply(previous,next_config,cookie_force_sites=()):
         else:
             journal['local_started']=True;state.save(JOURNAL,journal)
             service.stop()
-        if journal.get('cms_resolver_before') is not None:cms_resolver.finish(next_config)
         state.save(SETTINGS,next_config);JOURNAL.unlink()
     except Exception:
         restore(journal);JOURNAL.unlink()

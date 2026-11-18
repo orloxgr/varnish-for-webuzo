@@ -38,9 +38,9 @@ class Descriptors(unittest.TestCase):
 from pathlib import Path
 sys.path.insert(0,sys.argv[1])
 from cms_discovery import read_literal
-from cms_sessions import joomla_settings
+from cms_cookies import joomla_name
 root=Path(sys.argv[2]); parent=Path(sys.argv[3])
-assert len(joomla_settings(root))==32
+assert len(joomla_name(root))==32
 for base,relative in [(parent/'linked','configuration.php'),(root,'linked.php'),(root,'no-search/configuration.php'),(root,'unreadable.php'),(root,'libraries')]:
     try: read_literal(base,relative)
     except (OSError,ValueError): pass

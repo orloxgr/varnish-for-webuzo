@@ -32,11 +32,13 @@ class NativeActivation(unittest.TestCase):
         self.handoff=self.enterContext(patch.object(repository,'ensure_cookie_handoff'))
         self.features=self.enterContext(patch.object(service,'configure_esi'))
         self.recognition=self.enterContext(patch.object(recognition,'install'))
+        self.retirement=self.enterContext(patch.object(lifecycle,'retire_cms_helper'))
 
     def test_fresh_activation_provisions_panel_without_installing_service(self):
         with patch.object(engine,'action') as action:lifecycle.install()
         action.assert_not_called();self.modules.assert_not_called();self.handoff.assert_not_called();self.features.assert_not_called()
         self.recognition.assert_called_once()
+        self.retirement.assert_called_once()
 
     def test_existing_service_reconciles_after_provisioning_lock_is_released(self):
         state.save(state.ROOT/'settings.json',{'installed':True})
@@ -55,6 +57,7 @@ class NativeActivation(unittest.TestCase):
         with patch.object(engine,'action',side_effect=RuntimeError('Existing application policy is incompatible')):
             with self.assertRaisesRegex(RuntimeError,'application policy is incompatible'):lifecycle.install()
         self.assertEqual((state.ROOT/'settings.json').read_bytes(),before)
+        self.retirement.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

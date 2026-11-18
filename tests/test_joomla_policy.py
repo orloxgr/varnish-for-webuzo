@@ -1,73 +1,58 @@
-"""A warm public object must never bypass a fresh opaque-session auth check."""
-import json
-import os
-from pathlib import Path
+"""Opt-in Joomla HTML is unchanged and public HIT needs no external work."""
 import shutil
 import socket
-import sys
-import tempfile
-import threading
 import unittest
 from unittest.mock import patch
 import test_profiles as http
-import cms_resolver
+from test_cookie_delivery import proxy,cookies
 
 COOKIE='0123456789abcdef0123456789abcdef'
+TOKEN='fedcba9876543210fedcba9876543210'
 
 
-@unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0 and shutil.which('varnishtest'),'Native Linux/root Varnish required')
+@unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required')
 class JoomlaPolicy(unittest.TestCase):
-    run_policy=http.NativeProfiles.run_policy
+    def selected(self,*args,**kwargs):
+        row=self.original(*args,**kwargs)
+        if row['domain']=='example.test':
+            row.update(aggressive=True,aggressive_ttl=86400,cms_installations=[dict(cms='joomla',base='/')],
+                       cms_cookies=[dict(cms='joomla',base='/',cookie_name=COOKIE,supported=True)])
+        return row
 
-    def broker(self,profile,answers,responses,requests,private=False):
-        with tempfile.TemporaryDirectory(prefix='cms-broker-policy-') as temporary:
-            folder=Path(temporary);folder.chmod(0o755);path=folder/'sessions.sock'
-            listener=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-            listener.bind(str(path));path.chmod(0o666);listener.listen();listener.settimeout(10)
-            received=[];errors=[]
-            def serve():
-                try:
-                    for answer in answers:
-                        connection,_=listener.accept()
-                        with connection:
-                            received.append(json.loads(connection.makefile('rb').readline()))
-                            connection.sendall(answer.encode())
-                except Exception as error:errors.append(error)
-                finally:listener.close()
-            worker=threading.Thread(target=serve,daemon=True);worker.start()
-            original=http.site
-            def selected(*args,**kwargs):
-                row=original(*args,**kwargs)
-                if row['domain']=='example.test':
-                    row.update(aggressive=True,aggressive_ttl=86400,cms_installations=[dict(cms='joomla',base='/')],
-                               cms_sessions=[dict(cms='joomla',base='/',cookie_name=COOKIE,supported=True)])
-                    if private:row['cookie_policies']=dict(schemaVersion=1,rules=[dict(id='keep-private',match=dict(kind='exact',value=COOKIE),description='Explicit Private',action='private')])
-                return row
-            try:
-                with patch.object(http,'site',side_effect=selected),patch.object(cms_resolver,'SOCKET',str(path)):
-                    self.run_policy(profile,responses,requests)
-            finally:
-                worker.join(timeout=10)
-            self.assertFalse(errors,str(errors));self.assertFalse(worker.is_alive())
-            return received
-
-    def test_same_cookie_guest_to_authenticated_cannot_reuse_warm_public_html(self):
+    def test_warm_html_and_tokens_survive_closed_origin_without_helper_or_cookie_replay(self):
+        body='<html><script type="application/json" class="joomla-script-options">{"csrf.token":"'+TOKEN+'"}</script><form method="post"><input type="hidden" name="'+TOKEN+'" value="1"></form></html>'
         for profile in ('basic','ultracache'):
-            first=http.origin('/page','public',['Set-Cookie: '+COOKIE+'=session-A; Path=/','Vary: Cookie'],cache='no-store')
-            private=http.origin('/page','private',cache='private, no-store')
-            requests=[http.get('/page','public',cache='MISS'),'expect resp.http.Set-Cookie == "'+COOKIE+'=session-A; Path=/"',
-                      http.get('/page','public',['Cookie: '+COOKIE+'=session-A'],cache='HIT'),'expect resp.http.Set-Cookie == <undef>',
-                      http.get('/page','private',['Cookie: '+COOKIE+'=session-A'],cache='PASS'),
-                      'expect resp.http.X-Webuzo-Varnish-Reason == "joomla-authenticated-session"',
-                      http.get('/page','public',['Cookie: '+COOKIE+'=session-B'],cache='HIT'),'expect resp.http.Set-Cookie == <undef>']
-            received=self.broker(profile,['guest\tjoomla-guest-session\n','private\tjoomla-authenticated-session\n','guest\tjoomla-guest-session\n'],[first,private],requests)
-            self.assertEqual([r['cookie'] for r in received],[COOKIE+'=session-A',COOKIE+'=session-A',COOKIE+'=session-B'])
+            calls=[];self.original=http.site
+            def origin(path,headers):
+                calls.append((path,headers.get('Cookie')))
+                return body,[('Cache-Control','no-store, no-cache'),('Surrogate-Control','no-store'),
+                             ('Vary','Cookie'),('Set-Cookie',COOKIE+'=visitor-A; Path=/; HttpOnly')]
+            with self.subTest(profile=profile),patch.object(http,'site',side_effect=self.selected),proxy(profile,origin) as get:
+                status,fields,first=get('/el/page?ref=partner&utm_source=A',COOKIE+'=visitor-A; PHPSESSID=A; _ga=A')
+                self.assertEqual((status,first),(200,body));self.assertEqual(dict(fields)['X-Cache'],'MISS')
+                self.assertEqual(cookies(fields),[COOKIE+'=visitor-A; Path=/; HttpOnly'])
+                get.stop_origin()
+                with self.assertRaises(OSError):socket.create_connection(get.origin_endpoint,timeout=.2)
+                for visitor in ('B','C','A'):
+                    status,fields,html=get('/el/page?ref=partner&utm_source='+visitor,COOKIE+'=visitor-'+visitor+'; PHPSESSID='+visitor+'; _ga='+visitor)
+                    self.assertEqual((status,html),(200,body));self.assertEqual(dict(fields)['X-Cache'],'HIT')
+                    self.assertEqual(cookies(fields),[])
+                self.assertEqual(calls,[('/el/page?ref=partner&utm_source=A',COOKIE+'=visitor-A; PHPSESSID=A; _ga=A')])
 
-    def test_explicit_private_cookie_choice_wins_over_verified_guest_default(self):
+    def test_known_joomla_login_markers_and_explicit_private_cookie_still_pass(self):
+        self.original=http.site
         for profile in ('basic','ultracache'):
-            self.broker(profile,['guest\tjoomla-guest-session\n'],[http.origin('/page','private',cache='no-store')],
-                [http.get('/page','private',['Cookie: '+COOKIE+'=session-A'],cache='PASS'),
-                 'expect resp.http.X-Cache-Cookie-Action == "private"'],private=True)
+            responses=[http.origin('/page','public',cache='no-store')]
+            requests=[http.get('/page','public',cache='MISS')]
+            for path,header in [('/administrator/',None),('/?option=com_users&task=user.login',None),
+                                ('/page','Cookie: joomla_user_state=logged_in'),
+                                ('/page','Cookie: joomla_remember_me_abc=remember'),
+                                ('/page','Cookie: '+COOKIE+'=private')]:
+                responses.append(http.origin(path,'private',cache='no-store'))
+                requests.append(http.get(path,'private',[] if header is None else [header],cache='PASS'))
+            config={'cookie_policies':{'schemaVersion':1,'rules':[dict(id='explicit',match=dict(kind='exact',value=COOKIE),action='private',description='Explicit site choice')]}}
+            with patch.object(http,'site',side_effect=self.selected):
+                http.NativeProfiles.run_policy(self,profile,responses,requests,config=config)
 
 
 if __name__=='__main__':unittest.main()

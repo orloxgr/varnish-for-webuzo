@@ -13,34 +13,32 @@ host/backend/token isolation. `header` comes from the ABI-matching official
 
 ### Anonymous aggressive HTML and CMS routing
 
-`aggressive.py`, `cms_routes.py`, `cms_discovery.py`, `cms_metadata.py`,
-`cms_sessions.py` and `cms_session_server.py` are common panel-independent source.
-The adapter supplies validated native document roots, account IDs and origin
-descriptors. Aggressive mode is per-site, default OFF; no profile or migration
-enables it implicitly. The selected TTL is used without a lower addon cap.
-Generic origin privacy fields are overridden only for otherwise eligible 200
-HTML. Original browser fields are restored on delivery. Authentication, cart,
-explicit Private cookie choices and scoped private CMS paths/actions win first.
-Tracking normalization changes the key only, never the original origin request.
+`aggressive.py`, `cms_routes.py`, `cms_discovery.py`, `cms_metadata.py` and
+`cms_cookies.py` are common panel-independent source. The adapter supplies native
+document roots and static CMS/cookie descriptors during panel reconciliation.
+Aggressive mode is per-site and default OFF. It stores eligible public 200 HTML
+despite generic origin Cache-Control/Surrogate-Control/Pragma/Expires restrictions,
+using the selected TTL without a lower addon cap. Original browser policy is
+restored at delivery. Known private routes/actions, authentication/cart markers
+and explicit administrator Private/Variant choices retain precedence.
 
-Joomla database session metadata is read under the hosting UID before warm
-lookup. Session classification is fresh, with no guest-state TTL. The resolver
-transport is root owned and validates native peer identity. The native module
-has dynamically sized private token replies so cookies are not cut off at the
-small diagnostic-frame size. Root-only native origin descriptors never reach
-the hosting-UID subprocess. Native origin timeout allowances apply.
+Public HIT performs only Varnish work. There is no CMS helper service, session
+database lookup, PHP/HTTP token provider, body inspection or Joomla token ESI.
+Generic PHP and recognized Joomla session cookies are Shared in aggressive mode;
+their original values still reach the origin on a MISS/PASS. Tracking affects
+only the internal key, never the original URL. Functional query values remain
+part of the key. CMS discovery/configuration SQL happens only in panel actions.
 
-The Joomla body filter scans decoded HTML before shared-object allocation,
-without a body-size cutoff. Actual token-bearing forms remain private.
-Core JSON `csrf.token` values become internal ESI includes; their original
-values stay in the fetching request's private handoff, not the cached template.
-At each later HIT the root helper obtains this visitor's real application token
-and original Set-Cookie fields. The internal token URI accepts only a same-site
-ESI child of an aggressive Joomla parent. Both Basic and UltraCache use the
-same implementation. Token preparation completes before parent headers; failure
-uses the original uncached response. ETags for rewritten personal templates are
-removed. Provider fields are never shared between visitors or comma-joined.
-Only the assembled personal response is private; the parent object can HIT.
+The opt-in treats allowed HTML as common. Joomla HTML, scripts, forms and token
+values are stored and delivered unchanged; the addon does not infer hidden
+authentication state inside opaque sessions or generate visitor-specific tokens.
+Application-specific problems are addressed with explicit site rules or a future
+application integration. No automatic replacement admission gate is introduced.
+
+Original response Set-Cookie fields are detached before shared storage and
+returned only to the fetching visitor. A warm HIT does not contact the origin to
+issue another visitor's cookie. Existing UltraCache private ESI remains dynamic;
+aggressive mode adds no new fragments or requests.
 
 ### Reviewed database lifecycle
 

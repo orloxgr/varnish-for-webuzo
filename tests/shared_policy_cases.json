@@ -975,7 +975,7 @@
     ]
   },
   {
-    "name": "Joomla token private ESI fields retain public parent HIT and owner cookies",
+    "name": "Joomla aggressive HTML and tokens unchanged without runtime helper",
     "site_settings": {
       "aggressive": true,
       "cms_installations": [
@@ -983,27 +983,30 @@
           "cms": "joomla",
           "base": "/"
         }
+      ],
+      "cms_cookies": [
+        {
+          "cms": "joomla",
+          "base": "/",
+          "cookie_name": "0123456789abcdef0123456789abcdef",
+          "supported": true
+        }
       ]
     },
     "origin": [
-      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -body {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}"
-    ],
-    "broker_answers": [
-      "token\tfedcba9876543210fedcba9876543210\tU2V0LUNvb2tpZTogUEhQU0VTU0lEPXNlc3Npb24tQjsgUGF0aD0vOyBIdHRwT25seTsgU2FtZVNpdGU9TGF4\n",
-      "token\t0123456789abcdef0123456789abcdef\t\n"
+      "accept\nrxreq\nexpect req.url == \"/page?ref=partner&utm_source=A\"\nexpect req.http.Cookie == \"0123456789abcdef0123456789abcdef=visitor-A; PHPSESSID=A; _ga=A\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Surrogate-Control: no-store} -hdr {Vary: Cookie} -hdr {Set-Cookie: 0123456789abcdef0123456789abcdef=visitor-A; Path=/; HttpOnly} -body {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}"
     ],
     "requests": [
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"MISS\"",
-      "expect resp.http.Set-Cookie == \"PHPSESSID=session-A; Path=/; HttpOnly\"",
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
-      "expect resp.http.Set-Cookie == \"PHPSESSID=session-B; Path=/; HttpOnly; SameSite=Lax\"",
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PHPSESSID=session-A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/page?ref=partner&utm_source=A\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=visitor-A; PHPSESSID=A; _ga=A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"MISS\"",
+      "expect resp.http.Set-Cookie == \"0123456789abcdef0123456789abcdef=visitor-A; Path=/; HttpOnly\"",
+      "txreq -url \"/page?ref=partner&utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=visitor-B; PHPSESSID=B; _ga=B}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"HIT\"",
       "expect resp.http.Set-Cookie == <undef>",
-      "txreq -url \"/.__varnish_cms_token/v1\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 403"
+      "txreq -url \"/page?ref=partner&utm_source=C\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == <undef>"
     ]
   },
   {
-    "name": "Joomla token gzip parent has distinct visitor tokens and cookies",
+    "name": "Joomla aggressive gzip HTML and tokens unchanged without runtime helper",
     "site_settings": {
       "aggressive": true,
       "cms_installations": [
@@ -1011,27 +1014,30 @@
           "cms": "joomla",
           "base": "/"
         }
+      ],
+      "cms_cookies": [
+        {
+          "cms": "joomla",
+          "base": "/",
+          "cookie_name": "0123456789abcdef0123456789abcdef",
+          "supported": true
+        }
       ]
     },
     "origin": [
-      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -gzipbody {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}"
-    ],
-    "broker_answers": [
-      "token\tfedcba9876543210fedcba9876543210\tU2V0LUNvb2tpZTogUEhQU0VTU0lEPXNlc3Npb24tQjsgUGF0aD0vOyBIdHRwT25seTsgU2FtZVNpdGU9TGF4\n",
-      "token\t0123456789abcdef0123456789abcdef\t\n"
+      "accept\nrxreq\nexpect req.url == \"/page?ref=partner&utm_source=A\"\nexpect req.http.Cookie == \"0123456789abcdef0123456789abcdef=visitor-A; PHPSESSID=A; _ga=A\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Surrogate-Control: no-store} -hdr {Vary: Cookie} -hdr {Set-Cookie: 0123456789abcdef0123456789abcdef=visitor-A; Path=/; HttpOnly} -gzipbody {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}"
     ],
     "requests": [
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"MISS\"",
-      "expect resp.http.Set-Cookie == \"PHPSESSID=session-A; Path=/; HttpOnly\"",
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
-      "expect resp.http.Set-Cookie == \"PHPSESSID=session-B; Path=/; HttpOnly; SameSite=Lax\"",
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PHPSESSID=session-A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/page?ref=partner&utm_source=A\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=visitor-A; PHPSESSID=A; _ga=A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"MISS\"",
+      "expect resp.http.Set-Cookie == \"0123456789abcdef0123456789abcdef=visitor-A; Path=/; HttpOnly\"",
+      "txreq -url \"/page?ref=partner&utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=visitor-B; PHPSESSID=B; _ga=B}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"HIT\"",
       "expect resp.http.Set-Cookie == <undef>",
-      "txreq -url \"/.__varnish_cms_token/v1\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 403"
+      "txreq -url \"/page?ref=partner&utm_source=C\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\" class=\"joomla-script-options\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script><form method=\"post\"><input type=\"hidden\" name=\"fedcba9876543210fedcba9876543210\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == <undef>"
     ]
   },
   {
-    "name": "Joomla token unavailable provider falls back to original origin HTML",
+    "name": "Joomla aggressive known login markers still bypass warm HTML",
     "site_settings": {
       "aggressive": true,
       "cms_installations": [
@@ -1039,22 +1045,28 @@
           "cms": "joomla",
           "base": "/"
         }
+      ],
+      "cms_cookies": [
+        {
+          "cms": "joomla",
+          "base": "/",
+          "cookie_name": "0123456789abcdef0123456789abcdef",
+          "supported": true
+        }
       ]
     },
     "origin": [
-      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -body {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}",
-      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-B; Path=/; HttpOnly} -body {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}"
-    ],
-    "broker_answers": [
-      "unresolved\tjoomla-token-unavailable\n"
+      "accept\nrxreq\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -body {public}",
+      "accept\nrxreq\nexpect req.http.Cookie == \"joomla_user_state=logged_in\"\ntxresp -hdr {Content-Type: text/html} -body {private}"
     ],
     "requests": [
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"MISS\"",
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}\nexpect resp.http.X-Cache == \"PASS\""
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: joomla_user_state=logged_in}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {private}\nexpect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\""
     ]
   },
   {
-    "name": "Joomla token actual session form remains private with explicit reason",
+    "name": "Joomla aggressive explicit Variant overrides automatic generic session sharing",
     "site_settings": {
       "aggressive": true,
       "cms_installations": [
@@ -1062,13 +1074,39 @@
           "cms": "joomla",
           "base": "/"
         }
-      ]
+      ],
+      "cms_cookies": [
+        {
+          "cms": "joomla",
+          "base": "/",
+          "cookie_name": "0123456789abcdef0123456789abcdef",
+          "supported": true
+        }
+      ],
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "variant",
+            "match": {
+              "kind": "exact",
+              "value": "0123456789abcdef0123456789abcdef"
+            },
+            "action": "variant",
+            "description": "Explicit site variant"
+          }
+        ]
+      }
     },
     "origin": [
-      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -body {<form method=\"post\"><input type=\"hidden\" name=\"0123456789abcdef0123456789abcdef\" value=\"1\"></form>}"
+      "accept\nrxreq\nexpect req.http.Cookie == \"0123456789abcdef0123456789abcdef=A\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -body {A}",
+      "accept\nrxreq\nexpect req.http.Cookie == \"0123456789abcdef0123456789abcdef=B\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -body {B}"
     ],
     "requests": [
-      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<form method=\"post\"><input type=\"hidden\" name=\"0123456789abcdef0123456789abcdef\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"PASS\""
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=B}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: 0123456789abcdef0123456789abcdef=B}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"HIT\""
     ]
   },
   {

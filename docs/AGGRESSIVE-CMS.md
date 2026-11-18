@@ -39,15 +39,18 @@ roots. It does not execute site PHP. Discovery runs on install/reconcile and whe
 saving a site's configuration, rather than on every status request. The ordinary
 custom bypass textarea remains available for site-specific prefixes.
 
-## In-progress integration, not a release checklist completion claim
+## Public HIT without additional backend work
 
-Native Varnish 9.1 tests cover public pages in both profiles; known private paths
-and query actions; Greek/encoded configured aliases; distinct visitors' cookie
-handoffs; request spoof isolation; explicit Private/login/cart exclusions; and
-selected aggressive TTL with unchanged browser policy.
+The opt-in preserves original Joomla HTML and tokens. It no longer reconstructs
+opaque-session authentication, scans response bodies, injects token ESI or calls
+an application token provider. Known private paths/actions and cookie markers
+still match in VCL. The panel discovers the Joomla cookie name statically with
+`cms_cookies.joomla_name`; runtime visitors never execute this Python module.
 
-Still required before release: database-backed configured alias discovery,
-real guest/auth classification for opaque Joomla sessions, examination of
-session-bound form tokens, adapter lifecycle/UI verification, the full regression
-suite, and current-source behavioral parity with Hestia. A cookie name alone
-does not distinguish a guest Joomla session from an authenticated one.
+The CMS helper service and worker sources are removed. Successful native upgrade
+retires owned legacy unit/configuration/code; it does not retain a disabled worker.
+Public HIT must keep working when its already-warmed origin has been stopped.
+Original Set-Cookie fields remain owned by the fetching visitor. Existing private
+UltraCache ESI is unchanged and is not claimed to be zero-backend composition.
+
+See AGGRESSIVE-VALIDATION.md for the current-source acceptance results.

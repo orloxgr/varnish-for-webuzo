@@ -6,27 +6,6 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import socket
-import threading
-
-
-def start_broker(folder, answers):
-    """Disposable root peer for identical per-visitor protocol assertions."""
-    path=Path(folder)/'cms.sock';Path(folder).chmod(0o755)
-    listener=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-    listener.bind(str(path));path.chmod(0o666);listener.listen();listener.settimeout(10)
-    received=[];errors=[]
-    def serve():
-        try:
-            for answer in answers:
-                connection,_=listener.accept()
-                with connection:
-                    received.append(json.loads(connection.makefile('rb').readline()))
-                    connection.sendall(answer.encode())
-        except Exception as error:errors.append(type(error).__name__)
-        finally:listener.close()
-    worker=threading.Thread(target=serve,daemon=True);worker.start()
-    return str(path),worker,received,errors
 
 
 def main():
@@ -46,12 +25,11 @@ def main():
         for case in json.loads(cases.read_text(encoding='utf-8')):
             if profile not in case.get('profiles',['basic','ultracache']):continue
             if args.case and not any(value.lower() in case['name'].lower() for value in args.case):continue
-            configuration=json.dumps({key:case.get(key) for key in ('legacy_cookie_delivery','site_settings','broker_answers')},sort_keys=True)
+            configuration=json.dumps({key:case.get(key) for key in ('legacy_cookie_delivery','site_settings')},sort_keys=True)
             if configuration not in programs:
                 command=[sys.executable,str(args.adapter),'--profile',profile]
                 if 'legacy_cookie_delivery' in case:command.extend(['--legacy-cookie-delivery',json.dumps(case['legacy_cookie_delivery'])])
                 if 'site_settings' in case:command.extend(['--site-settings',json.dumps(case['site_settings'])])
-                if 'broker_answers' in case:command.extend(['--session-socket','@@CMS_RESOLVER_SOCKET@@'])
                 programs[configuration]=json.loads(subprocess.run(command,capture_output=True,text=True,check=True).stdout)
             rendered=programs[configuration]
             server='\n'.join(case['origin']).removeprefix('accept\n')
@@ -64,23 +42,15 @@ def main():
                 +'varnish v1 '+case.get('varnish_args','')+' -arg "-p uncacheable_ttl=37 -p default_grace=41 -p default_keep=23" -vcl {\n'+rendered['vcl']+'\n} -start\n'
                 +'client c1 {\n'+client+'\n} -run\nserver s1 -wait\n'+case.get('tail','')+'\n')
             with tempfile.TemporaryDirectory(prefix='shared-policy-parity-') as folder:
-                broker=None
-                if 'broker_answers' in case:
-                    path,worker,received,errors=start_broker(folder,case['broker_answers']);broker=(worker,received,errors)
-                    content=content.replace('@@CMS_RESOLVER_SOCKET@@',path)
                 script=Path(folder)/'case.vtc';script.write_text(content,encoding='utf-8')
                 run=subprocess.run(['varnishtest','-t','20',str(script)],capture_output=True,text=True,timeout=30)
-                if broker:
-                    worker.join(timeout=10)
-                    if worker.is_alive() or errors or len(received)!=len(case['broker_answers']):
-                        raise RuntimeError('CMS token parity broker did not complete: '+str(errors))
             if run.returncode:
                 print(case['name']+' '+profile+' FAILED\n'+run.stdout+run.stderr,file=sys.stderr)
                 raise SystemExit(1)
             results.append(dict(case=case['name'],profile=profile,result='passed'))
     report=dict(policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
         handoff_sources={name:hashlib.sha256((policy.parent/name).read_bytes()).hexdigest()
-                         for name in ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/joomla_forms.h','native_build.py')},
+                         for name in ('native/cookie_handoff.c','native/cookie_handoff.vcc','native_build.py')},
         policy_modules=manifest(),
         source_loader_sha256=hashlib.sha256(policy.with_name('vcl_source.py').read_bytes()).hexdigest(),
         defaults_sha256=hashlib.sha256(policy.with_name('cookie-defaults.json').read_bytes()).hexdigest(),
@@ -88,7 +58,7 @@ def main():
         admin_module_sha256=hashlib.sha256(policy.with_name('cookie_admin.py').read_bytes()).hexdigest(),
         catalogue_sha256=hashlib.sha256(policy.with_name('cookie-policies.json').read_bytes()).hexdigest(),
         compiler_sha256=hashlib.sha256(policy.with_name('cookie_catalogue.py').read_bytes()).hexdigest(),
-        cms_sources={name:hashlib.sha256(policy.with_name(name).read_bytes()).hexdigest() for name in ('aggressive.py','cms_routes.py','cms_discovery.py','cms_metadata.py','cms_sessions.py','cms_session_server.py')},
+        cms_sources={name:hashlib.sha256(policy.with_name(name).read_bytes()).hexdigest() for name in ('aggressive.py','cms_routes.py','cms_discovery.py','cms_metadata.py','cms_cookies.py')},
         cases_sha256=hashlib.sha256(cases.read_bytes()).hexdigest(),results=results)
     encoded=json.dumps(report,indent=2)+'\n'
     if args.output:args.output.write_text(encoded,encoding='utf-8')

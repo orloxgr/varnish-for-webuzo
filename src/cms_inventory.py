@@ -9,7 +9,7 @@ from urllib.parse import unquote
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'shared'))
 import cms_discovery
 import cms_metadata
-import cms_sessions
+import cms_cookies
 
 
 def query(connection, site, statement):
@@ -45,10 +45,10 @@ def discover(site, previous=None):
         if record['cms'] not in ('wordpress','joomla','prestashop'):continue
         root = Path(site['path']) / unquote(record['base']).lstrip('/')
         if record['cms']=='joomla':
-            try:sessions.append(dict(cms='joomla',base=record['base'],cookie_name=cms_sessions.joomla_settings(root),supported=True))
+            try:sessions.append(dict(cms='joomla',base=record['base'],cookie_name=cms_cookies.joomla_name(root),supported=True))
             except (OSError,ValueError):
                 sessions.append(dict(cms='joomla',base=record['base'],supported=False))
-                notices.append('joomla at '+record['base']+': Session configuration requires resolver support before its opaque session can share anonymous HTML.')
+                notices.append('joomla at '+record['base']+': Session cookie name could not be read; use an explicit cookie rule if needed.')
         try:
             connection = cms_metadata.connection(record['cms'], root)
             records[index] = cms_metadata.aliases(record, lambda statement:query(connection,site,statement), connection['prefix'], site['names'])

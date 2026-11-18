@@ -16,7 +16,7 @@ def settings(site):
 
 def session_names(site):
     if not settings(site)['aggressive']:return []
-    rows=site.get('cms_sessions',[])
+    rows=site.get('cms_cookies',[])
     if not isinstance(rows,list):raise ValueError('Invalid CMS session descriptors')
     names=[]
     for row in rows:
