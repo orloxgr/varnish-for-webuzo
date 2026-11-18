@@ -369,11 +369,11 @@ VCL_STRING vmod_token_reason(VRT_CTX, struct vmod_priv *priv) {
  * storage grows to its actual fields rather than truncating cookies. */
 static char *token_exchange(const char *socket_path, const char *site, const char *path,
                             const char *cookie, const char *host, const char *scheme,
-                            const char *agent, const char *client_ip, double timeout) {
+                            const char *agent, const char *client_ip, const char *language, double timeout) {
     struct sockaddr_un address = { .sun_family = AF_UNIX };
     struct ucred peer; socklen_t peer_length = sizeof(peer);
-    const char *names[] = {"site", "path", "cookie", "host", "scheme", "user_agent", "client_ip"};
-    const char *values[] = {site, path, cookie, host, scheme, agent, client_ip};
+    const char *names[] = {"site", "path", "cookie", "host", "scheme", "user_agent", "client_ip", "accept_language"};
+    const char *values[] = {site, path, cookie, host, scheme, agent, client_ip, language};
     char *message = NULL, *reply = NULL;
     int fd = -1, success = 0;
     if (!socket_path || socket_path[0] != '/' || strlen(socket_path) >= sizeof(address.sun_path) ||
@@ -485,12 +485,12 @@ done:
 VCL_BOOL vmod_ensure_token(VRT_CTX, struct vmod_priv *priv, struct vmod_priv *top_priv,
                            VCL_STRING socket_path, VCL_STRING site, VCL_STRING path,
                            VCL_STRING cookie, VCL_STRING host, VCL_STRING scheme,
-                           VCL_STRING agent, VCL_STRING client_ip, VCL_DURATION timeout) {
+                           VCL_STRING agent, VCL_STRING client_ip, VCL_STRING language, VCL_DURATION timeout) {
     if (vmod_prepare_token(ctx, priv, top_priv)) return 1;
     struct task *task = get_task(priv);
     if (!task) return 0;
     strcpy(task->token_reason, "joomla-token-unavailable");
-    char *reply = token_exchange(socket_path, site, path, cookie, host, scheme, agent, client_ip, timeout);
+    char *reply = token_exchange(socket_path, site, path, cookie, host, scheme, agent, client_ip, language, timeout);
     if (!reply) return 0;
     if (strncmp(reply, "token\t", 6) || strlen(reply) < 39 || reply[38] != '\t' ||
         !jf_hex((struct joomla_span){(const unsigned char *)reply + 6, 32})) {

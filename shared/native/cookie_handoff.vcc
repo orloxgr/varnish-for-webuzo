@@ -63,7 +63,7 @@ $Restrict vcl_synth
 
 Return only the top request's private token for its internal ESI fragment.
 
-$Function BOOL ensure_token(PRIV_TASK, PRIV_TOP, STRING socket_path, STRING site, STRING path, STRING cookie, STRING host, STRING scheme, STRING user_agent, STRING client_ip, DURATION timeout)
+$Function BOOL ensure_token(PRIV_TASK, PRIV_TOP, STRING socket_path, STRING site, STRING path, STRING cookie, STRING host, STRING scheme, STRING user_agent, STRING client_ip, STRING accept_language, DURATION timeout)
 $Restrict vcl_hit vcl_deliver
 
 Obtain a real origin-issued session/token for this visitor. On failure the VCL

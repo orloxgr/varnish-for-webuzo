@@ -66,7 +66,7 @@ class JoomlaForms(unittest.TestCase):
                 if gzip:origin=origin.replace('-body {','-gzipbody {')
                 requests=[http.get('/page',bodies[0],cache='MISS'),'expect resp.http.Set-Cookie == "PHPSESSID=session-A; Path=/; Secure; HttpOnly"',
                           'expect resp.http.ETag == <undef>',
-                          http.get('/page',bodies[1],cache='HIT'),'expect resp.http.Set-Cookie == "PHPSESSID=session-B; Path=/; Secure; HttpOnly"',
+                          http.get('/page',bodies[1],['Accept-Language: el-GR,en;q=0.8'],cache='HIT'),'expect resp.http.Set-Cookie == "PHPSESSID=session-B; Path=/; Secure; HttpOnly"',
                           'expect resp.http.ETag == <undef>',
                           http.get('/page',bodies[0],['Cookie: PHPSESSID=session-A'],cache='HIT'),'expect resp.http.Set-Cookie == <undef>',
                           http.get('/.__varnish_cms_token/v1',None,status=403)]
@@ -74,6 +74,7 @@ class JoomlaForms(unittest.TestCase):
                     received=self.token_broker(['token\t'+TOKEN_B+'\t'+fields+'\n','token\t'+TOKEN_A+'\t\n'],
                         lambda:self.run_joomla(profile,[origin],requests))
                     self.assertEqual([r['op'] for r in received],['token','token'])
+                    self.assertEqual(received[0]['accept_language'],'el-GR,en;q=0.8')
                     self.assertEqual(received[1]['cookie'],'PHPSESSID=session-A')
 
     def test_token_provider_failure_uses_original_origin_html_without_placeholder(self):

@@ -3,6 +3,13 @@
 sub scp_cms_recv {
     call scp_cms_normalize;
     @@CMS_ROUTE_RULES@@
+    # PrestaShop encrypts authentication, customer identity and cart state in
+    # this combined cookie. It is not a generic anonymous PHP session marker.
+    if (req.http.X-SCP-CMS == "prestashop" &&
+        req.http.Cookie ~ "(^|;[[:blank:]]*)PrestaShop-[0-9a-fA-F]{32}=.+") {
+        set req.http.X-SCP-Reason = "prestashop-private-session";
+        return (pass);
+    }
     # Drupal's authentication cookies carry an identifiable session prefix.
     if (req.http.X-SCP-CMS == "drupal" &&
         req.http.Cookie ~ "(^|;[[:blank:]]*)(SSESS|SESS)[0-9a-f]+=.+") {

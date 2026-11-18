@@ -1070,5 +1070,29 @@
     "requests": [
       "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<form method=\"post\"><input type=\"hidden\" name=\"0123456789abcdef0123456789abcdef\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"PASS\""
     ]
+  },
+  {
+    "name": "PrestaShop combined customer cart cookie cannot seed or reuse shared public HTML",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "prestashop",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/product\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: private, no-store} -body {private-A}",
+      "accept\nrxreq\nexpect req.url == \"/product\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: private, no-store} -body {public}",
+      "accept\nrxreq\nexpect req.url == \"/product\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: private, no-store} -body {private-B}"
+    ],
+    "requests": [
+      "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PrestaShop-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=encrypted-customer-and-cart}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {private-A}\nexpect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"",
+      "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PrestaShop-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=encrypted-customer-and-cart}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {private-B}\nexpect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
   }
 ]

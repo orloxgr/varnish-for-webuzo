@@ -60,6 +60,9 @@ Pragma or Expires prohibitions. No smaller addon TTL is imposed. The origin's
 browser policy is restored on delivery; this setting changes server storage.
 Generic PHP session cookies alone no longer force PASS. Explicit Private cookie
 choices, recognized authentication, cart state and private CMS actions still do.
+PrestaShop's encrypted `PrestaShop-*` cookie combines customer authentication
+and cart state; matching requests use `prestashop-private-session` rather than
+being treated as a generic PHP session.
 
 **Refresh sites** discovers WordPress/WooCommerce, Joomla, Drupal, Magento and
 PrestaShop inside native document roots. Known private paths and query actions
