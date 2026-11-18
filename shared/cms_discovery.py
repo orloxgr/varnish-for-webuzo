@@ -55,9 +55,24 @@ def _magento_admin(root):
         text = read_literal(root, 'app/etc/env.php')
     except (OSError, ValueError):
         return None
-    # A literal entry only, never include/eval the PHP return value.
-    match = re.search(r"['\"]backend['\"]\s*=>\s*\[\s*['\"]frontName['\"]\s*=>\s*(['\"])([A-Za-z0-9_-]+)\1", text)
-    return match[2] if match else None
+    # The literal reader ignores PHP comments and conflicting values.
+    from cms_metadata import settings
+    value=settings(text)[2].get('frontName')
+    return value if isinstance(value,str) and re.fullmatch('[A-Za-z0-9_-]+',value) else None
+
+
+def _prestashop_admin(root, directories):
+    # PrestaShop intentionally renames admin-dev on installation. Identify its
+    # real entrypoint, never guess by prefix or execute the tenant PHP file.
+    from cms_metadata import TOKEN
+    found=[]
+    for name in directories:
+        try:text=read_literal(root,name+'/index.php')
+        except (OSError,ValueError):continue
+        tokens=[t for t in TOKEN.findall(text) if not t.startswith(('//','/*','#'))]
+        if any(tokens[i:i+4]==['define','(',"'_PS_ADMIN_DIR_'",','] or tokens[i:i+4]==['define','(','"_PS_ADMIN_DIR_"',','] for i in range(len(tokens))):
+            found.append(name)
+    return found
 
 
 def discover(document_root):
@@ -65,8 +80,13 @@ def discover(document_root):
     if not root.is_absolute() or '..' in root.parts or root.is_symlink() or not root.is_dir():
         return []
     found = []
+    # Magento's recommended public root is pub/, beside its app/etc metadata.
+    if root.name=='pub' and _exists(root,'index.php') and _exists(root.parent,'app/etc/env.php') and _exists(root.parent,'bin/magento'):
+        admin=_magento_admin(root.parent)
+        found.append(dict(cms='magento',base='/',private_paths=['/'+admin] if admin else []))
     for folder, directories, _ in os.walk(root, followlinks=False):
         folder = Path(folder)
+        children=list(directories)
         directories[:] = sorted(name for name in directories if name not in SKIP and
                                 not name.startswith('.') and not (folder / name).is_symlink())
         cms = None
@@ -89,5 +109,7 @@ def discover(document_root):
             admin = _magento_admin(folder) if cms == 'magento' else None
             if admin:
                 private.append(base.rstrip('/') + '/' + admin)
+            if cms=='prestashop':
+                private.extend(base.rstrip('/')+'/'+quote(name,safe='-._~') for name in _prestashop_admin(folder,children))
             found.append(dict(cms=cms, base=base, private_paths=private))
     return normalize(found)

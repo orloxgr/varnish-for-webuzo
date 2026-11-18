@@ -2,6 +2,7 @@
 
 sub scp_init {
     cookie_handoff.reset();
+    if (req.restarts == 0) { unset req.http.X-SCP-Token-Retry; }
     unset req.http.X-SCP-Cookie-Handoff;
     unset req.http.X-SCP-Cookie-Contract;
     unset req.http.X-UltraCache-Cookie-Settings;
@@ -146,6 +147,7 @@ sub scp_deliver {
             req.url, req.http.Cookie, req.http.host, req.http.X-Forwarded-Proto,
             req.http.User-Agent, req.http.X-Real-IP, std.duration(req.http.X-SCP-Token-Timeout, 0s))) {
         set req.http.X-SCP-Reason = cookie_handoff.token_reason();
+        set req.http.X-SCP-Token-Retry = req.http.X-SCP-Reason;
         return (restart);
     }
     cookie_handoff.deliver();

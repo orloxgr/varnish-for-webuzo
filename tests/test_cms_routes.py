@@ -42,6 +42,23 @@ class Descriptors(unittest.TestCase):
             self.assertEqual({(r['cms'], r['base']) for r in rows}, {('wordpress', '/blog'), ('joomla', '/cms'), ('magento', '/shop')})
             self.assertEqual(next(r for r in rows if r['cms'] == 'magento')['private_paths'], ['/shop/secret_admin'])
 
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Native no-follow filesystem')
+    def test_magento_public_root_and_renamed_prestashop_admin_are_discovered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            files={'magento/pub/index.php':'<?php require __DIR__."/../app/bootstrap.php";',
+                   'magento/app/etc/env.php':"<?php /* 'frontName'=>'wrong' */ return ['backend'=>['frontName'=>'actual_admin']];",
+                   'magento/bin/magento':'',
+                   'shop/config/settings.inc.php':'', 'shop/classes/Dispatcher.php':'',
+                   'shop/office892/index.php':"<?php define('_PS_ADMIN_DIR_',__DIR__); require _PS_ADMIN_DIR_.'/../config/config.inc.php';",
+                   'shop/articles/index.php':"<?php /* define('_PS_ADMIN_DIR_',__DIR__); */ echo 'public';"}
+            for name,value in files.items():
+                target=root/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(value)
+            magento=cms_discovery.discover(root/'magento/pub')
+            self.assertEqual(magento,[dict(cms='magento',base='/',private_paths=['/actual_admin'],private_queries=[])])
+            shop=cms_discovery.discover(root/'shop')
+            self.assertEqual(shop[0]['private_paths'],['/office892'])
+
 
 @unittest.skipUnless(shutil.which('varnishtest'), 'Native Varnish required')
 class NativeCMS(unittest.TestCase):

@@ -22,7 +22,7 @@ ROUTES = {
     'joomla': r'(?:administrator|component/users|component/(?:virtuemart|hikashop)/(?:cart|checkout|user|order)|(?:login|logout|registration|reset|remind|profile))',
     'drupal': r'(?:admin|user/(?:login|login_status|logout|register|password|reset|edit)|user/[0-9]+/(?:edit|cancel)|node/(?:add|[0-9]+/(?:edit|delete))|(?:cart|checkout))',
     'magento': r'(?:admin|customer|checkout|sales/order|sales/guest|wishlist|paypal|multishipping|vault|customer/section/load)',
-    'prestashop': r'(?:authentication|login|logout|password|my-account|identity|addresses|address|history|order-detail|order-follow|order-slip|cart|order|order-confirmation|guest-tracking)',
+    'prestashop': r'(?:admin|admin-dev|authentication|login|logout|password|my-account|identity|addresses|address|history|order-detail|order-follow|order-slip|cart|order|order-confirmation|guest-tracking)',
 }
 QUERIES = {
     'wordpress': [r'(^|&)(?:add-to-cart|remove_item|undo_item|wc-ajax|wc-api|apply_coupon|remove_coupon|order_again|cancel_order|pay_for_order|download_file)=', r'(^|&)key=wc_order_'],

@@ -291,8 +291,10 @@ tracking URL; regex BAN selectors target the documented canonical URL space.
 HTTP and HTTPS remain separate Vary representations of one purgeable URL.
 
 Tracking remains visible to browser analytics. Code executed in PHP on every
-landing requires its own tracking request/before-cache integration; a HIT never
-executes that PHP. There is no automatic application-code injection here.
+landing requires its own tracking request/before-cache integration; a HIT does
+not execute the cached main-page PHP route. Joomla's private token provider may
+separately execute its native core component on a parent HIT. The addon does
+not inject or modify application source code.
 
 ## Verification
 

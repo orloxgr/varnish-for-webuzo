@@ -3,7 +3,7 @@ $ABI strict
 $Module cookie_handoff 3 "Request-owned response cookie handoff"
 $Event cookie_event
 
-$Function VOID reset(PRIV_TASK)
+$Function VOID reset(PRIV_TASK, PRIV_TOP)
 $Restrict vcl_recv
 
 Discard request state before a new receive attempt, including restart to a HIT.

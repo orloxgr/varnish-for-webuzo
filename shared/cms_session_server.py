@@ -54,9 +54,9 @@ def select_installation(site, path):
     if not pathname.startswith('/') or '\x00' in pathname:
         raise ValueError('Invalid request path')
     matching = [row for row in site['installations'] if row['cms'] == 'joomla' and
-                (row['base'] == '/' or pathname == row['base'].rstrip('/') or
-                 pathname.startswith(row['base'].rstrip('/') + '/'))]
-    return max(matching, key=lambda row: len(row['base'])) if matching else None
+                (row['base'] == '/' or pathname == unquote(row['base']).rstrip('/') or
+                 pathname.startswith(unquote(row['base']).rstrip('/') + '/'))]
+    return max(matching, key=lambda row: len(unquote(row['base']))) if matching else None
 
 
 def resolve(config, request):
@@ -188,7 +188,10 @@ def resolve_token(config,request,fetch=None):
                 new_scheme=target.scheme
                 if (new_scheme!=scheme and (scheme,new_scheme)!=('http','https')) or target.username or target.password or target.port not in (None,443 if new_scheme=='https' else 80):
                     raise ValueError('Component redirect leaves its native website')
-                if base and target.path!=base and not target.path.startswith(base+'/'):
+                target_path=unquote(target.path);base_path=unquote(base)
+                if any(part in ('.','..') for part in target_path.split('/')):
+                    raise ValueError('Component redirect is not canonical')
+                if base_path and target_path!=base_path and not target_path.startswith(base_path+'/'):
                     raise ValueError('Component redirect leaves its CMS installation')
                 host=new_host;scheme=new_scheme
                 origin=site.get('origins',{}).get(scheme,default_origin)

@@ -28,6 +28,7 @@ struct handoff {
     char csrf[33];
 };
 struct task { struct handoff *owner; uint64_t key; char token_reason[80]; };
+struct csrf_top { char token[33]; };
 #define BUCKETS 1024
 static struct handoff *buckets[BUCKETS];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -73,8 +74,9 @@ static struct task *get_task(struct vmod_priv *priv) {
     return priv->priv;
 }
 
-VCL_VOID vmod_reset(VRT_CTX, struct vmod_priv *priv) {
-    (void)ctx;
+VCL_VOID vmod_reset(VRT_CTX, struct vmod_priv *priv, struct vmod_priv *top_priv) {
+    if (ctx->req && ctx->req->esi_level == 0 && top_priv->priv)
+        memset(top_priv->priv, 0, sizeof(struct csrf_top));
     if (priv->priv) { close_owner(priv->priv); free(priv->priv); priv->priv = NULL; }
 }
 
@@ -331,7 +333,6 @@ done:
     return WS_Copy(ctx->ws, result, -1);
 }
 
-struct csrf_top { char token[33]; };
 static void csrf_top_fini(VRT_CTX, void *value) { (void)ctx; free(value); }
 static const struct vmod_priv_methods csrf_top_methods = {
     .magic = VMOD_PRIV_METHODS_MAGIC, .type = "request-csrf-token", .fini = csrf_top_fini
