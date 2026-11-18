@@ -1,10 +1,20 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <stdint.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <errno.h>
+#include <limits.h>
+#include <math.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
 #include "cache/cache.h"
 #include "vcc_if.h"
 
@@ -207,4 +217,113 @@ VCL_INT vmod_pending(VRT_CTX) {
     (void)ctx;
     pthread_mutex_lock(&lock); count = live; pthread_mutex_unlock(&lock);
     return count;
+}
+
+static double resolver_now(void) {
+    struct timespec value;
+    if (clock_gettime(CLOCK_MONOTONIC, &value)) return 0;
+    return value.tv_sec + value.tv_nsec / 1e9;
+}
+
+static int resolver_ready(int fd, short events, double deadline) {
+    struct pollfd descriptor = { .fd = fd, .events = events };
+    for (;;) {
+        double left = deadline - resolver_now();
+        if (left <= 0) return 0;
+        int milliseconds = left * 1000 >= INT_MAX ? INT_MAX : (int)(left * 1000) + 1;
+        int result = poll(&descriptor, 1, milliseconds);
+        if (result < 0 && errno == EINTR) continue;
+        return result > 0 && (descriptor.revents & events);
+    }
+}
+
+static char *resolver_json_string(char *out, const char *input) {
+    static const char hex[] = "0123456789abcdef";
+    const unsigned char *p = (const unsigned char *)(input ? input : "");
+    *out++ = '"';
+    while (*p) {
+        unsigned char c = *p++;
+        if (c == '"' || c == '\\') { *out++ = '\\'; *out++ = c; }
+        else if (c < 32 || c >= 127) {
+            memcpy(out, "\\u00", 4); out += 4;
+            *out++ = hex[c >> 4]; *out++ = hex[c & 15];
+        } else *out++ = c;
+    }
+    *out++ = '"';
+    return out;
+}
+
+VCL_STRING vmod_session_state(VRT_CTX, VCL_STRING socket_path, VCL_STRING site,
+                             VCL_STRING path, VCL_STRING cookie, VCL_DURATION timeout) {
+    struct sockaddr_un address = { .sun_family = AF_UNIX };
+    struct ucred peer;
+    socklen_t peer_length = sizeof(peer);
+    char response[256], *message = NULL;
+    const char *result = "unresolved\tcms-session-unavailable";
+    int fd = -1, complete = 0;
+    size_t used = 0;
+    if (!socket_path || socket_path[0] != '/' || strlen(socket_path) >= sizeof(address.sun_path) ||
+        !site || strlen(site) != 32 || strspn(site, "0123456789abcdef") != 32 ||
+        !isfinite(timeout) || timeout <= 0) goto done;
+    size_t lengths = strlen(site);
+    if (path && strlen(path) > SIZE_MAX - lengths) goto done;
+    lengths += path ? strlen(path) : 0;
+    if (cookie && strlen(cookie) > SIZE_MAX - lengths) goto done;
+    lengths += cookie ? strlen(cookie) : 0;
+    if (lengths > (SIZE_MAX - 128) / 6) goto done;
+    message = malloc(lengths * 6 + 128);
+    if (!message) goto done;
+    char *out = message;
+    memcpy(out, "{\"schema\":1,\"site\":", 19); out += 19;
+    out = resolver_json_string(out, site);
+    memcpy(out, ",\"path\":", 8); out += 8;
+    out = resolver_json_string(out, path);
+    memcpy(out, ",\"cookie\":", 10); out += 10;
+    out = resolver_json_string(out, cookie);
+    *out++ = '}'; *out++ = '\n';
+    size_t length = (size_t)(out - message);
+    double deadline = resolver_now() + timeout;
+    memcpy(address.sun_path, socket_path, strlen(socket_path) + 1);
+    fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd < 0) goto done;
+    if (connect(fd, (struct sockaddr *)&address, sizeof(address))) {
+        if (errno != EINPROGRESS || !resolver_ready(fd, POLLOUT, deadline)) goto done;
+        int error = 0; socklen_t error_length = sizeof(error);
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &error_length) || error) goto done;
+    }
+    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &peer_length) || peer.uid != 0) {
+        result = "unresolved\tcms-session-peer"; goto done;
+    }
+    while (used < length) {
+        if (!resolver_ready(fd, POLLOUT, deadline)) goto done;
+        ssize_t count = send(fd, message + used, length - used, MSG_NOSIGNAL);
+        if (count < 0 && (errno == EAGAIN || errno == EINTR)) continue;
+        if (count <= 0) goto done;
+        used += (size_t)count;
+    }
+    used = 0;
+    while (used + 1 < sizeof(response)) {
+        if (!resolver_ready(fd, POLLIN, deadline)) goto done;
+        ssize_t count = recv(fd, response + used, 1, 0);
+        if (count < 0 && (errno == EAGAIN || errno == EINTR)) continue;
+        if (count != 1) goto done;
+        if (response[used] == '\n') { complete = 1; break; }
+        ++used;
+    }
+    response[used] = '\0';
+    const char *reason = strchr(response, '\t');
+    if (!complete || !reason || !reason[1] ||
+        (strncmp(response, "guest\t", 6) && strncmp(response, "private\t", 8) && strncmp(response, "unresolved\t", 11))) {
+        result = "unresolved\tcms-session-protocol"; goto done;
+    }
+    for (const char *p = reason + 1; *p; ++p) {
+        if (!(*p >= 'a' && *p <= 'z') && !(*p >= '0' && *p <= '9') && *p != '-') {
+            result = "unresolved\tcms-session-protocol"; goto done;
+        }
+    }
+    result = response;
+done:
+    if (fd >= 0) close(fd);
+    free(message);
+    return WS_Copy(ctx->ws, result, -1);
 }

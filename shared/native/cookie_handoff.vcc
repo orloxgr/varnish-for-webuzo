@@ -37,3 +37,10 @@ Append the original fields to their owning client response only.
 $Function INT pending()
 
 Number of live handoffs, for lifecycle verification (never cookie contents).
+
+$Function STRING session_state(STRING socket_path, STRING site, STRING path, STRING cookie, DURATION timeout)
+$Restrict vcl_recv
+
+Query the root-owned local CMS session resolver before cache lookup. The result
+contains only guest/private/unresolved and a fixed diagnostic, never session
+values. Timeout comes from the hosting adapter's native connection allowance.

@@ -22,6 +22,7 @@ import cookie_bridge
 import cookie_execution
 import cms_discovery
 import aggressive
+import cms_inventory
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
@@ -39,7 +40,11 @@ def inventory(config,discover=False,discover_id=None):
         site['cookie_policies']=cookie_views.normalize(previous.get('cookie_policies'))
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
         site.update(aggressive.settings(previous))
-        site['cms_installations']=(cms_discovery.discover(site['path']) if site.get('path') else []) if discover or sid==discover_id else copy.deepcopy(previous.get('cms_installations',[]))
+        if (discover or sid==discover_id) and site.get('path'):
+            site['cms_installations'],site['cms_discovery_notices']=cms_inventory.discover(site)
+        else:
+            site['cms_installations']=copy.deepcopy(previous.get('cms_installations',[]))
+            site['cms_discovery_notices']=copy.deepcopy(previous.get('cms_discovery_notices',[]))
         if site['cookie_integration'] is not None:
             site['cookie_integration'],revoked=cookie_bridge.cookie_control.reconcile_integration(site['cookie_integration'],site['domain'],site['names'])
             if revoked or previous.get('cookie_integration_notice'):

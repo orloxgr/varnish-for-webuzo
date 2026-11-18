@@ -117,6 +117,7 @@
       profileCell.append(aggressiveLabel, aggressiveFields);
       const detected = (site.cms_installations || []).map(item => item.cms + (item.base === '/' ? '' : ' at ' + item.base));
       if (detected.length) name.append(node('small', 'CMS rules: ' + detected.join(', ')));
+      for (const notice of site.cms_discovery_notices || []) name.append(node('small', notice));
       const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = site.enabled; enabled.setAttribute('aria-label', 'Enable Varnish for ' + site.domain);
       const enabledCell = node('td'); enabledCell.append(enabled); row.append(enabledCell);
       const bypass = node('textarea'); bypass.value = site.bypass.join('\n'); bypass.placeholder = '/private-area/\n/custom-checkout/'; bypass.setAttribute('aria-label', 'Additional bypass paths for ' + site.domain);
