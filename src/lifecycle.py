@@ -34,13 +34,16 @@ def retire_cms_helper(*, unit=None, source=None):
         # The native plugin tree is managed by Webuzo's dedicated panel group,
         # unlike root-private state. Reuse the panel's existing path validation.
         descriptor=native.open_native(path)
-        parent=native.open_native(path.parent,True)
+        parent=None
         try:
+            parent=native.open_native(path.parent,True)
             opened=os.fstat(descriptor);current=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
             if (opened.st_dev,opened.st_ino)!=(current.st_dev,current.st_ino):
                 raise ValueError('Retired addon source changed during cleanup')
             os.unlink(path.name,dir_fd=parent)
-        finally:os.close(descriptor);os.close(parent)
+        finally:
+            os.close(descriptor)
+            if parent is not None:os.close(parent)
     for path in obsolete:
         if path.exists() or path.is_symlink():remove_source(path)
     # Bytecode belongs to the same removed source modules, never tenant code.

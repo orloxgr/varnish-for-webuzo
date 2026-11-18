@@ -78,5 +78,16 @@ class NativeAggressive(unittest.TestCase):
              http.get('/page','other-A',['X-SCP-Aggressive: 1','X-SCP-Aggressive-TTL: 86400'],host='other.test',cache='PASS'),
              http.get('/page','other-B',host='other.test',cache='PASS')])
 
+    def test_write_requests_do_not_reuse_or_seed_a_warm_public_object(self):
+        for profile in ('basic','ultracache'):
+            responses=[http.origin('/page','public',cache='no-store')]
+            requests=[http.get('/page','public',cache='MISS')]
+            for method in ('POST','PUT','PATCH','DELETE'):
+                responses.append(http.origin('/page',method,cache='no-store',expect=['expect req.method == "'+method+'"']))
+                requests.extend([http.get('/page',method,method=method,cache='PASS'),
+                                 'expect resp.http.X-Webuzo-Varnish-Reason == "request-method"'])
+            requests.append(http.get('/page','public',cache='HIT'))
+            self.aggressive(profile,responses,requests)
+
 
 if __name__=='__main__':unittest.main()
