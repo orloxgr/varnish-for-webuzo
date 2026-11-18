@@ -140,7 +140,7 @@ sub vcl_recv {
  set req.http.X-WV-Origin = '''+quoted(origin_secret)+''';
  std.collect(req.http.Cookie, "; ");
  if (req.http.X-WV-Disabled) { set req.http.X-WV-Reason = "site-disabled"; return (pass); }
- if (req.restarts > 0) { set req.http.X-SCP-Reason = "joomla-token-retry"; return (pass); }
+ if (req.restarts > 0 && req.http.X-SCP-Token-Retry) { set req.http.X-SCP-Reason = req.http.X-SCP-Token-Retry; return (pass); }
 ''')
     for profile in profiles.NAMES:
         fragment=fragments.validate(profiles.rules(config,profile)['recv_vcl'],'recv',mark_pass=True,pass_reason='central-profile-vcl')
