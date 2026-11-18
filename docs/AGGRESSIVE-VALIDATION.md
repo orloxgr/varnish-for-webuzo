@@ -18,6 +18,14 @@ executed the read-only session lookup. The CMS helper source identity now
 includes discovery and route dependencies, so native plugin activation reloads
 the worker after these modules change.
 
+The correction passed 20 native CMS route/metadata/activation methods, five
+package checks, and the generated systemd helper running its hosting UID below
+a search-only 0711 ancestor. The regression still rejects symbolic links and
+enforces final-file read and directory search permissions. Hestia copied the
+identical shared reader and passed 24 focused methods, including an actual
+helper restart when either discovery or route dependencies change. The VCL
+and native module remain unchanged from the 0.9.0 policy validation below.
+
 ## Verified native behavior
 
 On the disposable Webuzo lab, Varnish 9.1 compiled the ABI-matching cookie

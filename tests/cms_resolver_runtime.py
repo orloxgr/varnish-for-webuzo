@@ -27,7 +27,9 @@ daemon=pwd.getpwnam(service.DAEMON)
 source=Path(__file__).resolve().parents[1]/'shared/cms_session_server.py'
 
 with tempfile.TemporaryDirectory(prefix='wvw-cms-unit-',dir='/var/lib') as temporary:
-    root=Path(temporary);root.chmod(0o755)
+    # Match panel-owned /home: the worker may traverse this directory without
+    # being able to list it, and must still read the known Joomla files.
+    root=Path(temporary);root.chmod(0o711)
     version=root/'libraries/src/Version.php';version.parent.mkdir(parents=True)
     version.write_text('<?php const MAJOR_VERSION = 3;')
     (root/'configuration.php').write_text("<?php class JConfig { public $secret='runtime-test'; public $session_handler='database'; public $host='localhost'; public $user='unused'; public $password='unused'; public $db='unused'; public $dbprefix='j_'; }")
