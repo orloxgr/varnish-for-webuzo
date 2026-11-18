@@ -11,6 +11,7 @@ from cookie_catalogue import load_catalogue
 import recognition
 import state
 import cookie_bridge
+import aggressive
 
 EMPTY = {'schemaVersion': 1, 'rules': []}
 
@@ -70,7 +71,7 @@ def executable(config, site):
 
 def compile_recv(config, site):
     return cookie_admin.compile_vcl(normalize(config.get('cookie_policies')),
-                                    normalize(site.get('cookie_policies')),chain_defaults=True)
+                                    normalize(site.get('cookie_policies')),chain_defaults=True,automatic_shared=aggressive.session_names(site))
 
 
 def defaults_vcl():

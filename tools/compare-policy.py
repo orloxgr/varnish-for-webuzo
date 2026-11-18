@@ -17,6 +17,8 @@ def main():
     for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native_build.py',
                  'shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
+                 'shared/vcl/aggressive.vcl','shared/vcl/cms-routes.vcl',
+                 'shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py',
                  'shared/vcl/representations.vcl','shared/vcl/ultracache-esi.vcl',
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
                  'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
@@ -46,6 +48,9 @@ def main():
                  if name.startswith('shared/native/') or name=='shared/native_build.py'}
         if left.get('handoff_sources') != handoff:
             raise SystemExit('The reports do not test the current native cookie handoff')
+        cms={name.removeprefix('shared/'):value for name,value in digests.items() if name in
+             ('shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py')}
+        if left.get('cms_sources')!=cms:raise SystemExit('The reports do not test the current CMS policy sources')
         cases=json.loads((root/'tests/shared_policy_cases.json').read_text(encoding='utf-8'))
         expected=[dict(case=case['name'],profile=profile,result='passed') for profile in ('basic','ultracache')
             for case in cases if profile in case.get('profiles',['basic','ultracache'])]

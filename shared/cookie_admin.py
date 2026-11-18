@@ -114,7 +114,7 @@ def executable(central=None, site=None):
             for row in active(central, site)]
 
 
-def response_rules(central=None, site=None, *, aggressive_mode=False):
+def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_shared=()):
     """Same ordered choices for every real response cookie, without values.
 
     Core authentication/cart contracts remain authoritative in both directions.
@@ -130,6 +130,15 @@ def response_rules(central=None, site=None, *, aggressive_mode=False):
         resolved = [dict(row,action='shared') if row['scope']=='central' and row['id'].startswith('bundled:') and generic(row) else row for row in resolved]
         # Explicit site/central choices precede these generic session defaults.
         resolved += [dict(action='shared',match=dict(kind='exact',value=name)) for name in sorted(GENERIC_COOKIES)]
+        # Installed CMS names are automatic defaults, never user overrides.
+        # Any explicit Private/Variant/Shared match keeps its existing priority.
+        automatic=[]
+        for name in automatic_shared:
+            if not re.fullmatch('[0-9a-f]{32}',name):raise ValueError('Invalid automatic session name')
+            match=dict(kind='exact',value=name)
+            if not any(not row.get('id','').startswith('bundled:') and _matches(row['match'],match) for row in resolved):
+                automatic.append(dict(action='shared',match=match))
+        resolved=automatic+resolved
     return ''.join(row['action']+'\t'+row['match']['kind']+'\t'+row['match']['value']+'\n'
                    for row in mandatory + resolved)
 
@@ -314,14 +323,22 @@ def _tidy(header):
             'if (req.http.' + header + ' == "") { unset req.http.' + header + '; }')
 
 
-def compile_vcl(central=None, site=None, *, chain_defaults=False):
+def compile_vcl(central=None, site=None, *, chain_defaults=False, automatic_shared=()):
     """Body for scp_admin_cookie_rules, called after core privacy checks.
 
     Remove already handled pairs from a working copy so a lower-priority prefix
     cannot undo an exact/site decision. Keep the real origin Cookie unchanged.
     """
     rules = resolve(concrete(central),concrete(site)) if chain_defaults else active(central, site)
-    return _compile_rules(rules,chain_defaults=chain_defaults)
+    generated=_compile_rules(rules,chain_defaults=chain_defaults)
+    if automatic_shared:
+        automatic=[]
+        for name in automatic_shared:
+            if not re.fullmatch('[0-9a-f]{32}',name):raise ValueError('Invalid automatic session name')
+            automatic.append(dict(id='cms:joomla-session',match=dict(kind='exact',value=name),action='shared',scope='cms'))
+        body=_compile_rules(automatic,initialize=False,finish=False)
+        generated=generated.replace('call scp_bundled_cookie_rules;',body+'\ncall scp_bundled_cookie_rules;')
+    return generated
 
 
 def defaults_vcl():

@@ -745,5 +745,233 @@
       "txreq -url \"/shared-response\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {same-public-html}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Cache-Control == \"public, max-age=1800\"",
       "txreq -url \"/shared-response\" -hdr \"Host: example.test\" -hdr \"Cookie: _fbp=different-provider-id\" @@GET_HEADERS@@\nrxresp\nexpect resp.body == {same-public-html}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>"
     ]
+  },
+  {
+    "name": "Aggressive public HTML overrides origin restrictions and retains browser policy",
+    "site_settings": {
+      "aggressive": true,
+      "aggressive_ttl": 604800
+    },
+    "origin": [
+      "accept",
+      "rxreq",
+      "expect req.url == \"/page\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\" -hdr \"Surrogate-Control: no-store\" -hdr \"Pragma: no-cache\" -hdr \"Expires: Wed, 17 Aug 2005 00:00:00 GMT\" -body \"public\""
+    ],
+    "requests": [
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"MISS\"",
+      "expect resp.http.Cache-Control == \"private, no-store\"",
+      "expect resp.http.Surrogate-Control == \"no-store\"",
+      "expect resp.http.X-Cache-Mode == \"aggressive\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Pragma == \"no-cache\"",
+      "expect resp.http.Expires == \"Wed, 17 Aug 2005 00:00:00 GMT\""
+    ]
+  },
+  {
+    "name": "Aggressive session cookie handoff belongs to its fetching visitor",
+    "site_settings": {
+      "aggressive": true
+    },
+    "origin": [
+      "accept",
+      "rxreq",
+      "expect req.url == \"/?utm_source=A\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\" -hdr \"Set-Cookie: PHPSESSID=visitor-A; Path=/; HttpOnly\" -hdr \"Vary: Cookie\" -body \"public\""
+    ],
+    "requests": [
+      "txreq -url \"/?utm_source=A\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"MISS\"",
+      "expect resp.http.Set-Cookie == \"PHPSESSID=visitor-A; Path=/; HttpOnly\"",
+      "txreq -url \"/?utm_source=B\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: PHPSESSID=visitor-B\"",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == <undef>"
+    ]
+  },
+  {
+    "name": "Known CMS joomla anonymous public HIT and private action PASS",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "joomla",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept",
+      "rxreq",
+      "expect req.url == \"/article\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/el/component/users/login\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/el/component/users/login\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\""
+    ],
+    "requests": [
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/el/component/users/login\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/el/component/users/login\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Known CMS drupal anonymous public HIT and private action PASS",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "drupal",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept",
+      "rxreq",
+      "expect req.url == \"/article\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/el/user/login\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/el/user/login\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\""
+    ],
+    "requests": [
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/el/user/login\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/el/user/login\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Known CMS magento anonymous public HIT and private action PASS",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "magento",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept",
+      "rxreq",
+      "expect req.url == \"/article\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/customer/account\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/customer/account\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\""
+    ],
+    "requests": [
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/customer/account\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/customer/account\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Known CMS prestashop anonymous public HIT and private action PASS",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "prestashop",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept",
+      "rxreq",
+      "expect req.url == \"/article\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/?controller=order\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\"",
+      "accept",
+      "rxreq",
+      "expect req.url == \"/?controller=order\"",
+      "txresp -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr \"Connection: close\"  -body \"public\""
+    ],
+    "requests": [
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/?controller=order\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/?controller=order\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"PASS\"",
+      "txreq -url \"/article\" -hdr \"Host: example.test\" @@GET_HEADERS@@ ",
+      "rxresp",
+      "expect resp.status == 200",
+      "expect resp.http.X-Cache == \"HIT\""
+    ]
   }
 ]

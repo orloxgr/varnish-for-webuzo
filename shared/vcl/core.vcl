@@ -22,6 +22,10 @@ sub scp_init {
     unset req.http.X-SCP-Aggressive;
     unset req.http.X-SCP-Aggressive-TTL;
     unset req.http.X-SCP-Private-Check;
+    unset req.http.X-SCP-Session-State;
+    unset req.http.X-SCP-Session-Socket;
+    unset req.http.X-SCP-Session-Site;
+    unset req.http.X-SCP-Session-Timeout;
     unset req.http.X-SCP-Reason;
     unset req.http.X-SCP-Pass;
     unset req.http.X-SCP-Key-URL;
@@ -67,6 +71,11 @@ sub scp_hit {
 sub scp_backend_fetch {
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     unset bereq.http.X-SCP-Cookie-Handoff;
+    unset bereq.http.X-SCP-Session-State;
+    unset bereq.http.X-SCP-Session-Socket;
+    unset bereq.http.X-SCP-Session-Site;
+    unset bereq.http.X-SCP-Session-Timeout;
+    unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
     unset bereq.http.X-SCP-Admin-Keep;
     unset bereq.http.X-SCP-Admin-Matched;

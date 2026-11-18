@@ -25,10 +25,11 @@ def main():
         for case in json.loads(cases.read_text(encoding='utf-8')):
             if profile not in case.get('profiles',['basic','ultracache']):continue
             if args.case and not any(value.lower() in case['name'].lower() for value in args.case):continue
-            configuration=json.dumps(case.get('legacy_cookie_delivery'),sort_keys=True)
+            configuration=json.dumps({key:case.get(key) for key in ('legacy_cookie_delivery','site_settings')},sort_keys=True)
             if configuration not in programs:
                 command=[sys.executable,str(args.adapter),'--profile',profile]
-                if 'legacy_cookie_delivery' in case:command.extend(['--legacy-cookie-delivery',configuration])
+                if 'legacy_cookie_delivery' in case:command.extend(['--legacy-cookie-delivery',json.dumps(case['legacy_cookie_delivery'])])
+                if 'site_settings' in case:command.extend(['--site-settings',json.dumps(case['site_settings'])])
                 programs[configuration]=json.loads(subprocess.run(command,capture_output=True,text=True,check=True).stdout)
             rendered=programs[configuration]
             server='\n'.join(case['origin']).removeprefix('accept\n')
@@ -57,6 +58,7 @@ def main():
         admin_module_sha256=hashlib.sha256(policy.with_name('cookie_admin.py').read_bytes()).hexdigest(),
         catalogue_sha256=hashlib.sha256(policy.with_name('cookie-policies.json').read_bytes()).hexdigest(),
         compiler_sha256=hashlib.sha256(policy.with_name('cookie_catalogue.py').read_bytes()).hexdigest(),
+        cms_sources={name:hashlib.sha256(policy.with_name(name).read_bytes()).hexdigest() for name in ('aggressive.py','cms_routes.py','cms_discovery.py','cms_metadata.py')},
         cases_sha256=hashlib.sha256(cases.read_bytes()).hexdigest(),results=results)
     encoded=json.dumps(report,indent=2)+'\n'
     if args.output:args.output.write_text(encoded,encoding='utf-8')
