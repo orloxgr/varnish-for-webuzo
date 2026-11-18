@@ -1,8 +1,12 @@
 # Shared cookies policy. GPL-3.0-or-later.
 
 sub scp_private_cookie_recv {
-    if (req.http.Cookie ~ {"@@COOKIE_PATTERN_varnishPrivate@@"}) {
-        set req.http.X-SCP-Cookie-Name = regsub(req.http.Cookie, {"^.*?@@COOKIE_PATTERN_varnishPrivate@@.*$"}, "\2");
+    set req.http.X-SCP-Private-Check = req.http.Cookie;
+    if (req.http.X-SCP-Aggressive == "1") {
+        set req.http.X-SCP-Private-Check = regsuball(req.http.X-SCP-Private-Check, "(^|;[[:blank:]]*)(PHPSESSID|__Secure-PHPSESSID)=[^;]*", "");
+    }
+    if (req.http.X-SCP-Private-Check ~ {"@@COOKIE_PATTERN_varnishPrivate@@"}) {
+        set req.http.X-SCP-Cookie-Name = regsub(req.http.X-SCP-Private-Check, {"^.*?@@COOKIE_PATTERN_varnishPrivate@@.*$"}, "\2");
         set req.http.X-SCP-Cookie-Role = "private";
         set req.http.X-SCP-Reason = "private-session-cookie"; return (pass);
     }

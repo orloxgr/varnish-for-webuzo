@@ -6,5 +6,7 @@ include "vcl/core.vcl";
 include "vcl/cookies.vcl";
 include "vcl/cookie-delivery.vcl";
 include "vcl/http-cache.vcl";
+include "vcl/cms-routes.vcl";
+include "vcl/aggressive.vcl";
 include "vcl/representations.vcl";
 include "vcl/ultracache-esi.vcl";

@@ -20,13 +20,15 @@ import recognition
 import cookie_views
 import cookie_bridge
 import cookie_execution
+import cms_discovery
+import aggressive
 
 SETTINGS=state.ROOT/'settings.json'
 JOURNAL=state.ROOT/'transaction.json'
 
 def settings():return state.read(SETTINGS,{})
 
-def inventory(config):
+def inventory(config,discover=False,discover_id=None):
     sites=native.collect()
     for sid,site in sites.items():
         previous=config.get('sites',{}).get(sid,{})
@@ -36,6 +38,8 @@ def inventory(config):
         site['browser_cache']=browser_cache.validate(previous['browser_cache']) if previous.get('browser_cache') is not None else None
         site['cookie_policies']=cookie_views.normalize(previous.get('cookie_policies'))
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
+        site.update(aggressive.settings(previous))
+        site['cms_installations']=(cms_discovery.discover(site['path']) if site.get('path') else []) if discover or sid==discover_id else copy.deepcopy(previous.get('cms_installations',[]))
         if site['cookie_integration'] is not None:
             site['cookie_integration'],revoked=cookie_bridge.cookie_control.reconcile_integration(site['cookie_integration'],site['domain'],site['names'])
             if revoked or previous.get('cookie_integration_notice'):
@@ -156,6 +160,8 @@ def apply(previous,next_config,cookie_force_sites=()):
             for sid,site in next_config['sites'].items():
                 old=previous.get('sites',{}).get(sid,{})
                 changed=any(old.get(k,'' if k in ('recv_vcl','backend_vcl') else None)!=site.get(k,'' if k in ('recv_vcl','backend_vcl') else None) for k in ('enabled','bypass','names','recv_vcl','backend_vcl'))
+                changed=changed or old.get('cms_installations',[])!=site.get('cms_installations',[])
+                changed=changed or aggressive.settings(old)!=aggressive.settings(site)
                 changed=changed or execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'))
                 changed=changed or sid in cookie_purge_sites
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
@@ -217,7 +223,7 @@ def action(request):
     operation=request.get('action')
     allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore','recognition_status','recognition_configure','recognition_update'}
     if operation not in allowed:raise ValueError('Unknown action')
-    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
+    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl','aggressive','aggressive_ttl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if operation=='recognition_configure':allowed_keys.add('automatic')
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
@@ -228,7 +234,7 @@ def action(request):
     with state.locked():
         recover()
         if operation=='status':return status()
-        previous=settings();sites=inventory(previous)
+        previous=settings();sites=inventory(previous,discover=operation in ('install','reconcile'),discover_id=request.get('id') if operation=='configure' else None)
         if operation=='reconcile' and previous.get('installed'):
             repository.reconcile_owned()
             repository.ensure_cookie_modules()
@@ -289,6 +295,7 @@ def action(request):
                     if type(request.get('enabled')) is not bool:raise ValueError('Invalid enabled value')
                     if site['error'] and request['enabled']:raise ValueError(site['error'])
                     site.update(enabled=request['enabled'],bypass=policy.paths(request.get('bypass',[])))
+                    site.update(aggressive.settings(dict(site,**{k:request[k] for k in ('aggressive','aggressive_ttl') if k in request})))
                     site['profile']=profiles.name(request.get('profile',site['profile']))
                     if any(field in request for field in ('recv_vcl','backend_vcl')):
                         for field,stage in (('recv_vcl','recv'),('backend_vcl','backend_response')):

@@ -27,6 +27,8 @@ sub scp_common_recv {
         set req.http.X-SCP-Reason = "application-credentials";
         return (pass);
     }
+    call scp_cms_recv;
+    if (!req.http.X-SCP-CMS || req.http.X-SCP-CMS == "wordpress") {
     if (req.url ~ "(?i)^/([^?]*/)?(wp-admin(?:/|[?]|$)|wp-login[.]php(?:[?]|$)|xmlrpc[.]php(?:[?]|$)|wp-cron[.]php(?:[?]|$)|wp-comments-post[.]php(?:[?]|$))") {
         set req.http.X-SCP-Reason = "wordpress-private-route";
         return (pass);
@@ -48,6 +50,7 @@ sub scp_common_recv {
         req.http.X-SCP-Query ~ "(?i)(^|&)rest_route=(/|%2f)(wc(/|%2f)store(/|%2f)v[0-9]+(/|%2f)(cart|checkout|order)|wp(/|%2f)v[0-9]+(/|%2f)(users(/|%2f)me|settings))(/|%2f|&|$)") {
         set req.http.X-SCP-Reason = "private-rest-context";
         return (pass);
+    }
     }
     call scp_private_cookie_recv;
     call scp_cart_cookie_recv;

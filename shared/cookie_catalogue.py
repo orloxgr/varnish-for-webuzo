@@ -82,7 +82,7 @@ def cookie_pattern(catalogue, consumer):
     return '(^|;[[:blank:]]*)(' + '|'.join(names) + ')='
 
 
-def render_policy(source, catalogue, admin_rules='', response_rules=''):
+def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rules=''):
     """Expand only reviewed names; output remains a standalone native VCL."""
     validate(catalogue)
     source = expand(source)
@@ -93,6 +93,9 @@ def render_policy(source, catalogue, admin_rules='', response_rules=''):
     rendered = MARKER.sub(replace, source).replace('@@COOKIE_POLICY_VERSION@@', version)
     rendered = rendered.replace('@@COOKIE_ADMIN_RULES@@', admin_rules)
     rendered = rendered.replace('@@COOKIE_RESPONSE_RULES@@', response_rules)
+    import cms_routes
+    rendered = rendered.replace('@@CMS_ROUTE_RULES@@', cms_rules)
+    rendered = rendered.replace('@@CMS_NORMALIZATION@@', cms_routes.normalization_vcl())
     # Native-helper-only updates must also activate a newly loaded VCL/VMOD.
     # This contains source identity, never visitor state or an engine ABI guess.
     root=Path(__file__).parent

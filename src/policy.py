@@ -8,19 +8,13 @@ import profiles
 import timeouts
 import cookie_views
 import cookie_bridge
+import cms_routes
+import aggressive
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
 
 def paths(value):
-    if not isinstance(value,list):raise ValueError('Bypass paths must be a list')
-    result=[]
-    for path in value:
-        if not isinstance(path,str) or len(path)>4096 or not path.startswith('/') or re.search(r'%(?![0-9a-fA-F]{2})',path):raise ValueError('Use valid URL paths starting with /')
-        decoded=unquote(path,errors='strict')
-        if any(ord(c)<32 or ord(c)==127 or c in '?#\\' for c in decoded):raise ValueError('Bypass paths cannot contain queries, fragments or control characters')
-        canonical=quote(decoded,safe='/-._~')
-        if canonical not in result:result.append(canonical)
-    return result
+    return cms_routes.literal_prefixes(value)
 
 def literal_bytes(value):return ''.join('\\x'+format(b,'02x') for b in value.encode())
 
@@ -42,13 +36,13 @@ import cookie_handoff;
     admin_rules=[];response_rules=[];response_groups={};cookie_groups={}
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if site.get('enabled') and not site.get('error'):
-            key=json.dumps(cookie_views.normalize(site.get('cookie_policies')),sort_keys=True)
+            key=json.dumps([cookie_views.normalize(site.get('cookie_policies')),aggressive.settings(site)['aggressive']],sort_keys=True)
             cookie_groups.setdefault(key,dict(site=site,ids=[]))['ids'].append(site['id'])
     for group in cookie_groups.values():
         body=cookie_views.compile_recv(config,group['site'])
         condition=' || '.join('req.http.X-WV-Site == '+quoted(identity) for identity in group['ids'])
         if body:admin_rules.append('if ('+condition+') {\n'+body+'\n}')
-        rules=cookie_views.cookie_admin.response_rules(config.get('cookie_policies'),group['site'].get('cookie_policies'))
+        rules=cookie_views.cookie_admin.response_rules(config.get('cookie_policies'),group['site'].get('cookie_policies'),aggressive_mode=aggressive.settings(group['site'])['aggressive'])
         response_groups.setdefault(rules,[]).extend(group['ids'])
     for rules,identities in response_groups.items():
         # Response matching has no row-ID diagnostics. Identical literal action
@@ -56,7 +50,12 @@ import cookie_handoff;
         condition=' || '.join('bereq.http.X-WV-Site == '+quoted(identity) for identity in identities)
         response_rules.append('if ('+condition+') {\nif (cookie_handoff.detach({"'+rules+'"}, bereq.is_bgfetch)) {}\n}')
     if cookie_groups:text.append(cookie_views.defaults_vcl())
-    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules)),'''
+    cms_rules=[]
+    for site in sorted(sites.values(),key=lambda s:s['id']):
+        if not site.get('enabled') or site.get('error'):continue
+        rules=cms_routes.compile_recv(site.get('cms_installations'))
+        if rules:cms_rules.append('if (req.http.X-WV-Site == '+quoted(site['id'])+') {\n'+rules+'\n}')
+    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules)),'''
 sub vcl_recv {
  call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';
@@ -97,9 +96,11 @@ sub vcl_recv {
             names.add(name)
         cond=' || '.join('req.http.host == '+quoted(n) for n in site['names'])
         profile=profiles.selected(site)
+        override=aggressive.settings(site)
         cookie_contract=cookie_bridge.cookie_control.cache_contract(site.get('cookie_integration'),site['domain'],site['names'],config.get('cookie_policies'),site.get('cookie_policies'))
         text.append(' if ('+cond+') {\n set req.http.X-WV-Site = '+quoted(site['id'])+';\n'+
             ' set req.http.X-WV-Profile = '+quoted(profile)+';\n set req.http.X-SCP-Profile = '+quoted(profile)+';\n'+
+            (' set req.http.X-SCP-Aggressive = "1"; set req.http.X-SCP-Aggressive-TTL = '+quoted(str(override['aggressive_ttl']))+';\n' if override['aggressive'] else '')+
             (' set req.http.X-SCP-Cookie-Contract = '+quoted(cookie_contract)+';\n' if cookie_contract else '')+
             (' set req.http.X-WV-Disabled = "1";\n' if not site.get('enabled') else '')+
             ' if (req.method == "HEAD" && req.http.X-WV-Control-Discovery == "1" && local.socket == "public") { return (synth(405, "HTTP cache control endpoint")); }\n'+
@@ -157,6 +158,7 @@ sub vcl_hash {
  call scp_key;
  call scp_cookie_hash;
  hash_data("webuzo-shared-policy-v8");
+ hash_data(req.http.X-SCP-Aggressive); hash_data(req.http.X-SCP-Aggressive-TTL);
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
  hash_data(req.http.X-SCP-Key-URL);
  return (lookup);

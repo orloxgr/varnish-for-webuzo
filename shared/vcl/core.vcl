@@ -16,6 +16,12 @@ sub scp_init {
     unset req.http.X-SCP-Admin-Scope;
     unset req.http.X-SCP-Admin-Action;
     unset req.http.X-SCP-Profile;
+    unset req.http.X-SCP-CMS;
+    unset req.http.X-SCP-CMS-Path;
+    unset req.http.X-SCP-CMS-Query;
+    unset req.http.X-SCP-Aggressive;
+    unset req.http.X-SCP-Aggressive-TTL;
+    unset req.http.X-SCP-Private-Check;
     unset req.http.X-SCP-Reason;
     unset req.http.X-SCP-Pass;
     unset req.http.X-SCP-Key-URL;
@@ -94,6 +100,7 @@ sub scp_backend_response {
             set beresp.http.Vary = beresp.http.Vary + ", X-Forwarded-Proto";
         }
     }
+    call scp_aggressive_backend_response;
     call scp_shared_response_cookies;
     call scp_response_privacy;
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
@@ -104,6 +111,9 @@ sub scp_backend_response {
 }
 sub scp_deliver {
     cookie_handoff.deliver();
+    if (req.http.X-SCP-Aggressive == "1") { set resp.http.X-Cache-Mode = "aggressive"; }
+    else { set resp.http.X-Cache-Mode = "standard"; }
+    call scp_aggressive_deliver;
     if (req.http.X-SCP-Pass == "1" || obj.uncacheable) {
         set resp.http.X-SCP-Result = "PASS";
         if (req.http.X-SCP-Reason) { set resp.http.X-SCP-Result-Reason = req.http.X-SCP-Reason; }

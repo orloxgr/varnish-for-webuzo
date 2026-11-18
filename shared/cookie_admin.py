@@ -114,17 +114,24 @@ def executable(central=None, site=None):
             for row in active(central, site)]
 
 
-def response_rules(central=None, site=None):
+def response_rules(central=None, site=None, *, aggressive_mode=False):
     """Same ordered choices for every real response cookie, without values.
 
     Core authentication/cart contracts remain authoritative in both directions.
     Tab/newline cannot occur in normalized literal matches.
     """
+    from aggressive import GENERIC_COOKIES
+    generic = lambda row: row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES
     mandatory = [dict(action='private', match=row['match'])
                  for row in load_catalogue()['policies']
-                 if row['consumers']['varnishPrivate'] or row['consumers']['varnishCart']]
+                 if (row['consumers']['varnishPrivate'] or row['consumers']['varnishCart']) and not (aggressive_mode and generic(row))]
+    resolved = active(central, site)
+    if aggressive_mode:
+        resolved = [dict(row,action='shared') if row['scope']=='central' and row['id'].startswith('bundled:') and generic(row) else row for row in resolved]
+        # Explicit site/central choices precede these generic session defaults.
+        resolved += [dict(action='shared',match=dict(kind='exact',value=name)) for name in sorted(GENERIC_COOKIES)]
     return ''.join(row['action']+'\t'+row['match']['kind']+'\t'+row['match']['value']+'\n'
-                   for row in mandatory + active(central, site))
+                   for row in mandatory + resolved)
 
 
 def _recognition_match(row):
@@ -319,7 +326,12 @@ def compile_vcl(central=None, site=None, *, chain_defaults=False):
 
 def defaults_vcl():
     """Emit once per program; explicit site rules consume their pairs first."""
-    return 'sub scp_bundled_cookie_rules {\n'+_compile_rules(resolve(defaults()),initialize=False,finish=False)+'\n}'
+    from aggressive import GENERIC_COOKIES
+    rows=resolve(defaults())
+    generic=[row for row in rows if row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES]
+    remaining=[row for row in rows if row not in generic]
+    branch='if (req.http.X-SCP-Aggressive == "1") {\n'+_compile_rules([dict(row,action='shared') for row in generic],initialize=False,finish=False)+'\n} else {\n'+_compile_rules(generic,initialize=False,finish=False)+'\n}\n'
+    return 'sub scp_bundled_cookie_rules {\n'+branch+_compile_rules(remaining,initialize=False,finish=False)+'\n}'
 
 
 def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False):

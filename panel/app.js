@@ -106,17 +106,32 @@
       row.append(name);
       const profile = node('select'); options(profile, site.profile); profile.setAttribute('aria-label', 'VCL profile for ' + site.domain);
       const profileCell = node('td'); profileCell.append(profile); row.append(profileCell);
+      const aggressive = node('input'); aggressive.type = 'checkbox'; aggressive.checked = site.aggressive === true;
+      aggressive.setAttribute('aria-label', 'Enable aggressive caching for ' + site.domain);
+      const aggressiveLabel = node('label'); aggressiveLabel.append(aggressive, document.createTextNode(' Enable aggressive caching'));
+      const aggressiveTTL = node('input'); aggressiveTTL.type = 'number'; aggressiveTTL.min = '1'; aggressiveTTL.step = '1'; aggressiveTTL.value = site.aggressive_ttl;
+      aggressiveTTL.setAttribute('aria-label', 'Aggressive cache duration in seconds for ' + site.domain);
+      const ttlLabel = node('label', 'Aggressive cache duration · seconds'); ttlLabel.append(aggressiveTTL);
+      const aggressiveFields = node('div'); aggressiveFields.append(ttlLabel, node('small', 'Overrides origin cache restrictions for anonymous public HTML. Known private routes, authentication, cart and additional exclusions still apply. Browser cache settings stay separate.'));
+      const aggressiveChanged = () => { aggressiveFields.hidden = !aggressive.checked; }; aggressive.addEventListener('change', aggressiveChanged); aggressiveChanged();
+      profileCell.append(aggressiveLabel, aggressiveFields);
+      const detected = (site.cms_installations || []).map(item => item.cms + (item.base === '/' ? '' : ' at ' + item.base));
+      if (detected.length) name.append(node('small', 'CMS rules: ' + detected.join(', ')));
       const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = site.enabled; enabled.setAttribute('aria-label', 'Enable Varnish for ' + site.domain);
       const enabledCell = node('td'); enabledCell.append(enabled); row.append(enabledCell);
       const bypass = node('textarea'); bypass.value = site.bypass.join('\n'); bypass.placeholder = '/private-area/\n/custom-checkout/'; bypass.setAttribute('aria-label', 'Additional bypass paths for ' + site.domain);
       const bypassCell = node('td'); bypassCell.append(bypass, node('small', 'URL prefixes, one per line.')); row.append(bypassCell);
       const cell = node('td'), actions = node('div'); actions.className = 'wvw-actions';
       const save = node('button', 'Save & Apply'); save.type = 'button'; save.className = 'wvw-primary';
-      save.addEventListener('click', () => call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value}));
+      save.addEventListener('click', () => {
+        const ttl = Number(aggressiveTTL.value);
+        if (!Number.isSafeInteger(ttl) || ttl <= 0) { aggressiveTTL.reportValidity(); return; }
+        call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, aggressive: aggressive.checked, aggressive_ttl: ttl, bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value});
+      });
       const purge = node('button', 'Clear cache'); purge.type = 'button'; purge.dataset.unavailable = String(!snapshot.installed || !site.enabled ? 1 : 0);
       purge.addEventListener('click', () => call('purge', {id: site.id}));
       actions.append(save, purge); cell.append(actions); row.append(cell); body.append(row);
-      for (const el of [profile, enabled, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      for (const el of [profile, aggressive, aggressiveTTL, enabled, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       const detailRow = node('tr'); detailRow.hidden = true; detailRow.dataset.detailsFor = site.id;
       const detailCell = node('td'); detailCell.colSpan = 5;
       const section = node('div'); section.className = 'wvw-site-details'; detailCell.append(section); detailRow.append(detailCell); body.append(detailRow);
