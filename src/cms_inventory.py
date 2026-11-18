@@ -37,7 +37,7 @@ def query(connection, site, statement):
     except (ValueError, TypeError):raise cms_metadata.MetadataUnavailable('Unexpected CMS route metadata') from None
 
 
-def discover(site):
+def discover(site, previous=None):
     records = cms_discovery.discover(site['path'])
     notices = []
     sessions = []
@@ -53,5 +53,10 @@ def discover(site):
             connection = cms_metadata.connection(record['cms'], root)
             records[index] = cms_metadata.aliases(record, lambda statement:query(connection,site,statement), connection['prefix'], site['names'])
         except (OSError, ValueError, KeyError, TypeError):
-            notices.append(record['cms']+' at '+record['base']+': Configured route metadata unavailable; standard CMS routes remain active.')
+            retained=next((old for old in (previous or {}).get('cms_installations',[])
+                           if old['cms']==record['cms'] and old['base']==record['base']),None)
+            if retained and (previous or {}).get('path')==site['path']:
+                records[index]=retained
+                notices.append(record['cms']+' at '+record['base']+': Configured route metadata unavailable; last discovered routes remain active.')
+            else:notices.append(record['cms']+' at '+record['base']+': Configured route metadata unavailable; standard CMS routes remain active.')
     return records, notices, sessions

@@ -72,11 +72,15 @@ def configuration(config):
     for sid,site in selected(config).items():
         roots=[dict(cms=row['cms'],base=row['base'],root=str(Path(site['path'])/unquote(row['base']).lstrip('/')))
                for row in site['cms_installations'] if row['cms']=='joomla']
-        sites[sid]=dict(uid=site['uid'],gid=site['gid'],home=site['home'],installations=roots)
+        sites[sid]=dict(uid=site['uid'],gid=site['gid'],home=site['home'],installations=roots,
+            names=site['names'],origins={scheme:dict(type='unix',
+                path='/run/varnish-for-webuzo-origin-'+scheme+'.sock',
+                headers={'X-WV-Origin':config['origin']}) for scheme in ('http','https')})
     root=Path(__file__).resolve().parents[1]/'shared'
     source_identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in ('cms_sessions.py','cms_session_server.py','cms_metadata.py'))).hexdigest()
     return dict(schema=1,socket=SOCKET,allowed_uids=[daemon.pw_uid],socket_gid=daemon.pw_gid,
                 max_frame_bytes=frame_bytes(),query_timeout=timeouts.settings(config)['connect']/1000,
+                token_timeout=timeouts.frontend(timeouts.settings(config))['read']/1000,
                 mysql_socket='/var/lib/mysql/mysql.sock',sites=sites,source_identity=source_identity)
 
 

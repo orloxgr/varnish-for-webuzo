@@ -1,14 +1,18 @@
 # Modular source, self-contained runtime
 
-`cache-policy.vcl` is the source coordinator. It explicitly lists six modules:
+`cache-policy.vcl` is the source coordinator. Its modules cover:
 core entry points, request cookies/diagnostics, downstream response privacy,
-HTTP admission/privacy, representations and UltraCache ESI. Existing subroutines
+HTTP admission/privacy, representations, UltraCache ESI, aggressive HTML and
+CMS route policy. Existing subroutines
 keep their responsibilities and explicit call order. `profiles/control.vcl`
 continues to own the native control protocol.
 
 `vcl_source.expand()` resolves these owned files during generation, before
 reviewed cookie-name substitution. Both panel adapters publish a single complete
-VCL program. There are no runtime file references or visitor-time database reads.
+VCL program. There are no runtime VCL file references. Opt-in Joomla aggressive
+mode uses the owned local CMS helper for fresh session classification and,
+when needed, per-visitor native application token delivery. SQL/config reads
+run as the hosting UID; the helper never caches authentication results.
 
 This choice preserves the existing transactional deployment: the content digest
 covers all expanded module bytes, `vcl.load` compiles the whole program before

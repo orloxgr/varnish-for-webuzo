@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 $ABI strict
 $Module cookie_handoff 3 "Request-owned response cookie handoff"
+$Event cookie_event
 
 $Function VOID reset(PRIV_TASK)
 $Restrict vcl_recv
@@ -44,3 +45,30 @@ $Restrict vcl_recv
 Query the root-owned local CMS session resolver before cache lookup. The result
 contains only guest/private/unresolved and a fixed diagnostic, never session
 values. Timeout comes from the hosting adapter's native connection allowance.
+
+$Function VOID guard_joomla_forms(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Inspect actual Joomla session-token HTML before allocating a shared object.
+Public JSON token fields use a private ESI include. Actual session forms remain
+uncached origin responses. There is no body-size inspection cutoff.
+
+$Function BOOL prepare_token(PRIV_TASK, PRIV_TOP)
+$Restrict vcl_deliver
+
+Prepare the requesting visitor's token before ESI composition and headers.
+
+$Function STRING csrf_token(PRIV_TOP)
+$Restrict vcl_synth
+
+Return only the top request's private token for its internal ESI fragment.
+
+$Function BOOL ensure_token(PRIV_TASK, PRIV_TOP, STRING socket_path, STRING site, STRING path, STRING cookie, STRING host, STRING scheme, STRING user_agent, STRING client_ip, DURATION timeout)
+$Restrict vcl_hit vcl_deliver
+
+Obtain a real origin-issued session/token for this visitor. On failure the VCL
+falls back to the original uncached response before delivering any template.
+
+$Function STRING token_reason(PRIV_TASK)
+
+Fixed diagnostic for an unavailable/private token, without values.

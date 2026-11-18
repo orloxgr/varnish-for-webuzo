@@ -108,13 +108,22 @@ def view(config, sites, request):
     rows = cookie_admin.table(database, catalogue, central, local)
     inherited = cookie_admin.table(database, catalogue, central if site else None, None)
     for row in rows+inherited:
+        if site and aggressive.settings(site)['aggressive']:
+            explanation='Aggressive mode shares this generic anonymous session cookie. Known authentication, private routes and explicit Private choices still select PASS.'
+            if row['match']['kind']=='exact' and row['match']['value'] in aggressive.GENERIC_COOKIES:
+                if not row.get('override'):
+                    row.update(action='shared',effective_action='shared',mode_default_action='shared',
+                               core_precedence=explanation,policy_behavior='Shares anonymous public HTML without storing or replaying personal cookie values.')
+                if row['inherited_scope']=='bundled':row['inherited_action']='shared'
+            if row['reset_match']['kind']=='exact' and row['reset_match']['value'] in aggressive.GENERIC_COOKIES and row['inherited_scope']=='bundled':
+                row['reset_metadata'].update(effective_action='shared',mode_default_action='shared',core_precedence=explanation)
         explain_cart_precedence(row,row['match'],profile,catalogue,row.get('action') if row.get('override') else None)
         explain_cart_precedence(row['reset_metadata'],row['reset_match'],profile,catalogue,
                                 row['inherited_action'] if row['inherited_scope']=='central' else None)
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])
-        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior','active_rule') if key in fallback})
+        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior','active_rule','mode_default_action') if key in fallback})
                             if fallback else None)
     integration=None; integration_error=site.get('cookie_integration_notice','') if site else ''
     precedence=[]
@@ -135,6 +144,7 @@ def view(config, sites, request):
         rows=rows if site is not None or admin else [],
         enabled=bool(config.get('installed')) and (bool(site.get('enabled')) if site else admin),
         profile=site.get('profile') if site else None,
+        aggressive=aggressive.settings(site)['aggressive'] if site else False,
         integration=integration,integration_error=integration_error,
         precedence_notes=precedence,
         database_revision=database.get('revision', '')))

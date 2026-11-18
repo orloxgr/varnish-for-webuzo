@@ -11,6 +11,37 @@ host/backend/token isolation. `header` comes from the ABI-matching official
 
 ## Local cookie catalogue
 
+### Anonymous aggressive HTML and CMS routing
+
+`aggressive.py`, `cms_routes.py`, `cms_discovery.py`, `cms_metadata.py`,
+`cms_sessions.py` and `cms_session_server.py` are common panel-independent source.
+The adapter supplies validated native document roots, account IDs and origin
+descriptors. Aggressive mode is per-site, default OFF; no profile or migration
+enables it implicitly. The selected TTL is used without a lower addon cap.
+Generic origin privacy fields are overridden only for otherwise eligible 200
+HTML. Original browser fields are restored on delivery. Authentication, cart,
+explicit Private cookie choices and scoped private CMS paths/actions win first.
+Tracking normalization changes the key only, never the original origin request.
+
+Joomla database session metadata is read under the hosting UID before warm
+lookup. Session classification is fresh, with no guest-state TTL. The resolver
+transport is root owned and validates native peer identity. The native module
+has dynamically sized private token replies so cookies are not cut off at the
+small diagnostic-frame size. Root-only native origin descriptors never reach
+the hosting-UID subprocess. Native origin timeout allowances apply.
+
+The Joomla body filter scans decoded HTML before shared-object allocation,
+without a body-size cutoff. Actual token-bearing forms remain private.
+Core JSON `csrf.token` values become internal ESI includes; their original
+values stay in the fetching request's private handoff, not the cached template.
+At each later HIT the root helper obtains this visitor's real application token
+and original Set-Cookie fields. The internal token URI accepts only a same-site
+ESI child of an aggressive Joomla parent. Both Basic and UltraCache use the
+same implementation. Token preparation completes before parent headers; failure
+uses the original uncached response. ETags for rewritten personal templates are
+removed. Provider fields are never shared between visitors or comma-joined.
+Only the assembled personal response is private; the parent object can HIT.
+
 ### Reviewed database lifecycle
 
 Recognition descriptions, assessments and concrete executable defaults ship

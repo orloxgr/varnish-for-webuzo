@@ -41,7 +41,7 @@ class Metadata(unittest.TestCase):
         row=cms_metadata.aliases(dict(cms='wordpress',base='/wordpress'),query,'wp_',['example.test'])
         self.assertIn('/el/%CE%BA%CE%B1%CE%BB%CE%AC%CE%B8%CE%B9',row['private_paths'])
         self.assertIn('/el/orders/pay',row['private_paths'])
-        self.assertEqual(row['private_queries'],[dict(name='page_id',value='7'),dict(name='page_id',value='8')])
+        self.assertEqual(row['private_queries'],[dict(name='page_id',value='7',base='/el'),dict(name='page_id',value='8',base='/el')])
 
     def test_joomla_actual_menu_aliases_languages_and_itemids(self):
         def query(statement):
@@ -50,7 +50,7 @@ class Metadata(unittest.TestCase):
                     dict(id=13,path='news',link='index.php?option=com_content&view=article&id=13',language='el-GR')]
         row=cms_metadata.aliases(dict(cms='joomla',base='/cms'),query,'j_',['example.test'])
         self.assertEqual(row['private_paths'],['/cms/el/members/customer','/cms/en/members/customer','/cms/members/customer'])
-        self.assertEqual(row['private_queries'],[dict(name='Itemid',value='12')])
+        self.assertEqual(row['private_queries'],[dict(name='Itemid',value='12',base='/cms')])
 
     def test_prestashop_localized_personal_rewrites(self):
         row=cms_metadata.aliases(dict(cms='prestashop',base='/store'),lambda statement:[dict(page='my-account',path='mon-compte',language='fr')],'ps_',['example.test'])
@@ -71,6 +71,16 @@ class Metadata(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['extra_groups'],[])
         self.assertIn('START TRANSACTION READ ONLY;',command[-1])
         with self.assertRaisesRegex(ValueError,'SELECT'):cms_inventory.query(connection,site,'UPDATE anything SET x=1')
+
+    def test_failed_refresh_preserves_configured_routes_only_for_same_native_root(self):
+        row=dict(cms='wordpress',base='/blog',private_paths=['/blog/personal-cart'],private_queries=[])
+        previous=dict(path='/home/site/public_html',cms_installations=[row])
+        site=dict(path=previous['path'],names=['example.test'])
+        with patch.object(cms_inventory.cms_discovery,'discover',side_effect=lambda _: [dict(cms='wordpress',base='/blog')]),patch.object(cms_inventory.cms_metadata,'connection',side_effect=OSError):
+            records,notices,_=cms_inventory.discover(site,previous)
+            self.assertEqual(records,[row]);self.assertIn('last discovered',notices[0])
+            records,_,_=cms_inventory.discover(dict(site,path='/home/other/public_html'),previous)
+            self.assertNotIn('private_paths',records[0])
 
 
 if __name__=='__main__':unittest.main()

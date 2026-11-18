@@ -150,7 +150,7 @@ def aliases(row, query, prefix, hosts):
             value = str(options.get(name,''))
             if not value.isdigit() or int(value) <= 0:continue
             number = int(value)
-            identities.append(dict(name='page_id',value=str(number)))
+            identities.append(dict(name='page_id',value=str(number),base=path(base or '/')))
             segments, seen = [], set()
             while number:
                 if number in seen:raise MetadataUnavailable('Recursive WordPress page hierarchy')
@@ -165,7 +165,7 @@ def aliases(row, query, prefix, hosts):
         menus = query("SELECT JSON_OBJECT('id',id,'path',path,'link',link,'language',language) FROM `"+prefix+"menu` WHERE client_id=0 AND published=1 AND type='component'")
         for menu in menus:
             if not _joomla_private(menu['link']):continue
-            if str(menu['id']).isdigit():identities.append(dict(name='Itemid',value=str(menu['id'])))
+            if str(menu['id']).isdigit():identities.append(dict(name='Itemid',value=str(menu['id']),base=row['base']))
             route = str(menu['path']).strip('/')
             if not route:continue
             base = row['base'].rstrip('/')

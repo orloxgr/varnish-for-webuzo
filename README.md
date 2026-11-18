@@ -52,6 +52,40 @@ and ESI checks.
 
 ## VCL profiles and new sites
 
+**Enable aggressive caching** is an opt-in setting in each site's existing
+Basic/UltraCache row. It starts disabled and does not migrate old choices.
+When enabled, eligible anonymous 200 HTML uses the selected **Aggressive HTML
+lifetime** (initially 86400 seconds) instead of generic origin private/no-store,
+Pragma or Expires prohibitions. No smaller addon TTL is imposed. The origin's
+browser policy is restored on delivery; this setting changes server storage.
+Generic PHP session cookies alone no longer force PASS. Explicit Private cookie
+choices, recognized authentication, cart state and private CMS actions still do.
+
+**Refresh sites** discovers WordPress/WooCommerce, Joomla, Drupal, Magento and
+PrestaShop inside native document roots. Known private paths and query actions
+apply automatically, including language prefixes and installation subfolders.
+Read-only CMS metadata adds actual WooCommerce page aliases/IDs, Joomla menu
+aliases/Itemids and PrestaShop personal-page rewrites. Magento's configured
+administrator frontName is read as data. Customer PHP is never executed for
+discovery. SQL runs under the hosting UID, using application credentials.
+Failed metadata refreshes retain previously discovered routes for the same
+document root and display a notice. Additional bypass paths cover custom routes.
+
+Joomla's opaque session is checked against its current guest/authenticated state
+before aggressive warm lookup. The owned local resolver drops to the hosting
+UID for every configuration/SQL read and does not cache authentication results.
+Core `csrf.token` JSON fields are delivered privately through a local ESI fragment
+while the common parent HTML can HIT. The first fetching visitor receives its
+original token/cookies; subsequent visitors obtain their own token through
+Joomla's native component endpoint on the native Apache bridge. Provider cookies
+are handed to that request only. Actual token-bearing forms retain their origin
+response (`joomla-session-form`). A token-provider failure falls back to the
+original origin HTML (`joomla-token-unavailable` or the precise helper reason).
+No session identifiers are fabricated, no application database writes are made
+by the addon, and the helper does not expose Varnish administration to the site.
+The assembled personal token/cookie delivery is private; the cached template
+contains no visitor's token or response cookie values.
+
 Each site has one profile selected in its own row:
 
 | Profile | Behavior |

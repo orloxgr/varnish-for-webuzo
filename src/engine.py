@@ -42,7 +42,7 @@ def inventory(config,discover=False,discover_id=None):
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
         site.update(aggressive.settings(previous))
         if (discover or sid==discover_id) and site.get('path'):
-            site['cms_installations'],site['cms_discovery_notices'],site['cms_sessions']=cms_inventory.discover(site)
+            site['cms_installations'],site['cms_discovery_notices'],site['cms_sessions']=cms_inventory.discover(site,previous)
         else:
             site['cms_installations']=copy.deepcopy(previous.get('cms_installations',[]))
             site['cms_discovery_notices']=copy.deepcopy(previous.get('cms_discovery_notices',[]))

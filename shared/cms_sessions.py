@@ -4,10 +4,49 @@ Guest authentication state alone does not prove that session-bound form tokens
 inside the response are shareable. The adapter must keep that separate contract.
 """
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 import re
 import subprocess
+
+
+class TokenHTML(HTMLParser):
+    """Read actual core token representations; never execute response scripts."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tokens=set();self.form=0;self.script=None
+
+    def handle_starttag(self,tag,attributes):
+        attrs=dict(attributes)
+        if tag=='form':self.form+=1
+        if tag=='input' and (self.form or attrs.get('form')) and attrs.get('type','').lower()=='hidden' and attrs.get('value')=='1':
+            value=attrs.get('name','')
+            if re.fullmatch('[a-f0-9]{32}',value):self.tokens.add(value)
+        if tag=='script' and attrs.get('type','').lower()=='application/json' and 'joomla-script-options' in attrs.get('class','').split():
+            self.script=[]
+
+    def handle_startendtag(self,tag,attributes):
+        self.handle_starttag(tag,attributes)
+        if tag=='form':self.form=max(0,self.form-1)
+
+    def handle_data(self,data):
+        if self.script is not None:self.script.append(data)
+
+    def handle_endtag(self,tag):
+        if tag=='form':self.form=max(0,self.form-1)
+        if tag=='script' and self.script is not None:
+            try:
+                value=json.loads(''.join(self.script)).get('csrf.token','')
+                if isinstance(value,str) and re.fullmatch('[a-f0-9]{32}',value):self.tokens.add(value)
+            except (ValueError,AttributeError,TypeError):pass
+            self.script=None
+
+
+def token_from_html(body):
+    parser=TokenHTML();parser.feed(body);parser.close()
+    if len(parser.tokens)!=1:raise ValueError('The core component did not return one session token')
+    return next(iter(parser.tokens))
 
 from cms_discovery import read_literal
 import cms_metadata
@@ -81,7 +120,7 @@ def classify(root, header, query):
         name = joomla_settings(root)
         # Joomla 3 accepts a pre-3.6 remember-me cookie under a bare hash name.
         # Its token.series shape is not an unrelated numeric analytics cookie.
-        if any(other!=name and re.fullmatch('[a-f0-9]{32}',other) and '.' in value
+        if any(other!=name and re.fullmatch('[a-f0-9]{32}',other) and re.fullmatch(r'[A-Za-z0-9]+[.][A-Za-z0-9]{20}',value)
                for other,value in supplied.items()):
             return 'unresolved', 'joomla-legacy-remember'
         if name not in supplied:

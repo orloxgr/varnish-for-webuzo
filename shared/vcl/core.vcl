@@ -26,6 +26,7 @@ sub scp_init {
     unset req.http.X-SCP-Session-Socket;
     unset req.http.X-SCP-Session-Site;
     unset req.http.X-SCP-Session-Timeout;
+    unset req.http.X-SCP-Token-Timeout;
     unset req.http.X-SCP-Reason;
     unset req.http.X-SCP-Pass;
     unset req.http.X-SCP-Key-URL;
@@ -59,6 +60,12 @@ sub scp_init {
 
 # Normalize a COPY for hashing/invalidation. Never change req.url.
 sub scp_recv {
+    if (req.url == "/.__varnish_cms_token/v1") {
+        if (req.esi_level > 0 && req_top.http.X-SCP-Aggressive == "1" && req_top.http.X-SCP-CMS == "joomla") {
+            return (synth(750));
+        }
+        return (synth(403));
+    }
     std.collect(req.http.Cookie, "; ");
     if (req.url ~ "[?]") { set req.http.X-SCP-Query = regsub(req.url, "^[^?]*[?]", ""); }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
@@ -66,6 +73,13 @@ sub scp_recv {
 }
 sub scp_pass { set req.http.X-SCP-Pass = "1"; }
 sub scp_hit {
+    if (obj.http.X-SCP-Joomla-Token == "1" && req.method != "HEAD" &&
+        !cookie_handoff.ensure_token(req.http.X-SCP-Session-Socket, req.http.X-SCP-Session-Site,
+            req.url, req.http.Cookie, req.http.host, req.http.X-Forwarded-Proto,
+            req.http.User-Agent, req.http.X-Real-IP, std.duration(req.http.X-SCP-Token-Timeout, 0s))) {
+        set req.http.X-SCP-Reason = cookie_handoff.token_reason();
+        return (pass);
+    }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
 }
 sub scp_backend_fetch {
@@ -75,6 +89,8 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Session-Socket;
     unset bereq.http.X-SCP-Session-Site;
     unset bereq.http.X-SCP-Session-Timeout;
+    unset bereq.http.X-SCP-Token-Timeout;
+    unset bereq.http.X-SCP-Form-Owner;
     unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
     unset bereq.http.X-SCP-Admin-Keep;
@@ -96,6 +112,7 @@ sub scp_backend_fetch {
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_fetch; }
 }
 sub scp_backend_response {
+    unset beresp.http.X-SCP-Joomla-Token;
     unset beresp.http.X-SCP-Reason;
     unset beresp.http.X-SCP-Client-Vary;
     unset beresp.http.X-SCP-Result;
@@ -117,12 +134,29 @@ sub scp_backend_response {
     # Only known analytics IDs are omitted from the internal Cookie key.
     call scp_representation_response;
     call scp_response_variants;
+    if (bereq.http.X-SCP-Aggressive == "1" && bereq.http.X-SCP-CMS == "joomla" &&
+        !beresp.uncacheable && beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html(?:;|$)") {
+        cookie_handoff.guard_joomla_forms();
+    }
 }
 sub scp_deliver {
+    if (resp.http.X-SCP-Joomla-Token == "1" && req.method != "HEAD" &&
+        !cookie_handoff.prepare_token() &&
+        !cookie_handoff.ensure_token(req.http.X-SCP-Session-Socket, req.http.X-SCP-Session-Site,
+            req.url, req.http.Cookie, req.http.host, req.http.X-Forwarded-Proto,
+            req.http.User-Agent, req.http.X-Real-IP, std.duration(req.http.X-SCP-Token-Timeout, 0s))) {
+        set req.http.X-SCP-Reason = cookie_handoff.token_reason();
+        return (restart);
+    }
     cookie_handoff.deliver();
     if (req.http.X-SCP-Aggressive == "1") { set resp.http.X-Cache-Mode = "aggressive"; }
     else { set resp.http.X-Cache-Mode = "standard"; }
     call scp_aggressive_deliver;
+    if (resp.http.X-SCP-Joomla-Token == "1" && req.method != "HEAD") { call scp_private_delivery; }
+    unset resp.http.X-SCP-Joomla-Token;
+    if (resp.http.X-SCP-Reason == "joomla-session-form" || resp.http.X-SCP-Reason == "joomla-session-form-encoding") {
+        call scp_private_delivery;
+    }
     if (req.http.X-SCP-Pass == "1" || obj.uncacheable) {
         set resp.http.X-SCP-Result = "PASS";
         if (req.http.X-SCP-Reason) { set resp.http.X-SCP-Result-Reason = req.http.X-SCP-Reason; }
@@ -182,4 +216,14 @@ sub scp_deliver {
         else { set resp.http.Vary = "Cookie"; }
     }
     if (req.http.X-SCP-Admin-Action == "private") { call scp_private_delivery; }
+}
+
+sub scp_synth {
+    if (resp.status == 750) {
+        set resp.status = 200;
+        set resp.http.Content-Type = "text/plain";
+        set resp.http.Cache-Control = "private, no-store";
+        set resp.body = cookie_handoff.csrf_token();
+        return (deliver);
+    }
 }

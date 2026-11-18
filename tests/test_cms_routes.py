@@ -118,6 +118,19 @@ class NativeCMS(unittest.TestCase):
                       'expect resp.http.X-Webuzo-Varnish-Reason == "drupal-authenticated-session"',
                       http.get('/article', 'public', cache='HIT')])
 
+    def test_configured_query_identity_is_scoped_to_its_real_public_base(self):
+        original=http.site
+        def selected(*args,**kwargs):
+            row=original(*args,**kwargs)
+            if row['domain']=='example.test':row['cms_installations']=[
+                dict(cms='wordpress',base='/blog',private_queries=[dict(name='page_id',value='7',base='/blog')]),
+                dict(cms='joomla',base='/')]
+            return row
+        for profile in ('basic','ultracache'):
+            with patch.object(http,'site',side_effect=selected):
+                self.run_policy(profile,[http.origin('/blog/?page_id=7','private'),http.origin('/?page_id=7','public')],
+                    [http.get('/blog/?page_id=7','private',cache='PASS'),http.get('/?page_id=7','public',cache='MISS'),http.get('/?page_id=7','public',cache='HIT')])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -9,7 +9,7 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 def source_bytes(path):
     raw=path.read_bytes()
-    if path.suffix.lower() in ('.py','.php','.js','.css','.vcl','.c','.vcc','.md','.json','.txt','.conf') or path.name in ('LICENSE','UPSTREAM'):
+    if path.suffix.lower() in ('.py','.php','.js','.css','.vcl','.c','.h','.vcc','.md','.json','.txt','.conf') or path.name in ('LICENSE','UPSTREAM'):
         return raw.replace(b'\r\n',b'\n')
     return raw
 

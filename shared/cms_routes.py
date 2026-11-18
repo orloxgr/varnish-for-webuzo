@@ -61,13 +61,14 @@ def normalize(value):
             raise ValueError('CMS private queries must be a list')
         result['private_queries'] = []
         for query in queries:
-            if (not isinstance(query, dict) or set(query) != {'name', 'value'} or
+            if (not isinstance(query, dict) or not {'name','value'} <= set(query) or set(query)-{'name','value','base'} or
                 not isinstance(query['name'], str) or not re.fullmatch('[A-Za-z0-9_.-]+', query['name']) or
                 not isinstance(query['value'], str) or not query['value'] or
                 re.search(r'[\x00-\x20\x7f&=#]', query['value'])):
                 raise ValueError('Invalid CMS private query')
             if query not in result['private_queries']:
                 result['private_queries'].append(dict(query))
+                if 'base' in query:result['private_queries'][-1]['base']=path(query['base'])
         if result not in rows:
             rows.append(result)
     return sorted(rows, key=lambda row: (-len(row['base']), row['base'], row['cms']))
@@ -116,14 +117,22 @@ def compile_custom_recv(value, reason='site-bypass-path'):
 def compile_recv(value):
     """Called with a normalized COPY of the path/query; origin URL is untouched."""
     code = []
-    for row in normalize(value):
+    rows=normalize(value)
+    for row in rows:
         # Configured public aliases may lie outside the CMS core directory
         # (WordPress siteurl=/wordpress, home=/ is a common installation).
         for configured in row['private_paths']:
             code.append('if (req.http.X-SCP-CMS-Path ~ ' + _regex('(?i)^' + _path_regex(configured) + r'(?:/|$)') + ') { set req.http.X-SCP-Reason = ' + _quote(row['cms'] + '-private-route') + '; return (pass); }')
         for query in row['private_queries']:
             pattern = '(?i)(^|&)' + re.escape(query['name']) + '=' + re.escape(query['value']) + '(&|$)'
-            code.append('if (req.http.X-SCP-CMS-Query ~ ' + _regex(pattern) + ') { set req.http.X-SCP-Reason = ' + _quote(row['cms'] + '-private-route') + '; return (pass); }')
+            condition='req.http.X-SCP-CMS-Query ~ '+_regex(pattern)
+            if 'base' in query:
+                scope='' if query['base']=='/' else _path_regex(query['base'])
+                condition+=' && req.http.X-SCP-CMS-Path ~ '+_regex('(?i)^'+scope+r'(?:/|$)')
+                for other in rows:
+                    if other!=row and other['base']!='/' and (query['base']=='/' or other['base'].startswith(query['base']+'/')):
+                        condition+=' && req.http.X-SCP-CMS-Path !~ '+_regex('(?i)^'+_path_regex(other['base'])+r'(?:/|$)')
+            code.append('if ('+condition+') { set req.http.X-SCP-Reason = ' + _quote(row['cms'] + '-private-route') + '; return (pass); }')
         base = '' if row['base'] == '/' else _path_regex(row['base'])
         # Longest installation base wins; a parent CMS never captures a child.
         scope = '(?i)^' + base + r'(?:/|$)'

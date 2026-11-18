@@ -182,7 +182,7 @@
       selectPage.checked = visible.length > 0 && visible.every(row => selected.has(row.id)); renderCount();
     }
     function actionName(action) { return action === 'application-contract' ? 'Public HTML with verified private fragments; otherwise PASS' : action === 'existing-policy' ? 'Existing handling; no active table rule' : ACTIONS[action]?.[0] || action || ''; }
-    function sourceName(row) { return row.active_rule === false ? 'Recognition only · proposal' : row.scope === 'bundled' ? 'Bundled default' : row.scope === 'central' ? 'Central choice' : row.scope === 'site' ? 'Site choice' : row.override ? 'Saved override' : 'Bundled default'; }
+    function sourceName(row) { return row.active_rule === false ? 'Recognition only · proposal' : row.mode_default_action && !row.override ? 'Aggressive mode · anonymous session default' : row.scope === 'bundled' ? 'Bundled default' : row.scope === 'central' ? 'Central choice' : row.scope === 'site' ? 'Site choice' : row.override ? 'Saved override' : 'Bundled default'; }
     function renderCount() { count.textContent = selected.size + ' selected'; const visible = pagination().visible; selectPage.checked = visible.length > 0 && visible.every(row => selected.has(row.id)); }
     async function load(id, saving = false) {
       if (busy) return;
@@ -193,6 +193,7 @@
         const response = await request(saving ? 'cookie_policies_save' : 'cookie_policies_status', values);
         if (!response || !response.cookie_policies) throw new Error('Cookie policies are unavailable.');
         model = response.cookie_policies; rows = model.rows; drafts = new Map(model.settings.rules.map(rule => [rule.id, clone(rule)])); selected.clear(); resetRows.clear(); expanded.clear(); dirty = false;
+        notice.textContent=model.aggressive ? 'Aggressive caching overrides generic origin no-cache/no-store for anonymous public HTML. Known authentication, private routes, cart contracts and explicit Private choices still take precedence.' : 'Shared HTML preserves cookies. Login, checkout, application private/no-store responses and private fragments keep their existing protection.';
         scope.replaceChildren(); if (model.administrator) scope.append(new Option('Central cookie policies', ''));
         for (const site of model.sites) scope.append(new Option(site.domain + (model.administrator ? ' / ' + site.owner : ''), site.id)); scope.value = model.id || '';
         integrationBox.hidden=!model.id;

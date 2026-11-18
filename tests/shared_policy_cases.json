@@ -973,5 +973,102 @@
       "expect resp.status == 200",
       "expect resp.http.X-Cache == \"HIT\""
     ]
+  },
+  {
+    "name": "Joomla token private ESI fields retain public parent HIT and owner cookies",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "joomla",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -body {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}"
+    ],
+    "broker_answers": [
+      "token\tfedcba9876543210fedcba9876543210\tU2V0LUNvb2tpZTogUEhQU0VTU0lEPXNlc3Npb24tQjsgUGF0aD0vOyBIdHRwT25seTsgU2FtZVNpdGU9TGF4\n",
+      "token\t0123456789abcdef0123456789abcdef\t\n"
+    ],
+    "requests": [
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"MISS\"",
+      "expect resp.http.Set-Cookie == \"PHPSESSID=session-A; Path=/; HttpOnly\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == \"PHPSESSID=session-B; Path=/; HttpOnly; SameSite=Lax\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PHPSESSID=session-A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == <undef>",
+      "txreq -url \"/.__varnish_cms_token/v1\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 403"
+    ]
+  },
+  {
+    "name": "Joomla token gzip parent has distinct visitor tokens and cookies",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "joomla",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -gzipbody {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}"
+    ],
+    "broker_answers": [
+      "token\tfedcba9876543210fedcba9876543210\tU2V0LUNvb2tpZTogUEhQU0VTU0lEPXNlc3Npb24tQjsgUGF0aD0vOyBIdHRwT25seTsgU2FtZVNpdGU9TGF4\n",
+      "token\t0123456789abcdef0123456789abcdef\t\n"
+    ],
+    "requests": [
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"MISS\"",
+      "expect resp.http.Set-Cookie == \"PHPSESSID=session-A; Path=/; HttpOnly\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == \"PHPSESSID=session-B; Path=/; HttpOnly; SameSite=Lax\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PHPSESSID=session-A}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"HIT\"",
+      "expect resp.http.Set-Cookie == <undef>",
+      "txreq -url \"/.__varnish_cms_token/v1\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 403"
+    ]
+  },
+  {
+    "name": "Joomla token unavailable provider falls back to original origin HTML",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "joomla",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -body {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}",
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-B; Path=/; HttpOnly} -body {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}"
+    ],
+    "broker_answers": [
+      "unresolved\tjoomla-token-unavailable\n"
+    ],
+    "requests": [
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"0123456789abcdef0123456789abcdef\"}</script>}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<script type=\"application/json\">{\"csrf.token\":\"fedcba9876543210fedcba9876543210\"}</script>}\nexpect resp.http.X-Cache == \"PASS\""
+    ]
+  },
+  {
+    "name": "Joomla token actual session form remains private with explicit reason",
+    "site_settings": {
+      "aggressive": true,
+      "cms_installations": [
+        {
+          "cms": "joomla",
+          "base": "/"
+        }
+      ]
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/page\"\ntxresp -hdr {Content-Type: text/html} -hdr {Cache-Control: no-store} -hdr {Set-Cookie: PHPSESSID=session-A; Path=/; HttpOnly} -body {<form method=\"post\"><input type=\"hidden\" name=\"0123456789abcdef0123456789abcdef\" value=\"1\"></form>}"
+    ],
+    "requests": [
+      "txreq -url \"/page\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {<form method=\"post\"><input type=\"hidden\" name=\"0123456789abcdef0123456789abcdef\" value=\"1\"></form>}\nexpect resp.http.X-Cache == \"PASS\""
+    ]
   }
 ]

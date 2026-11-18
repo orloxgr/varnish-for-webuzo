@@ -103,6 +103,7 @@ sub vcl_recv {
             ' set req.http.X-WV-Profile = '+quoted(profile)+';\n set req.http.X-SCP-Profile = '+quoted(profile)+';\n'+
             (' set req.http.X-SCP-Aggressive = "1"; set req.http.X-SCP-Aggressive-TTL = '+quoted(str(override['aggressive_ttl']))+';\n' if override['aggressive'] else '')+
             (' set req.http.X-SCP-Session-Socket = '+quoted(cms_resolver.SOCKET)+'; set req.http.X-SCP-Session-Site = '+quoted(site['id'])+'; set req.http.X-SCP-Session-Timeout = '+quoted(timeouts.seconds(allowances['connect']))+';\n' if override['aggressive'] else '')+
+            (' set req.http.X-SCP-Token-Timeout = '+quoted(timeouts.seconds(timeouts.frontend(allowances)['read']))+';\n' if override['aggressive'] else '')+
             (' set req.http.X-SCP-Cookie-Contract = '+quoted(cookie_contract)+';\n' if cookie_contract else '')+
             (' set req.http.X-WV-Disabled = "1";\n' if not site.get('enabled') else '')+
             ' if (req.method == "HEAD" && req.http.X-WV-Control-Discovery == "1" && local.socket == "public") { return (synth(405, "HTTP cache control endpoint")); }\n'+
@@ -116,7 +117,8 @@ sub vcl_recv {
  if (req.method == "PURGE" || req.method == "BAN") { return (synth(403)); }
  if (!req.http.X-WV-Site) { return (synth(421)); }
  if (req.esi_level > 0) {
-   if (req_top.http.X-WV-Site != req.http.X-WV-Site || req_top.http.X-WV-Profile != "ultracache") { return (synth(403)); }
+   if (req_top.http.X-WV-Site != req.http.X-WV-Site || (req_top.http.X-WV-Profile != "ultracache" &&
+       !(req.url == "/.__varnish_cms_token/v1" && req_top.http.X-SCP-Aggressive == "1" && req_top.http.X-SCP-CMS == "joomla"))) { return (synth(403)); }
    set req.http.X-Forwarded-Proto = req_top.http.X-Forwarded-Proto;
  } else if (req.http.X-WV-Gateway != '''+quoted(gateway)+''') { return (synth(403)); }
  unset req.http.X-WV-Gateway;
@@ -138,6 +140,7 @@ sub vcl_recv {
  set req.http.X-WV-Origin = '''+quoted(origin_secret)+''';
  std.collect(req.http.Cookie, "; ");
  if (req.http.X-WV-Disabled) { set req.http.X-WV-Reason = "site-disabled"; return (pass); }
+ if (req.restarts > 0) { set req.http.X-SCP-Reason = "joomla-token-retry"; return (pass); }
 ''')
     for profile in profiles.NAMES:
         fragment=fragments.validate(profiles.rules(config,profile)['recv_vcl'],'recv',mark_pass=True,pass_reason='central-profile-vcl')
@@ -204,6 +207,6 @@ sub vcl_deliver {
  set resp.http.X-Webuzo-Varnish-Profile = req.http.X-WV-Profile;
  set resp.http.X-Accel-Expires = "0";
 }
-sub vcl_synth { set resp.http.Cache-Control = "no-store"; set resp.http.X-Accel-Expires = "0"; }
+sub vcl_synth { call scp_synth; set resp.http.Cache-Control = "no-store"; set resp.http.X-Accel-Expires = "0"; }
 ''')
     return '\n'.join(text)+'\n'

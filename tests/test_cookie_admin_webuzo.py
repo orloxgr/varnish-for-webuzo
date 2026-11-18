@@ -65,6 +65,23 @@ class NativeScope(unittest.TestCase):
         self.assertTrue(all(row['active_rule'] and row['scope']=='bundled' and row['action'] in ('shared','variant','private') for row in view['rows']))
         self.assertEqual(view['settings']['rules'],[])
 
+    def test_aggressive_session_default_and_explicit_private_are_shown_as_executed(self):
+        previous=engine.settings();previous['sites'][self.first['id']]['aggressive']=True
+        state.save(engine.SETTINGS,previous)
+        view=self.request()['cookie_policies'];row=next(r for r in view['rows'] if r['name']=='PHPSESSID')
+        self.assertTrue(view['aggressive'])
+        self.assertEqual((row['action'],row['effective_action'],row['inherited']['action']),('shared','shared','shared'))
+        self.assertEqual(row['mode_default_action'],'shared')
+        previous['sites'][self.first['id']]['cookie_policies']=choices('private','PHPSESSID',identity=row['id'])
+        state.save(engine.SETTINGS,previous)
+        row=next(r for r in self.request()['cookie_policies']['rows'] if r['name']=='PHPSESSID')
+        self.assertEqual((row['action'],row['effective_action']),('private','private'))
+        self.assertEqual(row['inherited']['action'],'shared')
+        previous['sites'][self.first['id']]['aggressive']=False
+        previous['sites'][self.first['id']]['cookie_policies']=None;state.save(engine.SETTINGS,previous)
+        row=next(r for r in self.request()['cookie_policies']['rows'] if r['name']=='PHPSESSID')
+        self.assertEqual(row['action'],'private')
+
     def test_new_recognition_metadata_is_visible_without_claiming_an_executed_rule(self):
         database={'revision':'new','records':[dict(id='new',name='new_unbundled_cookie_17',provider='',wildcard=False)]}
         with patch.object(cookie_views.recognition,'database',return_value=database):
