@@ -70,6 +70,8 @@ class NativeScope(unittest.TestCase):
         state.save(engine.SETTINGS,previous)
         view=self.request()['cookie_policies'];row=next(r for r in view['rows'] if r['name']=='PHPSESSID')
         self.assertTrue(view['aggressive'])
+        tracking=next(r for r in view['rows'] if r['name']=='_ga')
+        self.assertIn('Aggressive mode can override',tracking['core_precedence'])
         self.assertEqual((row['action'],row['effective_action'],row['inherited']['action']),('shared','shared','shared'))
         self.assertEqual(row['mode_default_action'],'shared')
         previous['sites'][self.first['id']]['cookie_policies']=choices('private','PHPSESSID',identity=row['id'])

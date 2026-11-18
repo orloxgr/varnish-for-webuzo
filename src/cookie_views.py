@@ -110,6 +110,10 @@ def view(config, sites, request):
     for row in rows+inherited:
         if site and aggressive.settings(site)['aggressive']:
             explanation='Aggressive mode shares this generic anonymous session cookie. Known authentication, private routes and explicit Private choices still select PASS.'
+            for metadata in (row,row['reset_metadata']):
+                metadata['core_precedence']=metadata.get('core_precedence','').replace(
+                    'and origin private/no-store remain authoritative.',
+                    'take precedence. Aggressive mode can override generic origin privacy for anonymous public HTML.')
             if row['match']['kind']=='exact' and row['match']['value'] in aggressive.GENERIC_COOKIES:
                 if not row.get('override'):
                     row.update(action='shared',effective_action='shared',mode_default_action='shared',

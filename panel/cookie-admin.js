@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const ACTIONS = {
-    shared: ['Shared HTML', 'Ignore this cookie when selecting shared HTML. Preserve it in the browser and origin request; origin privacy and login protection still apply.'],
+    shared: ['Shared HTML', 'Ignore this cookie when selecting shared HTML. Preserve it in the browser and origin request; recognized login/cart protection and this site\'s cache mode still apply.'],
     variant: ['Public variant', 'Use this cookie value to select a separate public cache variant. Cookie values are never displayed in this table.'],
     private: ['Private', 'Requests carrying this cookie use private processing instead of shared public HTML.']
   };
@@ -90,7 +90,7 @@
         if (base.active_rule === false) { value.effective_action=draft.action; value.policy_behavior=ACTIONS[draft.action]?.[1] || ''; }
         if (renamed) Object.assign(value, {provider:'', category:'Custom cookie', proposal:null, confidence:'', sources:[], htmlEffect:'site-dependent', valid_match:undefined,
           reason:'This name was edited in this scope. Save & Apply resolves its matching default and protection rules.',
-          policy_behavior:ACTIONS[draft.action]?.[1] || '', core_precedence:'Login, private sessions, cart contracts and origin private/no-store remain authoritative.', effective_action:draft.action});
+          policy_behavior:ACTIONS[draft.action]?.[1] || '', core_precedence:model.aggressive ? 'Recognized authentication, private routes and cart contracts take precedence. Aggressive mode can override generic origin privacy for public HTML.' : 'Login, private sessions, cart contracts and origin private/no-store remain authoritative.', effective_action:draft.action});
         else if (draft.action !== base.action) {
           value.policy_behavior = ACTIONS[draft.action]?.[1] || '';
           if (draft.action === 'private') { value.effective_action = 'private'; value.core_precedence = 'The Private choice passes the entire request before optional shared HTML processing.'; }
