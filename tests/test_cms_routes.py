@@ -1,8 +1,10 @@
 """CMS selection, URL matching and unchanged forwarding with native Varnish."""
 import copy
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -15,6 +17,41 @@ import test_profiles as http
 
 
 class Descriptors(unittest.TestCase):
+    @unittest.skipUnless(sys.platform.startswith('linux') and hasattr(os,'geteuid') and os.geteuid()==0,
+                         'Native Linux hosting UID required')
+    def test_known_cms_files_below_search_only_parents_do_not_require_directory_listing(self):
+        import pwd
+        account=pwd.getpwnam('nobody')
+        with tempfile.TemporaryDirectory() as tmp:
+            parent=Path(tmp);parent.chmod(0o711)
+            root=parent/'home'/'site'/'public_html';root.mkdir(parents=True)
+            (parent/'home').chmod(0o711);(parent/'home/site').chmod(0o711)
+            version=root/'libraries/src/Version.php';version.parent.mkdir(parents=True)
+            version.write_text('<?php const MAJOR_VERSION = 3;')
+            (root/'configuration.php').write_text("<?php class JConfig { public $secret='test'; public $session_handler='database'; }")
+            (parent/'linked').symlink_to(root,target_is_directory=True)
+            (root/'linked.php').symlink_to(root/'configuration.php')
+            (root/'no-search').mkdir(mode=0o700)
+            (root/'no-search/configuration.php').write_text('private')
+            (root/'unreadable.php').write_text('private');(root/'unreadable.php').chmod(0o600)
+            code='''import json,sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from cms_discovery import read_literal
+from cms_sessions import joomla_settings
+root=Path(sys.argv[2]); parent=Path(sys.argv[3])
+assert len(joomla_settings(root))==32
+for base,relative in [(parent/'linked','configuration.php'),(root,'linked.php'),(root,'no-search/configuration.php'),(root,'unreadable.php'),(root,'libraries')]:
+    try: read_literal(base,relative)
+    except (OSError,ValueError): pass
+    else: raise AssertionError('Unexpected access: '+relative)
+print('known-file-read-with-search-only-parents; links-and-permissions-enforced')
+'''
+            result=subprocess.run([sys.executable,'-I','-B','-c',code,str(Path(cms_discovery.__file__).parent),str(root),str(parent)],
+                capture_output=True,text=True,user=account.pw_uid,group=account.pw_gid,extra_groups=[])
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('known-file-read-with-search-only-parents',result.stdout)
+
     def test_paths_are_data_not_vcl_and_parent_traversal_is_rejected(self):
         for value in ('relative', '/../private', '/%2e%2e/x', '/x?task=login', '/x\n', '/bad%GG'):
             with self.subTest(value=value), self.assertRaises(ValueError):

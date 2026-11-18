@@ -3,6 +3,21 @@
 Development acceptance for the opt-in Basic/UltraCache extension. No customer
 server was changed by these checks and no public release has been published.
 
+## 0.9.1 search-only directory correction
+
+A read-only production diagnostic found that the hosting UID could traverse
+the normal 0711 `/home` but the literal configuration reader incorrectly opened
+each ancestor O_RDONLY, which also required directory-list permission. This
+caused `joomla-session-unavailable` before any database query. Ancestors now use
+O_PATH with O_DIRECTORY and O_NOFOLLOW; the final regular file still requires
+read permission. No hosting permissions or application files are changed.
+
+With the corrected reader loaded only in the diagnostic process's memory, the
+same production hosting UID successfully read session/database metadata and
+executed the read-only session lookup. The CMS helper source identity now
+includes discovery and route dependencies, so native plugin activation reloads
+the worker after these modules change.
+
 ## Verified native behavior
 
 On the disposable Webuzo lab, Varnish 9.1 compiled the ABI-matching cookie

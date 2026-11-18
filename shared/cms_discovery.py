@@ -23,13 +23,17 @@ def read_literal(root, relative):
     relative = Path(relative)
     if not root.is_absolute() or '..' in root.parts or relative.is_absolute() or '..' in relative.parts:
         raise ValueError('Invalid CMS discovery path')
-    fd = os.open(root.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    # A known path needs search permission on its parents, not permission to
+    # list them. Hosting panels commonly use 0711 on /home. O_PATH keeps each
+    # ancestor pinned without following links or requiring directory reads.
+    parent_flags = os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(root.anchor, parent_flags)
     parts = [*root.parts[1:], *relative.parts]
     try:
         for index, part in enumerate(parts):
             last = index == len(parts) - 1
-            next_fd = os.open(part, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK |
-                              (0 if last else os.O_DIRECTORY), dir_fd=fd)
+            next_fd = os.open(part, (os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                              if last else parent_flags, dir_fd=fd)
             os.close(fd)
             fd = next_fd
         if not stat.S_ISREG(os.fstat(fd).st_mode):

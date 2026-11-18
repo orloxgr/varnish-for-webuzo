@@ -77,7 +77,8 @@ def configuration(config):
                 path='/run/varnish-for-webuzo-origin-'+scheme+'.sock',
                 headers={'X-WV-Origin':config['origin']}) for scheme in ('http','https')})
     root=Path(__file__).resolve().parents[1]/'shared'
-    source_identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in ('cms_sessions.py','cms_session_server.py','cms_metadata.py'))).hexdigest()
+    source_identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in
+        ('cms_sessions.py','cms_session_server.py','cms_metadata.py','cms_discovery.py','cms_routes.py'))).hexdigest()
     return dict(schema=1,socket=SOCKET,allowed_uids=[daemon.pw_uid],socket_gid=daemon.pw_gid,
                 max_frame_bytes=frame_bytes(),query_timeout=timeouts.settings(config)['connect']/1000,
                 token_timeout=timeouts.frontend(timeouts.settings(config))['read']/1000,
