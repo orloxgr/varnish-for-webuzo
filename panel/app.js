@@ -112,7 +112,7 @@
       const aggressiveTTL = node('input'); aggressiveTTL.type = 'number'; aggressiveTTL.min = '1'; aggressiveTTL.step = '1'; aggressiveTTL.value = site.aggressive_ttl;
       aggressiveTTL.setAttribute('aria-label', 'Aggressive cache duration in seconds for ' + site.domain);
       const ttlLabel = node('label', 'Aggressive cache duration · seconds'); ttlLabel.append(aggressiveTTL);
-      const aggressiveFields = node('div'); aggressiveFields.append(ttlLabel, node('small', 'Overrides origin cache restrictions for anonymous public HTML. Known private routes, authentication, cart and additional exclusions still apply. Browser cache settings stay separate.'));
+      const aggressiveFields = node('div'); aggressiveFields.append(ttlLabel, node('small', 'Overrides origin cache restrictions and shares allowed HTML as-is. Site-specific exceptions may be needed. Known private routes, authentication/cart markers and your exclusions still apply. Browser cache settings stay separate.'));
       const aggressiveChanged = () => { aggressiveFields.hidden = !aggressive.checked; }; aggressive.addEventListener('change', aggressiveChanged); aggressiveChanged();
       profileCell.append(aggressiveLabel, aggressiveFields);
       const detected = (site.cms_installations || []).map(item => item.cms + (item.base === '/' ? '' : ' at ' + item.base));
