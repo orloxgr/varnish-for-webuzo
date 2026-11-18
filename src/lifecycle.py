@@ -15,6 +15,7 @@ CONTENT=b'd /run/varnish-for-webuzo 0730 root webuzo -\n'
 
 def retire_cms_helper(*, unit=None, source=None):
     """Retire only addon-owned resources after the helper-free VCL is active."""
+    import native
     unit=unit or Path('/etc/systemd/system/varnish-for-webuzo-cms.service')
     config=state.ROOT/'cms-sessions.json'
     source=source or Path(__file__).resolve().parents[1]
@@ -26,19 +27,29 @@ def retire_cms_helper(*, unit=None, source=None):
         owned='ExecStart=/usr/bin/python3 -I -B /usr/local/webuzo/plugins/varnish-for-webuzo/shared/cms_session_server.py --config /var/lib/varnish-for-webuzo/cms-sessions.json'
         if owned not in content.splitlines() or 'Description=Varnish for Webuzo CMS session resolver' not in content.splitlines():
             raise ValueError('An independent service uses the former CMS helper name')
-        import native
         native.run('systemctl','disable','--now','varnish-for-webuzo-cms')
         unit.unlink();native.run('systemctl','daemon-reload')
     if config.exists() or config.is_symlink():state.trusted(config);config.unlink()
+    def remove_source(path):
+        # The native plugin tree is managed by Webuzo's dedicated panel group,
+        # unlike root-private state. Reuse the panel's existing path validation.
+        descriptor=native.open_native(path)
+        parent=native.open_native(path.parent,True)
+        try:
+            opened=os.fstat(descriptor);current=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+            if (opened.st_dev,opened.st_ino)!=(current.st_dev,current.st_ino):
+                raise ValueError('Retired addon source changed during cleanup')
+            os.unlink(path.name,dir_fd=parent)
+        finally:os.close(descriptor);os.close(parent)
     for path in obsolete:
-        if path.exists() or path.is_symlink():state.trusted(path);path.unlink()
+        if path.exists() or path.is_symlink():remove_source(path)
     # Bytecode belongs to the same removed source modules, never tenant code.
     for folder,names in ((source/'src/__pycache__',('cms_resolver',)),
                          (source/'shared/__pycache__',('cms_sessions','cms_session_server'))):
         if not folder.exists():continue
-        state.trusted(folder,True)
+        os.close(native.open_native(folder,True))
         for name in names:
-            for path in folder.glob(name+'.*.pyc'):state.trusted(path);path.unlink()
+            for path in folder.glob(name+'.*.pyc'):remove_source(path)
 
 def install():
     panel=pwd.getpwnam('webuzo')
