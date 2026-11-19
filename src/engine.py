@@ -29,7 +29,7 @@ JOURNAL=state.ROOT/'transaction.json'
 
 def settings():return state.read(SETTINGS,{})
 
-def inventory(config,discover=False,discover_id=None):
+def inventory(config,discover=False,discover_id=None,refresh_changed=False):
     sites=native.collect()
     for sid,site in sites.items():
         previous=config.get('sites',{}).get(sid,{})
@@ -40,12 +40,10 @@ def inventory(config,discover=False,discover_id=None):
         site['cookie_policies']=cookie_views.normalize(previous.get('cookie_policies'))
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
         site.update(aggressive.settings(previous))
-        if (discover or sid==discover_id) and site.get('path'):
-            site['cms_installations'],site['cms_discovery_notices'],site['cms_cookies']=cms_inventory.discover(site,previous)
-        else:
-            site['cms_installations']=copy.deepcopy(previous.get('cms_installations',[]))
-            site['cms_discovery_notices']=copy.deepcopy(previous.get('cms_discovery_notices',[]))
-            site['cms_cookies']=copy.deepcopy(previous.get('cms_cookies',[]))
+        site['cms_excluded_directories']=cms_discovery.exclusions(previous.get('cms_excluded_directories',[]))
+        cms_inventory.retain(site,previous)
+        if (discover or sid==discover_id or (refresh_changed and cms_inventory.root_changed(site))) and site.get('path'):
+            cms_inventory.refresh(site,previous)
         if site['cookie_integration'] is not None:
             site['cookie_integration'],revoked=cookie_bridge.cookie_control.reconcile_integration(site['cookie_integration'],site['domain'],site['names'])
             if revoked or previous.get('cookie_integration_notice'):
@@ -230,10 +228,11 @@ def action(request):
     operation=request.get('action')
     allowed={'status','install','configure','purge','reconcile','start','remove','usage','resize','connection','connection_setup','vcl','defaults','profile_rules','browser_defaults','browser_site','browser_restore','recognition_status','recognition_configure','recognition_update'}
     if operation not in allowed:raise ValueError('Unknown action')
-    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl','aggressive','aggressive_ttl'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
+    fields={'configure':{'id','enabled','bypass','profile','recv_vcl','backend_vcl','aggressive','aggressive_ttl','cms_excluded_directories'},'reconcile':{'refresh_cms'},'purge':{'id'},'connection':{'id'},'connection_setup':{'port'},'vcl':{'id','profile','recv_vcl','backend_vcl'},'resize':{'memory_mb'},'defaults':{'profile'},'profile_rules':{'profile','recv_vcl','backend_vcl'},'browser_defaults':{'settings'},'browser_site':{'id','settings'}}
     allowed_keys={'actor','admin','action'}|fields.get(operation,set())
     if operation=='recognition_configure':allowed_keys.add('automatic')
     if set(request)-allowed_keys:raise ValueError('Unexpected request field')
+    if 'refresh_cms' in request and type(request['refresh_cms']) is not bool:raise ValueError('CMS refresh must be a checkbox value')
     # Bundled database status does not enter site inventory or cache transactions.
     if operation in ('recognition_status','recognition_configure','recognition_update'):
         result=recognition.status()
@@ -241,7 +240,7 @@ def action(request):
     with state.locked():
         recover()
         if operation=='status':return status()
-        previous=settings();sites=inventory(previous,discover=operation in ('install','reconcile'),discover_id=request.get('id') if operation=='configure' else None)
+        previous=settings();sites=inventory(previous,discover=operation=='install' or request.get('refresh_cms',False),refresh_changed=operation=='reconcile')
         if operation=='reconcile' and previous.get('installed'):
             repository.reconcile_owned()
             repository.ensure_cookie_modules()
@@ -303,6 +302,10 @@ def action(request):
                     if site['error'] and request['enabled']:raise ValueError(site['error'])
                     site.update(enabled=request['enabled'],bypass=policy.paths(request.get('bypass',[])))
                     site.update(aggressive.settings(dict(site,**{k:request[k] for k in ('aggressive','aggressive_ttl') if k in request})))
+                    if 'cms_excluded_directories' in request:
+                        site['cms_excluded_directories']=cms_discovery.exclusions(request['cms_excluded_directories'])
+                    cms_inventory.retain(site,previous.get('sites',{}).get(sid,{}))
+                    if site.get('path'):cms_inventory.refresh(site,previous.get('sites',{}).get(sid,{}))
                     site['profile']=profiles.name(request.get('profile',site['profile']))
                     if any(field in request for field in ('recv_vcl','backend_vcl')):
                         for field,stage in (('recv_vcl','recv'),('backend_vcl','backend_response')):

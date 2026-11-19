@@ -81,7 +81,7 @@ def install():
         # An update must activate the shipped policy for existing sites. Run
         # the normal recoverable apply after releasing the provisioning lock.
         import engine
-        engine.action(dict(actor='root',admin=True,action='reconcile'))
+        engine.action(dict(actor='root',admin=True,action='reconcile',refresh_cms=True))
     retire_cms_helper()
 
 def native_read_tmp():

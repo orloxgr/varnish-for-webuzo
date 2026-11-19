@@ -76,7 +76,7 @@ class Metadata(unittest.TestCase):
         row=dict(cms='wordpress',base='/blog',private_paths=['/blog/personal-cart'],private_queries=[])
         previous=dict(path='/home/site/public_html',cms_installations=[row])
         site=dict(path=previous['path'],names=['example.test'])
-        with patch.object(cms_inventory.cms_discovery,'discover',side_effect=lambda _: [dict(cms='wordpress',base='/blog')]),patch.object(cms_inventory.cms_metadata,'connection',side_effect=OSError):
+        with patch.object(cms_inventory.cms_discovery,'discover',side_effect=lambda *_: [dict(cms='wordpress',base='/blog')]),patch.object(cms_inventory.cms_metadata,'connection',side_effect=OSError):
             records,notices,_=cms_inventory.discover(site,previous)
             self.assertEqual(records,[row]);self.assertIn('last discovered',notices[0])
             records,_,_=cms_inventory.discover(dict(site,path='/home/other/public_html'),previous)

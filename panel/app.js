@@ -118,6 +118,10 @@
       const detected = (site.cms_installations || []).map(item => item.cms + (item.base === '/' ? '' : ' at ' + item.base));
       if (detected.length) name.append(node('small', 'CMS rules: ' + detected.join(', ')));
       for (const notice of site.cms_discovery_notices || []) name.append(node('small', notice));
+      const cmsExcluded = node('textarea'); cmsExcluded.rows = 2; cmsExcluded.value = (site.cms_excluded_directories || []).join('\n');
+      cmsExcluded.placeholder = '/retired-site/'; cmsExcluded.setAttribute('aria-label', 'Excluded CMS directories for ' + site.domain);
+      const cmsExcludedLabel = node('label', 'Exclude directories from CMS detection'); cmsExcludedLabel.append(cmsExcluded);
+      name.append(cmsExcludedLabel, node('small', 'Literal paths relative to this site, one per line. Skips each directory and its children before reading configuration or querying its database. Use / to disable CMS detection.'));
       const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = site.enabled; enabled.setAttribute('aria-label', 'Enable Varnish for ' + site.domain);
       const enabledCell = node('td'); enabledCell.append(enabled); row.append(enabledCell);
       const bypass = node('textarea'); bypass.value = site.bypass.join('\n'); bypass.placeholder = '/private-area/\n/custom-checkout/'; bypass.setAttribute('aria-label', 'Additional bypass paths for ' + site.domain);
@@ -127,12 +131,12 @@
       save.addEventListener('click', () => {
         const ttl = Number(aggressiveTTL.value);
         if (!Number.isSafeInteger(ttl) || ttl <= 0) { aggressiveTTL.reportValidity(); return; }
-        call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, aggressive: aggressive.checked, aggressive_ttl: ttl, bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value});
+        call('configure', {id: site.id, profile: profile.value, enabled: enabled.checked, aggressive: aggressive.checked, aggressive_ttl: ttl, cms_excluded_directories: cmsExcluded.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), bypass: bypass.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean), recv_vcl: recv.value, backend_vcl: backend.value});
       });
       const purge = node('button', 'Clear cache'); purge.type = 'button'; purge.dataset.unavailable = String(!snapshot.installed || !site.enabled ? 1 : 0);
       purge.addEventListener('click', () => call('purge', {id: site.id}));
       actions.append(save, purge); cell.append(actions); row.append(cell); body.append(row);
-      for (const el of [profile, aggressive, aggressiveTTL, enabled, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
+      for (const el of [profile, aggressive, aggressiveTTL, cmsExcluded, enabled, bypass, save]) el.dataset.unavailable = String(!snapshot.installed || !!site.error ? 1 : 0);
       const detailRow = node('tr'); detailRow.hidden = true; detailRow.dataset.detailsFor = site.id;
       const detailCell = node('td'); detailCell.colSpan = 5;
       const section = node('div'); section.className = 'wvw-site-details'; detailCell.append(section); detailRow.append(detailCell); body.append(detailRow);
@@ -195,7 +199,7 @@
   byId('remove').addEventListener('click', () => {
     if (window.confirm('Disable Varnish for all sites and remove its service setup? Sites will return to their normal Webuzo routing.')) call('remove');
   });
-  byId('refresh').addEventListener('click', () => call(snapshot && snapshot.installed ? 'reconcile' : 'status'));
+  byId('refresh').addEventListener('click', () => snapshot && snapshot.installed ? call('reconcile', {refresh_cms: true}) : call('status'));
   byId('save-connection').addEventListener('click', () => call('connection_setup', {port: Number(byId('control-port').value)}));
   byId('edit-profile').addEventListener('change', () => { editingProfile = byId('edit-profile').value; profileEditor(); });
   byId('save-default').addEventListener('click', () => call('defaults', {profile: byId('default-profile').value}));

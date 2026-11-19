@@ -1,4 +1,5 @@
 """Native Webuzo document roots and unprivileged read-only route metadata."""
+import copy
 import json
 from pathlib import Path
 import pwd
@@ -38,7 +39,8 @@ def query(connection, site, statement):
 
 
 def discover(site, previous=None):
-    records = cms_discovery.discover(site['path'])
+    excluded = cms_discovery.exclusions(site.get('cms_excluded_directories', []))
+    records = cms_discovery.discover(site['path'], excluded)
     notices = []
     sessions = []
     for index, record in enumerate(records):
@@ -55,8 +57,39 @@ def discover(site, previous=None):
         except (OSError, ValueError, KeyError, TypeError):
             retained=next((old for old in (previous or {}).get('cms_installations',[])
                            if old['cms']==record['cms'] and old['base']==record['base']),None)
-            if retained and (previous or {}).get('path')==site['path']:
+            if retained and not cms_discovery.excluded(retained['base'], excluded) and \
+                    str(Path((previous or {}).get('path',''))) == str(Path(site['path'])):
                 records[index]=retained
                 notices.append(record['cms']+' at '+record['base']+': Configured route metadata unavailable; last discovered routes remain active.')
             else:notices.append(record['cms']+' at '+record['base']+': Configured route metadata unavailable; standard CMS routes remain active.')
     return records, notices, sessions
+
+
+def retain(site, previous):
+    """Explicit exclusions also prune last-valid metadata before any refresh."""
+    excluded = cms_discovery.exclusions(site.get('cms_excluded_directories', []))
+    for field in ('cms_installations', 'cms_cookies'):
+        site[field] = [copy.deepcopy(row) for row in previous.get(field, [])
+                       if not cms_discovery.excluded(row['base'], excluded)]
+    site['cms_discovery_notices'] = copy.deepcopy(previous.get('cms_discovery_notices', []))
+    marker = previous.get('cms_discovery_root')
+    if not marker and 'cms_installations' in previous:
+        marker = previous.get('path')
+    if marker:
+        site['cms_discovery_root'] = str(Path(marker))
+
+
+def root_changed(site):
+    return bool(site.get('path')) and str(Path(site['path'])) != site.get('cms_discovery_root')
+
+
+def refresh(site, previous):
+    retain(site, previous)
+    try:
+        records, notices, cookies = discover(site, previous)
+        site.update(cms_installations=records, cms_discovery_notices=notices, cms_cookies=cookies)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        # retain() already removed excluded metadata. Do not restore it on an
+        # unsuccessful explicit refresh or retry dead credentials every minute.
+        site['cms_discovery_notices'] = ['CMS discovery unavailable. Last known non-excluded routes remain active. Refresh after checking the native document root and hosting account.']
+    site['cms_discovery_root'] = str(Path(site['path']))

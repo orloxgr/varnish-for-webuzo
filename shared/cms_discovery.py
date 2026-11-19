@@ -9,7 +9,19 @@ import re
 import stat
 from urllib.parse import quote
 
-from cms_routes import normalize
+from cms_routes import normalize, path
+
+
+def exclusions(value):
+    """Literal URL-relative directory roots, never regexes or filesystem escapes."""
+    if not isinstance(value, list):
+        raise ValueError('Excluded CMS directories must be a list')
+    return sorted(set('/' + '/'.join(part for part in path(item).split('/') if part) for item in value))
+
+
+def excluded(base, roots):
+    return any(root == '/' or base == root or base.startswith(root + '/') for root in roots)
+
 
 SKIP = frozenset(('.git', '.svn', 'node_modules', 'vendor', 'cache', 'tmp', 'logs',
                   'wp-content', 'wp-includes', 'wp-admin', 'administrator', 'libraries',
@@ -79,9 +91,12 @@ def _prestashop_admin(root, directories):
     return found
 
 
-def discover(document_root):
+def discover(document_root, excluded_directories=None):
+    excluded_roots = exclusions([] if excluded_directories is None else excluded_directories)
     root = Path(document_root)
     if not root.is_absolute() or '..' in root.parts or root.is_symlink() or not root.is_dir():
+        return []
+    if excluded('/', excluded_roots):
         return []
     found = []
     # Magento's recommended public root is pub/, beside its app/etc metadata.
@@ -90,6 +105,10 @@ def discover(document_root):
         found.append(dict(cms='magento',base='/',private_paths=['/'+admin] if admin else []))
     for folder, directories, _ in os.walk(root, followlinks=False):
         folder = Path(folder)
+        relative = folder.relative_to(root).as_posix()
+        base = '/' if relative == '.' else '/' + quote(relative, safe='/-._~')
+        directories[:] = [name for name in directories if not excluded(
+            base.rstrip('/') + '/' + quote(name, safe='-._~'), excluded_roots)]
         children=list(directories)
         directories[:] = sorted(name for name in directories if name not in SKIP and
                                 not name.startswith('.') and not (folder / name).is_symlink())
@@ -107,8 +126,6 @@ def discover(document_root):
         elif (_exists(folder, 'config/settings.inc.php') or _exists(folder, 'app/config/parameters.php')) and _exists(folder, 'classes/Dispatcher.php'):
             cms = 'prestashop'
         if cms:
-            relative = folder.relative_to(root).as_posix()
-            base = '/' if relative == '.' else '/' + quote(relative, safe='/-._~')
             private = []
             admin = _magento_admin(folder) if cms == 'magento' else None
             if admin:

@@ -43,7 +43,7 @@ class NativeActivation(unittest.TestCase):
     def test_existing_service_reconciles_after_provisioning_lock_is_released(self):
         state.save(state.ROOT/'settings.json',{'installed':True})
         def reconcile(request):
-            self.assertEqual(request,dict(actor='root',admin=True,action='reconcile'))
+            self.assertEqual(request,dict(actor='root',admin=True,action='reconcile',refresh_cms=True))
             self.recognition.assert_called_once()
             with (state.ROOT/'operation.lock').open() as lock:
                 fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)

@@ -73,6 +73,9 @@ administrator frontName is read as data. Customer PHP is never executed for
 discovery. SQL runs under the hosting UID, using application credentials.
 Failed metadata refreshes retain previously discovered routes for the same
 document root and display a notice. Additional bypass paths cover custom routes.
+Per-site CMS discovery exclusions skip retired directories before configuration
+reads or database access. Automatic reconciliation reuses discovery for unchanged
+normalized document roots; **Refresh sites** explicitly retries discovery.
 
 Aggressive public HIT executes entirely inside Varnish. There is no CMS helper
 service, request-time database lookup, PHP token provider or Joomla HTML filter.

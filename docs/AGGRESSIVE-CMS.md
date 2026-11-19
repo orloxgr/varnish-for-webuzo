@@ -35,8 +35,14 @@ WordPress core at /wordpress with its public home at /). Standard routes are
 selected by the longest matching installation base and support language prefixes.
 
 The Webuzo adapter discovers CMS markers only beneath native panel document
-roots. It does not execute site PHP. Discovery runs on install/reconcile and when
-saving a site's configuration, rather than on every status request. The ordinary
+roots. It does not execute site PHP. Discovery runs on installation/update,
+explicit **Refresh sites**, and after saving a site's configuration. Automatic
+reconciliation scans only new or changed document roots, compared with normalized
+paths. A failed attempt is not repeated every minute; explicit refresh retries it.
+Per-site **Exclude directories from CMS detection** accepts literal URL-relative
+directory paths. Each excluded subtree is pruned before configuration reads or
+database access; `/` disables discovery for that site. Exclusions also remove
+retained routes and cookie descriptors when a refresh fails. The ordinary
 custom bypass textarea remains available for site-specific prefixes.
 
 ## Public HIT without additional backend work
