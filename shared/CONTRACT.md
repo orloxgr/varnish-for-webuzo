@@ -225,6 +225,19 @@ session tokens or credentials. There is no native provider-issuance diagnostic.
 
 ## Calls and trusted inputs
 
+Private PHP-session source GETs use the existing raw collector transport. When
+`X-UltraCache-Warm-Source: raw-v1`, `X-UltraCache-Internal-Request: 1`,
+`X-UltraCache-Warm: 1`, `X-UltraCache-Session-Source-Kind: native|observed` and
+`X-UltraCache-Session-Source: v1:<64 lowercase hex>:<64 lowercase hex>:<64 lowercase hex>:<64 lowercase hex>`
+all match, `scp_recv` returns PASS before profile-specific cookie transport or
+cache lookup. The original URL, cookies and source headers reach the origin.
+This bounded shape is routing only: it does not authenticate the request, grant
+public HTML eligibility or trust a PHP session. UltraCache still verifies its
+purpose-bound MAC and one-use observation owner. An invalid MAC of the same shape
+also reaches the application for refusal; its response cannot fill a shared object.
+Other requests, including ordinary request `Cache-Control: no-store`, retain their
+existing handling. No generic PHPSESSID Shared choice or native state gate is added.
+
 1. At the start of `vcl_recv`, call `scp_init` before accepting client metadata.
    It removes forged `X-SCP-*` inputs and inherited ESI carrier/approval headers. The private carrier is
    recovered from req_top when needed.

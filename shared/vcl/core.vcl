@@ -56,6 +56,17 @@ sub scp_init {
 # Normalize a COPY for hashing/invalidation. Never change req.url.
 sub scp_recv {
     std.collect(req.http.Cookie, "; ");
+    # This shape routes a private collector request, never authenticates it.
+    # The origin owns MAC/one-use validation. Preserve all original cookies,
+    # including ESI markers, by passing before profile-specific transport.
+    if (req.http.X-UltraCache-Session-Source && req.method == "GET" &&
+        req.http.X-UltraCache-Warm-Source == "raw-v1" &&
+        req.http.X-UltraCache-Internal-Request == "1" && req.http.X-UltraCache-Warm == "1" &&
+        req.http.X-UltraCache-Session-Source-Kind ~ "^(native|observed)$" &&
+        req.http.X-UltraCache-Session-Source ~ "^v1:[0-9a-f]{64}:[0-9a-f]{64}:[0-9a-f]{64}:[0-9a-f]{64}$") {
+        set req.http.X-SCP-Reason = "ultracache-private-session-source";
+        return (pass);
+    }
     if (req.url ~ "[?]") { set req.http.X-SCP-Query = regsub(req.url, "^[^?]*[?]", ""); }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
     call scp_common_recv;
