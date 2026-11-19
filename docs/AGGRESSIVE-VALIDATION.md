@@ -55,3 +55,15 @@ again confirmed no helper, no pending transaction and the original PID/tokens.
 Private validation artifacts are retained outside the distributed ZIP. The addon
 does not claim per-session Joomla token reconstruction or hidden session-state
 classification; these were explicitly removed from the opt-in policy.
+
+## CMS discovery exclusions — 0.10.1
+
+The subsequent Webuzo adapter passed 32 focused methods covering CMS directory
+exclusions, metadata queries, route matching and native activation. Excluded
+subtrees are pruned before marker/configuration reads; an unsuccessful refresh
+cannot restore their retained routes or cookie descriptors. Unchanged native
+document roots do not trigger repeated discovery during automatic reconciliation.
+New or changed roots are attempted once, while explicit Refresh sites and native
+addon activation request a fresh scan. Configuration applies exclusions before
+the selected-site scan. The shared discovery implementation matches Hestia byte
+for byte. These changes do not alter the visitor VCL or add a runtime helper.
