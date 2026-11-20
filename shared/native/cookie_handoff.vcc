@@ -124,18 +124,20 @@ $Function STRING selection_epoch()
 
 Native build identity; no visitor data. Namespaces only new UltraCache replicas.
 
-$Function BOOL selection_register(STRING site, STRING host, STRING wordpress_policy, STRING names, BOOL enabled)
+$Function BOOL selection_register(STRING site, STRING host, STRING scope, STRING wordpress_policy, STRING names, BOOL enabled)
 $Restrict vcl_recv
 
 Called only after existing per-site HTTP capabilities authentication. Stores
-exact resolver names and WP identity, never values. Ordinary probes do not call it.
+the required frontend scope, exact resolver names and WP identity, never values.
+An empty names list is an application boundary without an active resolver.
+Enabled false removes only that exact scope. Ordinary probes do not call it.
 
-$Function STRING selection_names(STRING site, STRING host)
+$Function STRING selection_names(STRING site, STRING host, STRING scope)
 $Restrict vcl_recv vcl_synth
 
-Return registered metadata only for this immutable adapter site and host.
+Return registered metadata only for this adapter site, host and exact scope.
 
-$Function STRING selection_wordpress_policy(STRING site, STRING host)
+$Function STRING selection_wordpress_policy(STRING site, STRING host, STRING scope)
 $Restrict vcl_recv vcl_synth
 
 Return the independent accepted WP policy identity.
@@ -167,3 +169,9 @@ $Restrict vcl_backend_response
 
 True only for the new authenticated selected-publication source. Old recovery
 keeps its own cookie variation and source-manifest binding unchanged.
+
+$Function BOOL selection_raw(PRIV_TASK)
+$Restrict vcl_backend_response
+
+True only for an owned public-select fetch returning a genuine non-protocol
+response. Deliver that private PASS normally, without capturing its body.

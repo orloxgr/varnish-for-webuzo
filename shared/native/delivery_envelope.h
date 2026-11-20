@@ -52,6 +52,8 @@ void delivery_selection_free(struct delivery_public_selection *selection);
 int delivery_selection_candidate(const struct delivery_public_selection *selection,
     const char *original, const char *rules, char **candidate);
 int delivery_cookie_name(const char *name, size_t length);
+int delivery_selection_scope_valid(const char *scope);
+int delivery_selection_scope_matches(const char *scope, const char *url);
 /* 0 Shared (including existing fallback), 1 Variant, 2 Private; -1 bad rules. */
 int delivery_cookie_action(const char *rules, const char *name, size_t length);
 char *delivery_selection_projection(const char *candidate, const char *rules);

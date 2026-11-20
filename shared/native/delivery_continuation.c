@@ -8,14 +8,15 @@
 #include "delivery_envelope.h"
 
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
-    D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT, D_FAILED };
+    D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
+    D_RAW_PASS, D_RAW_DELIVERED, D_FAILED };
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
     unsigned restart, sent, complete, failed;
     unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
     unsigned snapshot_ready, snapshot_mode;
-    unsigned selection_entry, selection_raw;
+    unsigned selection_entry;
     double public_deadline, prepare_response_time;
     uint64_t occurrences;
     /* Identity check only; exact installed-engine lifetime still needs native
@@ -23,7 +24,7 @@ struct continuation {
      * Never swap engine pointers or call uninstalled private HSH APIs. */
     const struct objcore *parent;
     char *url, *host, *site, *target, *manifest, *cookie, *encoding;
-    char *selection_rules, *selection_policy, *wordpress_policy, *selection_actions;
+    char *selection_rules, *selection_policy, *wordpress_policy, *selection_actions, *selection_scope;
     char *candidate, *variant;
     char *conditional[6];
     char request_id[32];
@@ -58,6 +59,7 @@ static const hdr_t h_selection_version = HDR("X-UltraCache-Delivery-Public-Selec
 static const hdr_t h_selection_policy = HDR("X-UltraCache-Delivery-Policy");
 static const hdr_t h_wordpress_policy = HDR("X-UltraCache-Delivery-WordPress-Policy");
 static const hdr_t h_selection_actions = HDR("X-UltraCache-Delivery-Public-Selection-Actions");
+static const hdr_t h_selection_scope = HDR("X-UltraCache-Delivery-Public-Selection-Scope");
 static const char selection_content_type[] = "application/vnd.ultracache.delivery+json";
 static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
 static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
@@ -86,7 +88,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     (void)ctx;
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
-    free(d->selection_actions); free(d->candidate); free(d->variant);
+    free(d->selection_actions); free(d->selection_scope); free(d->candidate); free(d->variant);
     delivery_selection_free(d->selection);
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
@@ -265,6 +267,9 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
     if (!d) return 0;
     if (ctx->req->esi_level > 0) {
         const struct delivery_fragment *f;
+        /* A genuine non-protocol response retains ordinary ESI routing. It
+         * has no prepared fragments and must not impersonate that contract. */
+        if (d->phase == D_RAW_DELIVERED) return 0;
         if (d->phase != D_DELIVERED) return -1;
         url = ctx->http_req->hd[HTTP_HDR_URL].b;
         for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) {
@@ -374,6 +379,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
                 http_ForceHeader(ctx->http_bereq,h_selection_policy,d->selection_policy);
                 http_ForceHeader(ctx->http_bereq,h_wordpress_policy,d->wordpress_policy);
                 http_ForceHeader(ctx->http_bereq,h_selection_actions,d->selection_actions);
+                http_ForceHeader(ctx->http_bereq,h_selection_scope,d->selection_scope);
             }
             if (d->cookie) http_ForceHeader(ctx->http_bereq,H_Cookie,d->cookie);
             else http_Unset(ctx->http_bereq,H_Cookie);
@@ -422,7 +428,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d;
     const char *encoding, *recovery, *selection_version = NULL, *content_type = NULL;
     unsigned i;
-    int owned, valid, selection_raw;
+    int owned, valid;
     if (!task || !task->key) return 0;
     pthread_mutex_lock(&lock);
     entry = delivery_entry(task->key);
@@ -433,23 +439,19 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     if (d->selection_entry) {
         int declared = http_GetHdr(ctx->http_beresp,h_selection_version,&selection_version) ||
             (content_type && !strncasecmp(content_type,selection_content_type,sizeof(selection_content_type)-1));
-        d->selection_raw = !declared;
         valid = declared ? selection_version && !strcmp(selection_version,"1") &&
             http_CountHdr(ctx->http_beresp,h_selection_version) == 1 &&
             content_type && !strncasecmp(content_type,selection_content_type,sizeof(selection_content_type)-1) &&
             (!content_type[sizeof(selection_content_type)-1] || content_type[sizeof(selection_content_type)-1] == ';') :
             http_GetStatus(ctx->http_beresp) >= 200 && http_GetStatus(ctx->http_beresp) <= 599;
         if (valid && !declared) {
-            d->document = calloc(1,sizeof(*d->document));
-            if (d->document) {
-                d->document->status = (unsigned)http_GetStatus(ctx->http_beresp);
-                d->document->content_type = strdup(content_type ? content_type : "");
-            }
-            valid = d->document && d->document->content_type;
+            /* Keep status, MIME, repeated owner cookies and the actual body
+             * on this private PASS. No body copy, JSON parse or second fetch. */
+            d->phase = D_RAW_PASS;
+            pthread_mutex_unlock(&lock); return 0;
         }
     } else valid = 1;
-    selection_raw = d->selection_raw;
-    if (!selection_raw) valid = valid && http_GetStatus(ctx->http_beresp) == 200 &&
+    valid = valid && http_GetStatus(ctx->http_beresp) == 200 &&
         (!http_GetHdr(ctx->http_beresp,H_Content_Encoding,&encoding) || !strcmp(encoding,"identity"));
     pthread_mutex_unlock(&lock);
     for (i = HTTP_HDR_FIRST; valid && i < ctx->http_beresp->nhd; ++i) {
@@ -484,6 +486,17 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     http_Unset(ctx->http_beresp,h_set_cookie2);
     if (!valid) VRT_fail(ctx,"UltraCache prepare response rejected");
     return 1;
+}
+
+VCL_BOOL vmod_selection_raw(VRT_CTX, struct vmod_priv *priv) {
+    struct task *task = priv->priv;
+    struct handoff *entry;
+    int raw = 0;
+    (void)ctx;
+    if (!task || !task->key) return 0;
+    pthread_mutex_lock(&lock); entry = delivery_entry(task->key);
+    if (entry && entry->delivery) raw = entry->delivery->phase == D_RAW_PASS && !entry->delivery->failed;
+    pthread_mutex_unlock(&lock); return raw;
 }
 
 VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target,
@@ -524,17 +537,24 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->phase = D_QUEUED;
         return 1;
     }
+    if (d->phase == D_RAW_PASS) {
+        if (d->failed || !delivery_restore(ctx,d) || !delivery_original_owner(ctx,d)) {
+            d->phase = D_FAILED; return -1;
+        }
+        d->phase = D_RAW_DELIVERED;
+        return 0; /* Native streaming delivery, never a synthetic full-body copy. */
+    }
     if (d->phase == D_PREPARE) {
         int valid;
         pthread_mutex_lock(&lock);
         valid = d->complete && !d->failed;
         pthread_mutex_unlock(&lock);
-        if (!valid || (!d->selection_raw && http_GetStatus(ctx->http_resp) != 200) || !delivery_parse(d) || !delivery_restore(ctx,d)) {
+        if (!valid || http_GetStatus(ctx->http_resp) != 200 || !delivery_parse(d) || !delivery_restore(ctx,d)) {
             d->phase = D_FAILED; return -1;
         }
         if (d->document) {
             if (d->recovery_ready || !delivery_original_owner(ctx,d) ||
-                !delivery_document_headers(ctx->http_resp,&d->document_headers,d->selection_raw)) {
+                !delivery_document_headers(ctx->http_resp,&d->document_headers,0)) {
                 d->phase = D_FAILED; return -1;
             }
             d->phase = D_DOCUMENT;

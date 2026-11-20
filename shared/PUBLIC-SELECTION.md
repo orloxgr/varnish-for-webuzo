@@ -36,13 +36,34 @@ operation does not invalidate cache. Add these request headers:
 ```
 X-UltraCache-Public-Selection-Version: 1
 X-UltraCache-Public-Selection-Enabled: 1
+X-UltraCache-Public-Selection-Scope: <normalized relative frontend base, e.g. / or /shop/>
 X-UltraCache-Public-Selection-WordPress-Policy: <WP effective digest>
 X-UltraCache-Public-Selection-Cookies: <comma-separated exact resolver names>
 ```
 
 These names declare actual installed resolver metadata, never cookie values.
-Enabled 0 unregisters. An ordinary capabilities request with no declaration
-does not modify registration. No panel cookie-integration flag is required.
+Scope is mandatory on both registration and removal: `/` is explicit, never an
+implicit registration fallback. It comes from the application's stable configured
+frontend base, not a request-dependent language-filtered home URL, core siteurl
+or administration path. It has a leading and trailing slash, no query/fragment,
+backslash, dot segment or repeated slash. Matching is literal (no decoding),
+ignores the query, and uses the longest registered scope. `/shop` belongs to
+`/shop/` for its normal canonical redirect; `/shopper/` does not.
+
+Enabled 0 unregisters only the exact site/host/scope. An ordinary capabilities
+request with no declaration does not modify any registration. Such a read-only
+probe may supply Scope alone to query an exact application; without Scope it
+reads root metadata. This read-only compatibility default cannot register a root
+application. No panel cookie-integration flag is required.
+
+Enabled 1 means the existing connected/cache-enabled application participates,
+independently of whether a resolver is currently installed. An empty Cookies
+list is valid application metadata with Actions `{}`. That boundary shadows an
+ancestor declaration without a provider operation, cookie action or additional
+cache bypass. Provider absence must not remove a participating child and expose
+it to the parent's WP policy. Activation/settings/update flows establish the
+boundary before relying on a first child frontend request. Enabled 0 is for
+retiring cooperation (including moving or deactivating), not provider inactivity.
 
 The authenticated capabilities response advertises:
 
@@ -51,6 +72,7 @@ X-UltraCache-VCL-Public-Selection-Version: 1
 X-UltraCache-VCL-Public-Selection-Epoch: <native DSO build identity>
 X-UltraCache-VCL-Public-Selection-Native-Policy: <active native digest>
 X-UltraCache-VCL-Public-Selection-WordPress-Policy: <accepted WP digest>
+X-UltraCache-VCL-Public-Selection-Scope: <accepted exact frontend base>
 X-UltraCache-VCL-Public-Selection-Actions: <JSON exact name to effective action>
 ```
 
@@ -59,7 +81,9 @@ behavior for names with no matching rule. Omitting an unmatched name cannot
 create a new unresolved-state veto. Activate when a declared name has actual
 native Variant behavior. Recompute native actions after policy changes.
 
-Registration contains site/host, names and WP identity only. It survives ordinary
+The accepted Scope and WP digest are both absent if no exact registration exists
+for the queried scope; an empty names list still has an accepted Scope/digest.
+Registration contains site/host/scope, names and WP identity only. It survives ordinary
 VCL reload in module-global state. DSO build identity participates in the cache
 namespace; a new DSO cannot deliver old warmed objects before registration.
 Normal origin requests advertise capability, epoch and current native policy
@@ -79,12 +103,18 @@ X-UltraCache-Delivery-Original-URL: <exact original URI>
 X-UltraCache-Delivery-Authorization: <existing site credential>
 X-UltraCache-Delivery-Policy: <current native digest>
 X-UltraCache-Delivery-WordPress-Policy: <registered WP digest>
+X-UltraCache-Delivery-Public-Selection-Scope: <selected exact frontend base>
 X-UltraCache-Delivery-Public-Selection-Actions: <current native actions JSON>
 ```
 
 There is no old source-manifest header: the first request may have no selected
 object. Validate the new entry's method, exact URL, credential, versions, request
-ID and both policy bindings separately; do not weaken the old validator.
+ID, mandatory exact application Scope and both policy bindings separately; do
+not weaken the old validator. Scope is native-owned request metadata and must
+match the application's configured frontend base before provider execution.
+Client copies of owned-entry/reply Scope headers are discarded. The selected
+JSON outcome is unchanged: request ID/URL/two policy identities bind its result
+to that scoped original-route operation.
 
 ## Response
 
@@ -122,6 +152,12 @@ HTML-only. Entry eligibility follows HTML navigation Accept, with absent or
 `*/*` accepted for CLI, rather than a filename blacklist. If the actual origin
 returns a non-protocol response such as a directly visited static resource,
 preserve its real status/type/body and owning headers as request-only delivery.
+This non-protocol fallback uses ordinary private, uncached native streaming,
+without capturing the complete body in a continuation or running PHP again.
+It has no response byte cap or filename blacklist. Genuine raw HTML ESI uses
+the ordinary existing child path, not the prepared-fragment protocol. The
+explicit JSON privateDocument outcome keeps its existing bounded-by-request
+lifetime capture/synthetic delivery semantics, without a product byte-size cap.
 An origin that declares the selection protocol but has malformed JSON or
 bindings remains a transport error; never substitute an unrelated cached page.
 Browser Cache-Control no-store/no-cache/max-age=0 or Pragma does not itself
@@ -169,6 +205,12 @@ downstream Vary:Cookie and all other legitimate Vary dimensions.
 - Concurrent publication replacement, exact URL/tag purge, expiry, disappearance,
   abandoned request and reload: no old-price fallback or freshness extension.
 - Separate Hestia/Webuzo acceptance with the same qualified native DSO.
+- Mandatory normalized scope, root/child/sibling registrations with independent
+  WP policies, longest literal boundary, bare-base redirect, exact removal,
+  metadata-only empty resolver child and ordinary same-DSO reload.
+- Non-protocol first bytes before origin EOF, exact streamed owner response,
+  aborted streaming request and handoff cleanup; malformed claimed protocol
+  remains an error and never enters raw passthrough.
 
 No runtime parity is claimed until both sides implement and pass these cases.
 
@@ -182,7 +224,7 @@ WordPress identity. No cookie value is included in negotiation state.
 The old HIT/prepare owner phase and parser are unchanged. The new pre-hash
 operation owns the original receive phase, then resumes final lookup once.
 A raw non-protocol origin response retains its actual status, MIME type, bytes
-and fresh owner headers as a private document. A claimed selection response with
+and fresh owner headers on a private streaming PASS. A claimed selection response with
 invalid JSON/binding remains a transport failure. The new private document
 alternative accepts actual non-HTML MIME types; the old prepare alternative
 retains its HTML grammar.

@@ -56,6 +56,10 @@ class PublicSelection(unittest.TestCase):
         cls.lib.delivery_selection_digest.restype=ctypes.c_int
         cls.lib.delivery_selection_projection.argtypes=[ctypes.c_char_p,ctypes.c_char_p]
         cls.lib.delivery_selection_projection.restype=ctypes.c_void_p
+        cls.lib.delivery_selection_scope_valid.argtypes=[ctypes.c_char_p]
+        cls.lib.delivery_selection_scope_valid.restype=ctypes.c_int
+        cls.lib.delivery_selection_scope_matches.argtypes=[ctypes.c_char_p,ctypes.c_char_p]
+        cls.lib.delivery_selection_scope_matches.restype=ctypes.c_int
     tearDownClass=classmethod(DeliveryEnvelope.tearDownClass.__func__)
 
     def parse(self,value,*,original=None,rules=RULES,request='42',url=URL,native=NATIVE,wordpress=WORDPRESS):
@@ -168,6 +172,22 @@ class PublicSelection(unittest.TestCase):
         value=dict(schemaVersion=1,requestId='42',originalUrl=URL,privateDocument=dict(
             status=404,contentType='application/json; charset=UTF-8',bodyBase64=base64.b64encode(b'{"error":true}').decode()))
         self.assertEqual(self.parse(value),dict(status=404,body=b'{"error":true}'))
+
+    def test_application_scope_requires_explicit_normalized_frontend_path(self):
+        for scope in (b'/',b'/shop/',b'/one/two/',b'/encoded%20name/'):
+            with self.subTest(scope=scope):self.assertEqual(self.lib.delivery_selection_scope_valid(scope),1)
+        for scope in (None,b'',b'shop/',b'/shop',b'//shop/',b'/shop//two/',b'/./',b'/shop/../',
+                      b'/shop/?x=1',b'/shop/#hash',b'/shop\\two/',b'/shop/\r\n',b'https://example.test/shop/'):
+            with self.subTest(scope=scope):self.assertEqual(self.lib.delivery_selection_scope_valid(scope),0)
+
+    def test_application_scope_matches_literal_boundaries_and_ignores_query(self):
+        for url in (b'/shop',b'/shop/',b'/shop?next=/blog/',b'/shop/?next=/blog/',b'/shop/book/'):
+            with self.subTest(url=url):self.assertEqual(self.lib.delivery_selection_scope_matches(b'/shop/',url),1)
+        for url in (b'/shopper/',b'/shopping',b'/?next=/shop/',b'/blog/shop/',b'/SHOP/',b'//shop/',None):
+            with self.subTest(url=url):self.assertEqual(self.lib.delivery_selection_scope_matches(b'/shop/',url),0)
+        self.assertEqual(self.lib.delivery_selection_scope_matches(b'/',b'/anything?next=/shop/'),1)
+        self.assertEqual(self.lib.delivery_selection_scope_matches(b'/encoded%20name/',b'/encoded%20name/x'),1)
+        self.assertEqual(self.lib.delivery_selection_scope_matches(b'/encoded%20name/',b'/encoded name/x'),0)
 
 
 if __name__=='__main__':unittest.main()

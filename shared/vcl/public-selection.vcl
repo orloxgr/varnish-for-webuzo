@@ -9,6 +9,7 @@ sub scp_selection_negotiate {
     std.collect(req.http.X-UltraCache-Public-Selection-Enabled);
     std.collect(req.http.X-UltraCache-Public-Selection-WordPress-Policy);
     std.collect(req.http.X-UltraCache-Public-Selection-Cookies);
+    std.collect(req.http.X-UltraCache-Public-Selection-Scope);
     if (req.http.X-UltraCache-Public-Selection-Version ||
         req.http.X-UltraCache-Public-Selection-Enabled ||
         req.http.X-UltraCache-Public-Selection-WordPress-Policy ||
@@ -19,13 +20,18 @@ sub scp_selection_negotiate {
             return (synth(400, "Invalid public selection declaration"));
         }
         if (!cookie_handoff.selection_register(req.http.X-SCP-Site,req.http.host,
+            req.http.X-UltraCache-Public-Selection-Scope,
             req.http.X-UltraCache-Public-Selection-WordPress-Policy,
             req.http.X-UltraCache-Public-Selection-Cookies,
             req.http.X-UltraCache-Public-Selection-Enabled == "1")) {
             return (synth(400, "Public selection declaration rejected"));
         }
     }
-    set req.http.X-SCP-Selection-Names = cookie_handoff.selection_names(req.http.X-SCP-Site,req.http.host);
+    # Scope alone is a read-only query. Only plain probes may default to root;
+    # a declaration above always requires its explicit application scope.
+    set req.http.X-SCP-Selection-Scope = req.http.X-UltraCache-Public-Selection-Scope;
+    if (!req.http.X-SCP-Selection-Scope) { set req.http.X-SCP-Selection-Scope = "/"; }
+    set req.http.X-SCP-Selection-Names = cookie_handoff.selection_names(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
     set req.http.X-SCP-Selection-Operation = "actions";
     call scp_selection_context;
     unset req.http.X-SCP-Selection-Operation;
@@ -38,9 +44,12 @@ sub scp_selection_capabilities {
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
         set resp.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();
         set resp.http.X-UltraCache-VCL-Public-Selection-Native-Policy = req.http.X-SCP-Selection-Native-Policy;
-        set resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy = cookie_handoff.selection_wordpress_policy(req.http.X-SCP-Site,req.http.host);
+        set resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy = cookie_handoff.selection_wordpress_policy(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
+        unset resp.http.X-UltraCache-VCL-Public-Selection-Scope;
         if (resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy !~ "^[0-9a-f]{64}$") {
             unset resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
+        } else {
+            set resp.http.X-UltraCache-VCL-Public-Selection-Scope = req.http.X-SCP-Selection-Scope;
         }
         set resp.http.X-UltraCache-VCL-Public-Selection-Actions = req.http.X-SCP-Selection-Actions;
     }

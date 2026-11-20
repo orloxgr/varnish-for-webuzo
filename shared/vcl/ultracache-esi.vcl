@@ -256,6 +256,20 @@ sub scp_ultracache_backend_response {
         set beresp.http.Surrogate-Control = "no-store";
         return (deliver);
     }
+    if (cookie_handoff.selection_raw()) {
+        # This is the actual original-route response, not a protocol envelope.
+        # Stream owner bytes without a heap copy or a second provider run.
+        if (beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html" &&
+            beresp.http.Surrogate-Control ~ "(?i)ESI/1[.]0") { set beresp.do_esi = true; }
+        call scp_mark_uncacheable;
+        set beresp.ttl = 0s;
+        set beresp.grace = 0s;
+        set beresp.keep = 0s;
+        set beresp.do_stream = true;
+        set beresp.http.Cache-Control = "private, no-store";
+        set beresp.http.Surrogate-Control = "no-store";
+        return (deliver);
+    }
     if (bereq.http.X-ESI-Private-Request == "1") {
         set beresp.http.X-SCP-Reason = "private-esi-fragment";
         call scp_mark_uncacheable;

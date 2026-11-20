@@ -21,20 +21,26 @@ WP_POLICY='b'*64
 PRIVATE='/index.php?ultracache_esi=mock-private&esi_scope=private'
 
 
+def pending_diagnostic(source):
+    source=source.replace('call scp_recv;','if (req.url == "/__test_selection_pending") { return (synth(299)); } call scp_recv;',1)
+    return source+'\nsub vcl_synth { if (resp.status == 299) { set resp.status = 200; set resp.body = "pending=" + cookie_handoff.pending(); return (deliver); } }\n'
+
+
 def rules(currency='variant',language='variant'):
     return dict(schemaVersion=1,rules=[dict(id='custom:'+name,match=dict(kind='exact',value=name),
         description='Declared mock resolver',action=action) for name,action in ((CURRENCY,currency),(LANGUAGE,language))])
 
 
-def control(get,operation='capabilities',*,enabled=None,names=None,path=None,token=True,extra=None):
+def control(get,operation='capabilities',*,enabled=None,names=None,path=None,token=True,extra=None,scope='/',wordpress_policy=WP_POLICY):
     headers=dict(get.request_headers)
     headers.update({'X-UltraCache-Contract':'2','X-UltraCache-Operation':operation,
         'X-UltraCache-Token':('b'*64 if 'X-WV-Gateway' in headers else 'A'*32) if token else 'invalid'})
     if enabled is not None:
         headers.update({'X-UltraCache-Public-Selection-Version':'1',
             'X-UltraCache-Public-Selection-Enabled':'1' if enabled else '0',
-            'X-UltraCache-Public-Selection-WordPress-Policy':WP_POLICY,
-            'X-UltraCache-Public-Selection-Cookies':names or CURRENCY+','+LANGUAGE})
+            'X-UltraCache-Public-Selection-WordPress-Policy':wordpress_policy,
+            'X-UltraCache-Public-Selection-Cookies':CURRENCY+','+LANGUAGE if names is None else names})
+    if scope is not None:headers['X-UltraCache-Public-Selection-Scope']=scope
     headers.update(extra or {})
     client=http.client.HTTPConnection(*get.endpoint,timeout=15)
     try:
@@ -45,13 +51,16 @@ def control(get,operation='capabilities',*,enabled=None,names=None,path=None,tok
 
 
 class Resolver:
-    def __init__(self,*,esi=False,ttl=120,change=None,raw=None):
+    def __init__(self,*,esi=False,ttl=120,change=None,raw=None,scope='/',wordpress_policy=WP_POLICY):
         self.esi=esi;self.ttl=ttl;self.change=change;self.raw=raw;self.calls=[];self.publications={};self.renders=0
+        self.scope=scope;self.wordpress_policy=wordpress_policy
     def __call__(self,path,headers):
         phase=headers.get('X-UltraCache-Delivery-Phase')
         self.calls.append((path,phase,dict(headers)))
         if self.raw is not None:return self.raw
         if phase!='public-select':return 'ordinary public',[('Cache-Control','public, max-age=120')]
+        assert headers['X-UltraCache-Delivery-Public-Selection-Scope']==self.scope
+        assert headers['X-UltraCache-Delivery-WordPress-Policy']==self.wordpress_policy
         currency='EUR' if headers.get('X-Test-Country')=='DE' else 'USD'
         visitor=headers.get('X-Test-Visitor','guest')
         key=(path,currency);now=time.monotonic()
@@ -71,10 +80,10 @@ class Resolver:
         target_headers=['Content-Type: text/html; charset=UTF-8',
             'X-UltraCache-Delivery-Prepare: /index.php?ultracache_delivery='+quote(manifest,safe=''),
             'X-UltraCache-ESI-Private-Count: '+str(count),
-            'X-UltraCache-Cookie-Settings: '+WP_POLICY,'Vary: Cookie',
+            'X-UltraCache-Cookie-Settings: '+self.wordpress_policy,'Vary: Cookie',
             'X-UltraCache-Tags: '+('product-demo' if path.startswith('/book') else 'news-demo')]
         if self.esi:target_headers+=['Surrogate-Control: ESI/1.0','X-UltraCache-ESI-Shared-Parent: 1']
-        selected=dict(policyDigest=headers['X-UltraCache-Delivery-Policy'],wordpressPolicyDigest=WP_POLICY,
+        selected=dict(policyDigest=headers['X-UltraCache-Delivery-Policy'],wordpressPolicyDigest=self.wordpress_policy,
             cookieUpdates=updates,manifest=manifest,occurrences=count,
             publicParent=dict(generation=hashlib.sha256(body.encode()).hexdigest(),
                 bodyBase64=base64.b64encode(body.encode()).decode(),freshRemaining=max(0,int(deadline-now))),
@@ -95,7 +104,8 @@ class PublicSelectionRuntime(unittest.TestCase):
         status,fields,_=control(get,enabled=True,**kwargs)
         self.assertEqual(status,200)
         self.assertEqual(fields['X-UltraCache-VCL-Public-Selection-Version'],'1')
-        self.assertEqual(fields['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],WP_POLICY)
+        self.assertEqual(fields['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],kwargs.get('wordpress_policy',WP_POLICY))
+        self.assertEqual(fields['X-UltraCache-VCL-Public-Selection-Scope'],kwargs.get('scope','/'))
         return fields
     def test_original_route_cold_and_warm_targets_own_cookies_and_no_second_provider(self):
         for esi in (False,True):
@@ -130,7 +140,74 @@ class PublicSelectionRuntime(unittest.TestCase):
             self.assertEqual(fields['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],WP_POLICY)
             status,fields,_=control(get,enabled=False);self.assertEqual(status,200)
             self.assertNotIn('X-UltraCache-VCL-Public-Selection-WordPress-Policy',fields)
+            self.assertNotIn('X-UltraCache-VCL-Public-Selection-Scope',fields)
             self.assertEqual(get('/book/')[2],'ordinary public')
+
+    def test_registration_requires_normalized_scope_and_rejection_preserves_declarations(self):
+        resolver=Resolver()
+        with proxy('ultracache',resolver,policies=rules()) as get:
+            self.declare(get)
+            for scope in (None,'','shop/','/shop','//shop/','/shop/?query=1','/shop/#hash','/shop/../','/./','/shop//nested/'):
+                for enabled in (True,False):
+                    with self.subTest(scope=scope,enabled=enabled):
+                        self.assertEqual(control(get,enabled=enabled,scope=scope)[0],400)
+            self.assertEqual(control(get,scope=None)[1]['X-UltraCache-VCL-Public-Selection-Scope'],'/')
+            self.assertIn('USD10',get('/book/')[2])
+
+    def test_independent_applications_use_longest_literal_scope_and_retire_only_exact_scope(self):
+        root=Resolver();shop=Resolver(scope='/shop/',wordpress_policy='c'*64)
+        blog=Resolver(scope='/blog/',wordpress_policy='d'*64)
+        def origin(path,headers):
+            base=path.split('?',1)[0]
+            resolver=shop if base=='/shop' or base.startswith('/shop/') else blog if base=='/blog' or base.startswith('/blog/') else root
+            return resolver(path,headers)
+        with proxy('ultracache',origin,policies=rules(),management=True) as get:
+            for resolver in (root,shop,blog):self.declare(get,scope=resolver.scope,wordpress_policy=resolver.wordpress_policy)
+            for path,resolver in (('/book/',root),('/shopper/',root),('/?next=/shop/',root),('/shop',shop),
+                    ('/shop?next=/blog/',shop),('/shop/book/?x=/blog/',shop),('/blog/',blog)):
+                with self.subTest(path=path):
+                    for expected in ('MISS','HIT'):
+                        status,fields,body=get(path,extra={
+                            'X-UltraCache-Delivery-Public-Selection-Scope':'/forged/',
+                            'X-UltraCache-VCL-Public-Selection-Scope':'/forged/'})
+                        self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],expected)
+                        self.assertIn('USD10',body)
+                        self.assertEqual(resolver.calls[-1][2]['X-UltraCache-Delivery-Public-Selection-Scope'],resolver.scope)
+                        self.assertNotIn('X-UltraCache-Delivery-Public-Selection-Scope',dict(fields))
+            # Same-DSO reload preserves every application's metadata.
+            get.activate('scoped_reload',get.source+'\n# scoped metadata survives\n')
+            self.assertEqual(dict(get('/shop/book/?x=/blog/')[1])['X-Cache'],'HIT')
+            status,fields,_=control(get,scope='/blog/')
+            self.assertEqual(status,200);self.assertEqual(fields['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],blog.wordpress_policy)
+            # Remove root only. Both children stay active; ordinary root misses
+            # do not carry a child's declaration or claimed internal fields.
+            self.assertEqual(control(get,enabled=False,scope='/')[0],200)
+            self.assertEqual(get('/after-root-retired/')[2],'ordinary public')
+            self.assertEqual(root.calls[-1][1],None)
+            self.assertNotIn('X-UltraCache-Delivery-Public-Selection-Scope',root.calls[-1][2])
+            self.assertEqual(dict(get('/shop/book/?x=/blog/')[1])['X-Cache'],'HIT')
+            self.assertEqual(control(get,enabled=False,scope='/shop/')[0],200)
+            self.assertEqual(get('/shop/after-retire/')[2],'ordinary public')
+            self.assertEqual(shop.calls[-1][1],None)
+            self.assertIn('USD10',get('/blog/')[2]);self.assertEqual(blog.calls[-1][1],'public-select')
+
+    def test_empty_resolver_boundary_shadows_ancestor_without_provider_entry(self):
+        resolver=Resolver()
+        with proxy('ultracache',resolver,policies=rules()) as get:
+            self.declare(get)
+            fields=self.declare(get,scope='/blog/',names='',wordpress_policy='c'*64)
+            self.assertEqual(json.loads(fields['X-UltraCache-VCL-Public-Selection-Actions']),{})
+            for path in ('/blog','/blog/','/blog/book/?next=/shop/'):
+                self.assertEqual(get(path)[2],'ordinary public')
+                self.assertEqual(dict(get(path)[1])['X-Cache'],'HIT')
+            self.assertTrue(all(phase is None for _,phase,_ in resolver.calls))
+            self.assertIn('USD10',get('/blogger/')[2]);self.assertEqual(resolver.calls[-1][1],'public-select')
+            # No-op query and a nested application's registration preserve the
+            # empty boundary. Removing a nested scope cannot remove its parent.
+            self.assertEqual(control(get,scope='/blog/')[1]['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],'c'*64)
+            self.assertEqual(control(get,enabled=True,scope='/blog/shop/')[0],200)
+            self.assertEqual(control(get,enabled=False,scope='/blog/shop/')[0],200)
+            self.assertEqual(get('/blog/new/')[2],'ordinary public')
     def test_browser_cache_directives_still_select_and_hit_correct_target(self):
         resolver=Resolver()
         with proxy('ultracache',resolver,policies=rules()) as get:
@@ -186,6 +263,88 @@ class PublicSelectionRuntime(unittest.TestCase):
                 self.assertEqual(cookies(fields),['actual=owner; Path=/'])
                 self.assertIn('no-store',dict(fields)['Cache-Control'])
             self.assertEqual(len(resolver.calls),2)
+
+    def test_non_protocol_stream_delivers_before_origin_eof_and_releases_owner(self):
+        release=threading.Event();sent=threading.Event();finished=threading.Event();calls=[]
+        first=b'owned-stream-'*16384;last=b'last-owner-bytes'
+        def chunks():
+            try:
+                yield first
+                sent.set();release.wait(5)
+                yield last
+            finally:finished.set()
+        def origin(path,headers):
+            calls.append((path,dict(headers)))
+            return chunks(),[('Content-Type','application/octet-stream'),('Set-Cookie','stream=owner; Path=/'),
+                ('Content-Disposition','attachment; filename="actual.bin"'),('Cache-Control','public, max-age=600')]
+        with proxy('ultracache',origin,policies=rules(),transform=pending_diagnostic) as get:
+            self.declare(get)
+            client=http.client.HTTPConnection(*get.endpoint,timeout=10)
+            try:
+                client.request('GET','/actual-download',headers=get.request_headers)
+                response=client.getresponse();fields=response.getheaders()
+                prefix=response.read(16)
+                self.assertTrue(sent.wait(5))
+                self.assertFalse(finished.is_set(),'Body was buffered until origin EOF instead of streaming')
+                self.assertEqual(prefix,first[:16]);self.assertEqual(response.status,200)
+                self.assertEqual(dict(fields)['Content-Type'],'application/octet-stream')
+                self.assertEqual(dict(fields)['Content-Disposition'],'attachment; filename="actual.bin"')
+                self.assertEqual(cookies(fields),['stream=owner; Path=/'])
+                self.assertEqual(dict(fields)['X-Cache'],'PASS');self.assertIn('no-store',dict(fields)['Cache-Control'])
+                release.set();self.assertEqual(prefix+response.read(),first+last)
+            finally:release.set();client.close()
+            self.assertTrue(finished.wait(5));self.assertEqual(len(calls),1)
+            self.assertEqual(calls[0][1]['X-UltraCache-Delivery-Phase'],'public-select')
+            deadline=time.monotonic()+5
+            while True:
+                pending=get('/__test_selection_pending')[2]
+                if pending=='pending=0':break
+                self.assertLess(time.monotonic(),deadline,pending);time.sleep(.02)
+
+    def test_abandoned_non_protocol_stream_releases_native_owner(self):
+        release=threading.Event();finished=threading.Event()
+        def chunks():
+            try:
+                yield b'owned-stream-'*16384
+                release.wait(5)
+                yield b'end'*65536
+            finally:finished.set()
+        def origin(path,headers):
+            return chunks(),[('Content-Type','application/octet-stream'),('Set-Cookie','abandoned=owner; Path=/')]
+        with proxy('ultracache',origin,policies=rules(),transform=pending_diagnostic) as get:
+            self.declare(get)
+            client=http.client.HTTPConnection(*get.endpoint,timeout=10)
+            response=None
+            try:
+                client.request('GET','/abandoned-download',headers=get.request_headers)
+                response=client.getresponse();self.assertEqual(response.read(16),b'owned-stream-own')
+            finally:
+                if response is not None:response.close()
+                client.close();release.set()
+            self.assertTrue(finished.wait(5))
+            deadline=time.monotonic()+5
+            while True:
+                pending=get('/__test_selection_pending')[2]
+                if pending=='pending=0':break
+                self.assertLess(time.monotonic(),deadline,pending);time.sleep(.02)
+
+    def test_raw_html_keeps_ordinary_public_esi_without_prepared_child_contract(self):
+        calls=[]
+        def origin(path,headers):
+            calls.append((path,dict(headers)))
+            if path=='/public-fragment/':return 'public-child',[('Cache-Control','public, max-age=120')]
+            return '<html>raw[<esi:include src="/public-fragment/"/>]</html>',[
+                ('Surrogate-Control','ESI/1.0'),('Set-Cookie','raw=owner; Path=/')]
+        with proxy('ultracache',origin,policies=rules()) as get:
+            self.declare(get)
+            for _ in range(2):
+                status,fields,body=get('/raw-html/')
+                self.assertEqual(status,200);self.assertEqual(body,'<html>raw[public-child]</html>')
+                self.assertEqual(dict(fields)['X-Cache'],'PASS')
+                self.assertEqual(cookies(fields),['raw=owner; Path=/'])
+            self.assertEqual([path for path,_ in calls],['/raw-html/','/public-fragment/','/raw-html/'])
+            self.assertEqual(calls[0][1]['X-UltraCache-Delivery-Phase'],'public-select')
+            self.assertNotIn('X-UltraCache-Delivery-Public-Selection-Scope',calls[1][1])
     def test_claimed_protocol_with_wrong_bindings_or_private_target_fails_closed(self):
         mutations=[lambda o,h:o.update(requestId='forged'),lambda o,h:o.update(originalUrl='/other/'),
             lambda o,h:o['selectedPublic'].update(policyDigest='f'*64),
@@ -228,10 +387,7 @@ class PublicSelectionRuntime(unittest.TestCase):
             if path=='/cancel/' and headers.get('X-UltraCache-Delivery-Phase')=='public-select':
                 started.set();release.wait(5)
             return resolver(path,headers)
-        def diagnostic(source):
-            source=source.replace('call scp_recv;','if (req.url == "/__test_selection_pending") { return (synth(299)); } call scp_recv;',1)
-            return source+'\nsub vcl_synth { if (resp.status == 299) { set resp.status = 200; set resp.body = "pending=" + cookie_handoff.pending(); return (deliver); } }\n'
-        with proxy('ultracache',origin,policies=rules(),transform=diagnostic) as get:
+        with proxy('ultracache',origin,policies=rules(),transform=pending_diagnostic) as get:
             self.declare(get)
             client=socket.create_connection(get.endpoint,timeout=5)
             try:

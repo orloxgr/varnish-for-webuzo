@@ -1,16 +1,16 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Included by delivery_continuation.c. Registry contains declarations only:
- * site/host, exact resolver names and WP policy identity, never cookie values.
+ * site/host/application scope, resolver names and WP identity, never values.
  */
 struct public_declaration {
     struct public_declaration *next;
-    char *site, *host, *wordpress_policy, *names;
+    char *site, *host, *scope, *wordpress_policy, *names;
 };
 static struct public_declaration *public_declarations;
 static unsigned public_selection_vcls;
 
 static void public_declaration_free(struct public_declaration *p) {
-    free(p->site); free(p->host); free(p->wordpress_policy); free(p->names); free(p);
+    free(p->site); free(p->host); free(p->scope); free(p->wordpress_policy); free(p->names); free(p);
 }
 static void public_selection_vcl_event(enum vcl_event_e event) {
     pthread_mutex_lock(&lock);
@@ -23,11 +23,21 @@ static void public_selection_vcl_event(enum vcl_event_e event) {
     }
     pthread_mutex_unlock(&lock);
 }
-static struct public_declaration *public_declaration(const char *site, const char *host) {
+static struct public_declaration *public_declaration(const char *site, const char *host, const char *scope) {
     struct public_declaration *p;
     for (p = public_declarations; p; p = p->next)
-        if (!strcmp(p->site,site) && !strcmp(p->host,host)) return p;
+        if (!strcmp(p->site,site) && !strcmp(p->host,host) && !strcmp(p->scope,scope)) return p;
     return NULL;
+}
+static struct public_declaration *public_declaration_for_url(const char *site, const char *host, const char *url) {
+    struct public_declaration *p, *selected = NULL;
+    size_t longest = 0;
+    for (p = public_declarations; p; p = p->next) {
+        size_t length = strlen(p->scope);
+        if (length > longest && !strcmp(p->site,site) && !strcmp(p->host,host) &&
+            delivery_selection_scope_matches(p->scope,url)) { selected = p; longest = length; }
+    }
+    return selected;
 }
 static int public_policy(const char *s) {
     size_t i;
@@ -40,7 +50,9 @@ static char *public_names(const char *names) {
     const char *p = names;
     char *out;
     size_t used = 0;
-    if (!p || !*p) return NULL;
+    /* No resolvers is a participating application's metadata-only boundary.
+     * It shadows an ancestor, without a provider operation or cookie veto. */
+    if (!p || !*p) return strdup("");
     out = malloc(strlen(p)+1);
     if (!out) return NULL;
     while (*p) {
@@ -96,20 +108,21 @@ static char *public_actions(const char *rules, const char *names, int *has_varia
 }
 VCL_STRING vmod_selection_epoch(VRT_CTX) { (void)ctx; return PACKAGE_VERSION; }
 VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
-    VCL_STRING wordpress_policy, VCL_STRING names, VCL_BOOL enabled) {
+    VCL_STRING scope, VCL_STRING wordpress_policy, VCL_STRING names, VCL_BOOL enabled) {
     struct public_declaration *next = NULL, **p;
     (void)ctx;
-    if (!site || !*site || !host || !*host || (enabled && !public_policy(wordpress_policy))) return 0;
+    if (!site || !*site || !host || !*host || !delivery_selection_scope_valid(scope) ||
+        (enabled && !public_policy(wordpress_policy))) return 0;
     if (enabled) {
         next = calloc(1,sizeof(*next));
         if (!next) return 0;
-        next->site = strdup(site); next->host = strdup(host);
+        next->site = strdup(site); next->host = strdup(host); next->scope = strdup(scope);
         next->wordpress_policy = strdup(wordpress_policy); next->names = public_names(names);
-        if (!next->site || !next->host || !next->wordpress_policy || !next->names) { public_declaration_free(next); return 0; }
+        if (!next->site || !next->host || !next->scope || !next->wordpress_policy || !next->names) { public_declaration_free(next); return 0; }
     }
     pthread_mutex_lock(&lock);
     p = &public_declarations;
-    while (*p && (strcmp((*p)->site,site) || strcmp((*p)->host,host))) p = &(*p)->next;
+    while (*p && (strcmp((*p)->site,site) || strcmp((*p)->host,host) || strcmp((*p)->scope,scope))) p = &(*p)->next;
     if (*p) {
         struct public_declaration *old = *p;
         *p = old->next; public_declaration_free(old);
@@ -117,19 +130,19 @@ VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     if (next) { next->next = public_declarations; public_declarations = next; }
     pthread_mutex_unlock(&lock); return 1;
 }
-VCL_STRING vmod_selection_names(VRT_CTX, VCL_STRING site, VCL_STRING host) {
+VCL_STRING vmod_selection_names(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope) {
     struct public_declaration *p;
     const char *out = NULL;
-    if (!site || !host) return NULL;
-    pthread_mutex_lock(&lock); p = public_declaration(site,host);
+    if (!site || !host || !delivery_selection_scope_valid(scope)) return NULL;
+    pthread_mutex_lock(&lock); p = public_declaration(site,host,scope);
     if (p) out = WS_Copy(ctx->ws,p->names,-1);
     pthread_mutex_unlock(&lock); return out;
 }
-VCL_STRING vmod_selection_wordpress_policy(VRT_CTX, VCL_STRING site, VCL_STRING host) {
+VCL_STRING vmod_selection_wordpress_policy(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope) {
     struct public_declaration *p;
     const char *out = NULL;
-    if (!site || !host) return NULL;
-    pthread_mutex_lock(&lock); p = public_declaration(site,host);
+    if (!site || !host || !delivery_selection_scope_valid(scope)) return NULL;
+    pthread_mutex_lock(&lock); p = public_declaration(site,host,scope);
     if (p) out = WS_Copy(ctx->ws,p->wordpress_policy,-1);
     pthread_mutex_unlock(&lock); return out;
 }
@@ -149,26 +162,27 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     struct handoff *entry;
     struct public_declaration *declaration;
     const char *host = NULL, *method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
-    char *names = NULL, *wordpress_policy = NULL, *actions;
+    char *names = NULL, *wordpress_policy = NULL, *scope = NULL, *actions;
     int has_variant, found;
     unsigned i;
     if (priv->priv || ctx->req->esi_level || ctx->req->restarts || !method || strcmp(method,"GET") ||
         !site || !*site || !public_policy(policy) ||
         !http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
-    pthread_mutex_lock(&lock); declaration = public_declaration(site,host);
+    pthread_mutex_lock(&lock); declaration = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
     found = declaration != NULL;
-    if (found) { names = strdup(declaration->names); wordpress_policy = strdup(declaration->wordpress_policy); }
+    if (found) { names = strdup(declaration->names); wordpress_policy = strdup(declaration->wordpress_policy); scope = strdup(declaration->scope); }
     pthread_mutex_unlock(&lock);
     if (!found) return 0;
-    if (!names || !wordpress_policy) { free(names); free(wordpress_policy); return -1; }
+    if (!names || !wordpress_policy || !scope) { free(names); free(wordpress_policy); free(scope); return -1; }
     actions = public_actions(rules,names,&has_variant); free(names);
-    if (!actions) { free(wordpress_policy); return -1; }
-    if (!has_variant) { free(actions); free(wordpress_policy); return 0; }
-    if (ctx->req->restarts+1 > ctx->req->max_restarts) { free(actions); free(wordpress_policy); return -1; }
+    if (!actions) { free(wordpress_policy); free(scope); return -1; }
+    if (!has_variant) { free(actions); free(wordpress_policy); free(scope); return 0; }
+    if (ctx->req->restarts+1 > ctx->req->max_restarts) { free(actions); free(wordpress_policy); free(scope); return -1; }
     d = calloc(1,sizeof(*d));
-    if (!d) { free(actions); free(wordpress_policy); return -1; }
+    if (!d) { free(actions); free(wordpress_policy); free(scope); return -1; }
     priv->priv = d; priv->methods = &delivery_methods;
     d->phase = D_FAILED; d->selection_entry = 1; d->wordpress_policy = wordpress_policy; d->selection_actions = actions;
+    d->selection_scope = scope;
     d->selection_policy = strdup(policy); d->selection_rules = strdup(rules ? rules : "");
     d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site);
     if (!d->selection_policy || !d->selection_rules || !d->url || !delivery_relative(d->url) || !d->site ||
@@ -195,11 +209,6 @@ static int public_selection_parse(struct continuation *d) {
     struct delivery_public_selection *s;
     struct delivery_header *header;
     struct fields **tail = &d->public_headers;
-    if (d->selection_raw) {
-        if (!d->document) return 0;
-        d->document->body = (unsigned char *)d->body; d->document->length = d->length;
-        d->body = NULL; d->length = d->capacity = 0; return 1;
-    }
     if (!delivery_selection_parse(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
         &d->selection,&d->document)) return 0;
     if (d->document) return 1;

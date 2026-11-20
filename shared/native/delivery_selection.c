@@ -6,6 +6,29 @@
 #include <ctype.h>
 #include "selection_digest.c"
 
+/* Application routing metadata, not a cookie decision. Compare the literal
+ * frontend path; never decode a query or confuse /shop/ with /shopper/. */
+int delivery_selection_scope_valid(const char *scope) {
+    const char *segment, *end;
+    size_t length;
+    if (!delivery_relative(scope) || strchr(scope,'?') || strstr(scope,"//")) return 0;
+    length = strlen(scope);
+    if (scope[length-1] != '/') return 0;
+    for (segment = scope+1; *segment; segment = end+1) {
+        end = strchr(segment,'/');
+        if (!end || (end-segment == 1 && segment[0] == '.') ||
+            (end-segment == 2 && segment[0] == '.' && segment[1] == '.')) return 0;
+    }
+    return 1;
+}
+int delivery_selection_scope_matches(const char *scope, const char *url) {
+    size_t length, path_length;
+    if (!delivery_selection_scope_valid(scope) || !delivery_relative(url)) return 0;
+    length = strlen(scope); path_length = strcspn(url,"?");
+    return (path_length >= length && !memcmp(scope,url,length)) ||
+        (path_length == length-1 && !memcmp(scope,url,path_length));
+}
+
 void delivery_selection_free(struct delivery_public_selection *s) {
     if (s) {
         struct delivery_cookie_update *u = s->updates;

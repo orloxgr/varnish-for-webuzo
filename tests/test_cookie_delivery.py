@@ -30,17 +30,26 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
                 self.close_connection = True # owned upstream EOF/fetch-error fixture
                 return
             status, body, headers = result if len(result)==3 else (200,*result)
-            body = body.encode()
+            if isinstance(body,str):body = body.encode()
+            streaming = not isinstance(body,bytes)
             self.send_response(status)
             if not any(name.lower() == 'content-type' for name, _ in headers):
                 self.send_header('Content-Type', 'text/html')
-            if not any(name.lower() == 'content-length' for name, _ in headers):
+            if not streaming and not any(name.lower() == 'content-length' for name, _ in headers):
                 self.send_header('Content-Length', str(len(body)))
             self.send_header('Connection', 'close')
             for name, value in headers:
                 self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                if streaming:
+                    for chunk in body:
+                        self.wfile.write(chunk);self.wfile.flush()
+                else:self.wfile.write(body)
+            except (BrokenPipeError,ConnectionResetError):
+                pass # abandoned client streaming fixture
+            finally:
+                if streaming and hasattr(body,'close'):body.close()
 
         def log_message(self, *args):
             pass
