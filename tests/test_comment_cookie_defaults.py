@@ -1,7 +1,8 @@
 """Shipped commenter rules and native transport, not real WordPress integration.
 
 Template fields, pending visibility, wpDiscuz and ESI-off application fallback
-require separate actual WordPress acceptance. No Shared override seeds defaults.
+require separate actual WordPress acceptance. Defaults stay Private; Shared
+transport scenarios below declare their manual choice explicitly.
 """
 import copy
 import json
@@ -32,21 +33,21 @@ class CommentCookiePolicy(unittest.TestCase):
     def test_reviewed_metadata_both_prefixes_and_request_response_rules_agree(self):
         row=next(r for r in load_catalogue()['policies'] if r['id']=='comment-author-prefix')
         self.assertEqual((row['integration'],row['htmlEffect'],row['cacheKey']),
-            ('wordpress-comments-esi','private-fragment','ignore'))
-        self.assertFalse(row['consumers']['varnishPrivate'])
+            ('wordpress-comments-esi','private','private'))
+        self.assertTrue(row['consumers']['varnishPrivate'])
         policy,metadata=defaults.bundle()
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         self.assertEqual(artifact['version'],metadata['version'])
         for prefix in PREFIXES:
             assessment=next(r for r in metadata['records'].values() if r['name']==prefix)
-            self.assertEqual((assessment['proposal'],assessment['htmlEffect']),('shared','private-fragment'))
+            self.assertEqual((assessment['proposal'],assessment['htmlEffect']),('private','private'))
             for rules in (policy['rules'],artifact['rules']):
                 rule=next(r for r in rules if r['match']==dict(kind='prefix',value=prefix))
-                self.assertEqual(rule['action'],'shared')
+                self.assertEqual(rule['action'],'private')
         selectors=compiled_selectors(admin.compile_vcl())
         for name in NAMES:
-            self.assertEqual(response_action(admin.response_rules(),name),'shared')
-            self.assertEqual(selected_action(selectors,name),'shared')
+            self.assertEqual(response_action(admin.response_rules(),name),'private')
+            self.assertEqual(selected_action(selectors,name),'private')
 
     def test_saved_choices_override_both_default_prefixes_without_snapshot_mutation(self):
         for prefix in PREFIXES:
@@ -66,18 +67,24 @@ class CommentCookiePolicy(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skipped is not acceptance')
 class NativeCommentCookieDefaults(unittest.TestCase):
-    def test_default_reuses_public_parent_across_absence_and_two_commenters(self):
+    def test_private_default_prevents_cold_commenter_leak_and_bypasses_warm_guest(self):
         for profile in ('basic','ultracache'):
-            calls=[]
-            def origin(path,headers):
-                calls.append(headers.get('Cookie'))
-                return 'public; no personal template asserted',[('Cache-Control','public, max-age=120'),('Vary','Cookie')]
-            with self.subTest(profile=profile),proxy(profile,origin) as get:
-                for value,expected in ((None,'MISS'),(commenter('A'),'HIT'),(commenter('B'),'HIT'),(None,'HIT')):
-                    status,fields,body=get('/public-comments',value)
-                    self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],expected)
-                    self.assertEqual(body,'public; no personal template asserted')
-                self.assertEqual(calls,[None])
+            for aggressive in (False,True):
+                calls=[]
+                def origin(path,headers):
+                    value=headers.get('Cookie');calls.append(value)
+                    # Model a plain app that emits personal HTML without any
+                    # Vary/private header. No application isolation is claimed.
+                    return value or 'guest form',[('Cache-Control','public, max-age=120')]
+                with self.subTest(profile=profile,aggressive=aggressive),proxy(profile,origin,
+                        site_settings={'aggressive':aggressive,'aggressive_ttl':600}) as get:
+                    for value,expected in ((commenter('A'),'PASS'),(None,'MISS'),
+                            (commenter('A'),'PASS'),(commenter('B'),'PASS'),(None,'HIT')):
+                        status,fields,body=get('/public-comments',value)
+                        self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],expected)
+                        self.assertEqual(body,value or 'guest form')
+                        if value:self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
+                    self.assertEqual(calls,[commenter('A'),None,commenter('A'),commenter('B')])
 
     def test_explicit_saved_shared_variant_and_private_choices_keep_their_behavior(self):
         for profile in ('basic','ultracache'):
@@ -99,7 +106,7 @@ class NativeCommentCookieDefaults(unittest.TestCase):
                         self.assertEqual(body,'public' if action=='shared' else value)
                     self.assertEqual(len(calls),{'shared':1,'variant':2,'private':3}[action])
 
-    def test_prepared_parent_uses_full_current_commenter_cookie_and_owner_only_response(self):
+    def test_manual_shared_prepared_parent_uses_current_cookie_and_owner_only_response(self):
         calls=[]
         def origin(path,headers):
             phase=headers.get('X-UltraCache-Delivery-Phase')
@@ -111,7 +118,8 @@ class NativeCommentCookieDefaults(unittest.TestCase):
                     ('Set-Cookie','comment_author_url_demo='+value[-3:]+'; Path=/; HttpOnly')]
             if path==PARENT:return BODY,META
             return 'cold child',[('Cache-Control','private, no-store')]
-        with proxy('ultracache',origin) as get:
+        # The user explicitly chose Shared; this does not seed a default test.
+        with proxy('ultracache',origin,policies=choices(('prefix','comment_author_','shared'))) as get:
             self.assertEqual(get(PARENT)[0],200);calls.clear()
             for visitor in ('A','B','A'):
                 value=commenter(visitor)
@@ -129,6 +137,7 @@ class NativeCommentCookieDefaults(unittest.TestCase):
                 return 'private-'+str(len(calls)),[('Cache-Control','private, no-store'),
                     ('X-UltraCache-Application-Private','personal-comment-template')]
             with self.subTest(profile=profile,aggressive=aggressive),proxy(profile,origin,
+                    policies=choices(('prefix','comment_author_','shared')),
                     site_settings={'aggressive':aggressive,'aggressive_ttl':600}) as get:
                 for i,visitor in enumerate(('A','B'),1):
                     status,fields,body=get('/private-comments',commenter(visitor))

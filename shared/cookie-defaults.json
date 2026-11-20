@@ -11501,7 +11501,7 @@
         "value": "comment_author_"
       },
       "description": "",
-      "action": "shared"
+      "action": "private"
     },
     {
       "id": "bundled:5b174572-0b7a-4929-8005-97bb8ff1bbcb",
@@ -11510,7 +11510,7 @@
         "value": "comment_author_url_"
       },
       "description": "Used to track comment author url, if “Save my name, email, and website in this browser for the next time I comment.” checkbox is checked",
-      "action": "shared"
+      "action": "private"
     },
     {
       "id": "bundled:policy:wp-postpass-prefix",
@@ -20504,6 +20504,6 @@
       "action": "private"
     }
   ],
-  "version": "2026.11.20.3",
+  "version": "2026.11.20.4",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }
