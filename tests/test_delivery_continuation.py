@@ -71,11 +71,16 @@ class DeliveryContinuation(unittest.TestCase):
                     return body,META
                 if path==public:
                     self.assertIsNone(headers.get('Cookie'))
-                    return 'public-child',[('Cache-Control','public, max-age=0')]
+                    # Aggressive mode deliberately overrides max-age=0 on the
+                    # warm visit. Vary:* makes this mock child non-storable in
+                    # both modes, so recovery must exercise its origin path.
+                    return 'public-child',[('Cache-Control','public, max-age=0'),('Vary','*')]
                 return 'cold-private',[('Cache-Control','private, no-store')]
             with self.subTest(fresh=fresh,aggressive=aggressive),proxy('ultracache',origin,
                     site_settings={'aggressive':aggressive,'aggressive_ttl':86400}) as get:
-                get(PARENT);calls.clear()
+                self.assertEqual(get(PARENT)[0],200)
+                self.assertEqual(calls.count((public,None)),1)
+                calls.clear()
                 status,fields,result=get(PARENT,'_fbp=visitor')
                 self.assertEqual(status,200)
                 self.assertEqual(result,'<html>parent[private:prepared-once][private:prepared-once][nonce:prepared-once]public-child</html>')
