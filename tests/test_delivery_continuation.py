@@ -40,7 +40,7 @@ def envelope(headers, visitor, change=None):
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class DeliveryContinuation(unittest.TestCase):
     def test_request_snapshot_survives_publication_loss_without_an_origin_recovery_fetch(self):
-        for fresh in (120,0):
+        for fresh,aggressive in ((120,False),(0,False),(0,True)):
             calls=[]
             public='/request-snapshot-public-child'
             body=BODY.replace('</html>','<esi:include src="'+public+'"/></html>')
@@ -73,7 +73,8 @@ class DeliveryContinuation(unittest.TestCase):
                     self.assertIsNone(headers.get('Cookie'))
                     return 'public-child',[('Cache-Control','public, max-age=0')]
                 return 'cold-private',[('Cache-Control','private, no-store')]
-            with self.subTest(fresh=fresh),proxy('ultracache',origin) as get:
+            with self.subTest(fresh=fresh,aggressive=aggressive),proxy('ultracache',origin,
+                    site_settings={'aggressive':aggressive,'aggressive_ttl':86400}) as get:
                 get(PARENT);calls.clear()
                 status,fields,result=get(PARENT,'_fbp=visitor')
                 self.assertEqual(status,200)

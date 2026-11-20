@@ -116,6 +116,10 @@ if (cookie_handoff.delivery_backend()) {
     set bereq.retry_connect = false;
     if (cookie_handoff.delivery_local_backend()) {
         set bereq.backend = cookie_handoff.delivery_local_backend();
+        # This is a refill of the selected publication's remaining budget,
+        # not a fresh origin render eligible for a new aggressive lifetime.
+        unset bereq.http.X-SCP-Aggressive;
+        unset bereq.http.X-SCP-Aggressive-TTL;
     }
 } else {
 # Advertise generic ESI capability to any compatible application.
