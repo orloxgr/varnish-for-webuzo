@@ -249,20 +249,21 @@ This bounded shape is routing only: it does not authenticate the request, grant
 public HTML eligibility or trust a PHP session. UltraCache still verifies its
 purpose-bound MAC and one-use observation owner. An invalid MAC of the same shape
 also reaches the application for refusal; its response cannot fill a shared object.
-An initial top-level GET/HEAD carrying an exact request `Cache-Control: no-store`
-directive also returns PASS before profile cookie transport, parent lookup or ESI
-prepare, with reason `request-no-store`. This includes ordinary raw warm requests:
-they must reach the current origin even when a previous proxy parent is warm and
-its application publication was retired. Repeated Cache-Control fields are
-collected; directive matching is case-insensitive and comma-delimited. The request
-retains its original URL, application cookies and application authentication headers.
-The ordinary UltraCache backend still removes its reserved `esi_session` and
-`ultracache_esi_optin` protocol markers; no-store grants no signed-source exception. PASS
-neither fills nor replaces the existing public object, even in Aggressive mode.
-`no-cache`, `max-age=0` and `Pragma: no-cache` alone keep normal server HIT handling;
-the warm/source headers alone grant no additional trust. Owned continuation
-restarts and ESI children retain their existing routing. No generic PHPSESSID
-Shared choice or native state gate is added.
+Browser `Cache-Control: no-store`, `no-cache`, `max-age=0` and
+`Pragma: no-cache` do not decide server-side bypass. Repeated fields retain
+normal lookup, including the negotiated public selection path. Real origin
+private/no-store remains authoritative. The purpose-bound raw source operation
+above stays separate: its full signed/shaped request reaches the application,
+which verifies its MAC and one-use owner before returning an uncached source.
+Warm/source names or browser revalidation headers alone grant no additional
+trust or transport exception.
+
+The additive request-owned public selection contract is documented in
+[PUBLIC-SELECTION.md](PUBLIC-SELECTION.md). It uses the existing authenticated
+HTTP capabilities channel, independent native and WordPress policy identities,
+and a distinct original-route entry. It never rebinds an old prepare manifest to
+a different publication. A native public target remains MISS/HIT cacheable while
+its final per-request selected delivery is private/no-store downstream.
 
 1. At the start of `vcl_recv`, call `scp_init` before accepting client metadata.
    It removes forged `X-SCP-*` inputs and inherited ESI carrier/approval headers. The private carrier is

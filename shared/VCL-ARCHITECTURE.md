@@ -2,17 +2,22 @@
 
 `cache-policy.vcl` is the source coordinator. Its modules cover:
 core entry points, request cookies/diagnostics, downstream response privacy,
-HTTP admission/privacy, representations, UltraCache ESI, aggressive HTML and
-CMS route policy. Existing subroutines
+HTTP admission/privacy, representations, negotiated public publication selection,
+UltraCache ESI, aggressive HTML and CMS route policy. Existing subroutines
 keep their responsibilities and explicit call order. `profiles/control.vcl`
 continues to own the native control protocol.
 
 `vcl_source.expand()` resolves these owned files during generation, before
 reviewed cookie-name substitution. Both panel adapters publish a single complete
 VCL program. There are no runtime VCL file references. Aggressive admission,
-cookie keys and CMS route matching run inside Varnish. Its public HIT has no
-CMS service, session SQL, token provider, body filter or additional HTTP calls.
-Static cookie/CMS discovery is performed by the panel adapter during refresh.
+cookie keys and CMS route matching run inside Varnish. Basic retains its native
+best-effort lookup without application composition. UltraCache's existing
+private-fragment prepare and negotiated public selection can execute one real
+application bootstrap before final delivery. A public selection HIT reuses the
+correct public publication instead of rendering its template again; it is not a
+zero-PHP request. Provider cookies remain request-owned and never enter public
+objects. Static cookie/CMS discovery is performed by the panel adapter during
+refresh. No new visitor scan or background resolver is introduced.
 
 This choice preserves the existing transactional deployment: the content digest
 covers all expanded module bytes, `vcl.load` compiles the whole program before

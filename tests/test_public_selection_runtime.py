@@ -165,7 +165,10 @@ class PublicSelectionRuntime(unittest.TestCase):
             resolver=Resolver()
             with self.subTest(profile=profile),proxy(profile,resolver,policies=rules('private','shared')) as get:
                 if profile=='ultracache':self.declare(get)
-                else:self.assertEqual(control(get,enabled=True)[0],400)
+                else:
+                    self.assertEqual(control(get,enabled=True)[0],400)
+                    # An authenticated cleanup stays possible after UC->Basic.
+                    self.assertEqual(control(get,enabled=False)[0],200)
                 for value in ('USD','EUR'):
                     _,fields,_=get('/book/',CURRENCY+'='+value)
                     self.assertEqual(dict(fields)['X-Cache'],'PASS')
@@ -227,7 +230,7 @@ class PublicSelectionRuntime(unittest.TestCase):
             return resolver(path,headers)
         def diagnostic(source):
             source=source.replace('call scp_recv;','if (req.url == "/__test_selection_pending") { return (synth(299)); } call scp_recv;',1)
-            return source+'\nsub vcl_synth { if (resp.status == 299) { set resp.status = 200; synthetic("pending=" + cookie_handoff.pending()); return (deliver); } }\n'
+            return source+'\nsub vcl_synth { if (resp.status == 299) { set resp.status = 200; set resp.body = "pending=" + cookie_handoff.pending(); return (deliver); } }\n'
         with proxy('ultracache',origin,policies=rules(),transform=diagnostic) as get:
             self.declare(get)
             client=socket.create_connection(get.endpoint,timeout=5)

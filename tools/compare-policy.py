@@ -25,7 +25,7 @@ def main():
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
                  'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
                  'shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_recognition.py',
-                 'shared/CONTRACT.md','shared/ESI-DELIVERY-DRAFT.md','shared/ESI-VALIDATION.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
+                 'shared/CONTRACT.md','shared/PUBLIC-SELECTION.md','shared/ESI-DELIVERY-DRAFT.md','shared/ESI-VALIDATION.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
                  'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_public_selection.py','tests/test_public_selection_runtime.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',

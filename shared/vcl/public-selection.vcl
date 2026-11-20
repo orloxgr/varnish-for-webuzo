@@ -13,7 +13,7 @@ sub scp_selection_negotiate {
         req.http.X-UltraCache-Public-Selection-Enabled ||
         req.http.X-UltraCache-Public-Selection-WordPress-Policy ||
         req.http.X-UltraCache-Public-Selection-Cookies) {
-        if (req.http.X-SCP-Profile != "ultracache" ||
+        if ((req.http.X-SCP-Profile != "ultracache" && req.http.X-UltraCache-Public-Selection-Enabled != "0") ||
             req.http.X-UltraCache-Public-Selection-Version != "1" ||
             req.http.X-UltraCache-Public-Selection-Enabled !~ "^[01]$") {
             return (synth(400, "Invalid public selection declaration"));
@@ -39,6 +39,9 @@ sub scp_selection_capabilities {
         set resp.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();
         set resp.http.X-UltraCache-VCL-Public-Selection-Native-Policy = req.http.X-SCP-Selection-Native-Policy;
         set resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy = cookie_handoff.selection_wordpress_policy(req.http.X-SCP-Site,req.http.host);
+        if (resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy !~ "^[0-9a-f]{64}$") {
+            unset resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
+        }
         set resp.http.X-UltraCache-VCL-Public-Selection-Actions = req.http.X-SCP-Selection-Actions;
     }
 }
