@@ -38,15 +38,25 @@ class PrivateDocument(unittest.TestCase):
                         ('Cache-Control','private, no-store'),
                         ('Content-Security-Policy',"script-src 'nonce-fresh'"),
                         ('Link','</fresh>; rel=preload'),('Content-Language','el'),
-                        ('ETag','json-wire-etag'),('Last-Modified','Thu, 01 Jan 1970 00:00:00 GMT'),
+                        ('ETag','"json-wire-etag"'),('Last-Modified','Thu, 01 Jan 1970 00:00:00 GMT'),
                         ('X-UltraCache-Application-Private','test-notices'),
                         (MARKER,'origin-spoof'),*[('Set-Cookie',value) for value in owner_fields]]
                 return envelope(headers,'other-owner'),[('Cache-Control','private, no-store')]
             self.assertIsNone(headers.get(MARKER),'A client cannot declare whole-document support')
-            if path==PARENT:return BODY,META+[('ETag','public-generation'),('Content-Security-Policy',"script-src 'nonce-old'")]
+            if path==PARENT:return BODY,META+[('ETag','"public-generation"'),('Content-Security-Policy',"script-src 'nonce-old'")]
             return 'cold-child',[('Cache-Control','private, no-store')]
         with proxy('ultracache',origin) as get:
-            get(PARENT);calls.clear()
+            get(PARENT)
+            status,before_fields,before_result=get(PARENT,'_fbp=baseline-owner')
+            before=dict(before_fields)
+            self.assertEqual(status,200);self.assertEqual(before['X-Cache'],'HIT')
+            self.assertEqual(before_result,'<html>parent[private:other-owner][private:other-owner][nonce:other-owner]</html>')
+            # Native ESI/gzip processing may weaken the valid origin entity-tag.
+            # Record the actual public validator before any private document,
+            # then require exactly that same value on the subsequent public HIT.
+            self.assertRegex(before['ETag'],r'\A(?:W/)?"public-generation"\Z')
+            self.assertEqual(before['Content-Security-Policy'],"script-src 'nonce-old'")
+            calls.clear()
             status,fields,result=get(PARENT,'_fbp=notice-owner',extra={MARKER:'client-spoof',
                 'X-UltraCache-Application-Private':'client-spoof'})
             values=dict(fields)
@@ -65,8 +75,8 @@ class PrivateDocument(unittest.TestCase):
             self.assertEqual(status,200)
             self.assertEqual(result,'<html>parent[private:other-owner][private:other-owner][nonce:other-owner]</html>')
             self.assertEqual(dict(fields)['X-Cache'],'HIT')
-            self.assertEqual(dict(fields)['ETag'],'public-generation')
-            self.assertEqual(dict(fields)['Content-Security-Policy'],"script-src 'nonce-old'")
+            self.assertEqual(dict(fields)['ETag'],before['ETag'])
+            self.assertEqual(dict(fields)['Content-Security-Policy'],before['Content-Security-Policy'])
             self.assertEqual(cookies(fields),[])
             self.assertEqual(calls,[(PARENT,'prepare')])
 

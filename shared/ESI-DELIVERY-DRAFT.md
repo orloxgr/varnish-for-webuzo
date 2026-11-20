@@ -727,3 +727,14 @@ complete adapter owns the single definition. The shared authorization rendering
 suite now asserts exactly one definition and one call for both adapters. No
 WordPress proxy was loaded with the failed generation. These corrected sources
 still require the root native rerun; a source assertion is not runtime proof.
+
+The corrected Hestia `f7ed39f` compiled and ran all 23 native methods: 22
+passed. The remaining fixture used an invalid unquoted origin entity-tag and
+compared its untransformed literal with the native ESI/gzip-delivered validator
+only after private delivery. The corrected fixture emits a valid quoted tag,
+observes an actual public HIT before any private-document outcome, requires
+that validator to identify the exact expected public generation (with optional
+native weakening), then requires byte-for-byte equality on the later public
+HIT. Its CSP and composed body are likewise checked before/after. It does not
+permit an arbitrary changed validator or claim that the failed assertion proved
+parent mutation. Root native rerun is still required for complete acceptance.
