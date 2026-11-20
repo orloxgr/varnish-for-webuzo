@@ -27336,8 +27336,32 @@
         "basic": "private",
         "ultracache": "private"
       }
+    },
+    {
+      "id": "bundled:policy:wcml-client-currency",
+      "match": {
+        "kind": "exact",
+        "value": "wcml_client_currency"
+      },
+      "description": "Resolved WCML client currency",
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "bundled:policy:wcml-client-currency-language",
+      "match": {
+        "kind": "exact",
+        "value": "wcml_client_currency_language"
+      },
+      "description": "WCML currency language context",
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
     }
   ],
-  "version": "2026.11.20.5",
+  "version": "2026.11.20.6",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

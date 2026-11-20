@@ -29,7 +29,7 @@ def main():
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
                  'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_public_selection.py','tests/test_public_selection_runtime.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',
-                 'tests/test_request_no_store.py','tests/test_comment_cookie_defaults.py','tests/test_cookie_profiles.py','tests/cookie_profile_ui.mjs','tools/build-cookie-assessments.py'):
+                 'tests/test_request_no_store.py','tests/test_comment_cookie_defaults.py','tests/test_wcml_cookie_defaults.py','tests/test_cookie_profiles.py','tests/cookie_profile_ui.mjs','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)
         digests[name]=hashlib.sha256(left).hexdigest()

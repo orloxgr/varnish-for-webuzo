@@ -247,3 +247,30 @@ Only final client delivery is private/no-store, including zero-fragment replies
 without Set-Cookie, so downstream caches cannot skip provider re-resolution.
 Runtime application and proxy acceptance is tracked separately from portable
 parser/build checks; mock resolver tests do not establish WCML correctness.
+
+## Bundled WCML choices, 2026.11.20.6
+
+The common bundle adds exactly two literal cookie choices:
+`wcml_client_currency` and `wcml_client_currency_language`, both Variant in
+Basic and UltraCache. No `wcml_` prefix or cookie-specific native resolver is
+introduced. Basic uses incoming cookie values only; it cannot resolve a first
+visitor's location. UltraCache can use the application's authenticated,
+scoped public resolver through the generic protocol above. Saved central/site
+choices still override each profile independently.
+
+The standalone defaults artifact gains two rows (2278 to 2280); all existing
+rows/actions are unchanged. The catalogue also aligns retired metadata with the
+common WP artifact: it removes four unused WordPress consumer flags and replaces
+the obsolete independent Meta delivery/transports/attributes description with
+provider-owned metadata. These fields do not drive native cookie actions or
+issuer generation. Every existing catalogue action and all three native
+consumer flags remain unchanged. Assessment metadata advances its version only;
+its 2288 source records and actions are unchanged. The editor has 2295 rows.
+
+Normalized LF common artifacts:
+
+- defaults.json: `8672979eae27a37ec987ba32c464026827881c355e6f05ae94e83ccebcb0518b`
+- catalogue.json: `a61c8a489bf9222e1d44dd1b7992c6fda87434393f939882ee69f47b6fc335ec`
+
+Native default tests use the shipped choices without injected prototype rules.
+Their mock resolver coverage is separate from actual WP/WCML/FPM qualification.

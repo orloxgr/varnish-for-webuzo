@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.5",
+  "version": "2026.11.20.6",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -15,43 +15,11 @@
       "htmlEffect": "none",
       "cacheKey": "ignore",
       "delivery": {
-        "mode": "independent",
-        "issuer": "transport-specific",
-        "supported": true,
+        "mode": "provider",
+        "issuer": "meta",
+        "supported": false,
         "preserveExisting": true,
-        "renewal": "provider",
-        "transports": {
-          "proxy-fbp": {
-            "issuer": "meta-compatible-native",
-            "supported": false,
-            "consentAdapter": "configured-cookie-equals",
-            "originResponseWins": true,
-            "verifiedScope": "Retired native identifier generator. Original provider response cookies use the generic Shared HTML handoff; new identifiers use the actual browser/application provider.",
-            "holdWhen": [
-              {
-                "cookie": "wc_facebook_signals_state",
-                "value": "held"
-              }
-            ],
-            "sources": [
-              "facebook-for-woocommerce:3.7.8/includes/Signals.php::should_hold_signals"
-            ]
-          },
-          "provider-endpoint-fbp": {
-            "issuer": "meta-parameter-builder",
-            "supported": true,
-            "consentAdapters": [
-              "real-cookie-banner",
-              "wp-consent-api"
-            ],
-            "originResponseWins": true,
-            "verifiedScope": "Actual WordPress/WooCommerce/Meta/RCB local HTML HIT and consent lifecycle; actual WP Consent API with Complianz optin consent type and per-provider server denial",
-            "sources": [
-              "facebook-for-woocommerce:3.7.8/facebook-commerce-events-tracker.php::get_param_builder",
-              "wp-consent-api:2.1.0/inc/api-functions.php::wp_has_consent"
-            ]
-          }
-        }
+        "renewal": "provider"
       },
       "consent": {
         "required": true,
@@ -59,18 +27,14 @@
         "authority": "provider-cmp"
       },
       "attributes": {
-        "domain": "site-configured",
-        "path": "/",
-        "maxAgeSeconds": 7776000,
-        "secure": "site-scheme",
-        "httpOnly": false,
-        "sameSite": "Lax"
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": "provider",
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -116,10 +80,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -163,10 +123,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -210,10 +166,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -257,10 +209,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -304,10 +252,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -351,10 +295,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -398,10 +338,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -445,10 +381,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -492,10 +424,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -539,10 +467,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -586,10 +510,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -633,10 +553,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -680,10 +596,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -727,10 +639,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -774,10 +682,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -821,10 +725,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -868,10 +768,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -915,10 +811,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -962,10 +854,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": true,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -1009,10 +897,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1056,10 +940,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1103,10 +983,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1150,10 +1026,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1197,10 +1069,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1244,10 +1112,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1291,10 +1155,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1338,10 +1198,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1385,10 +1241,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1432,10 +1284,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1479,10 +1327,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1526,10 +1370,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1573,10 +1413,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1620,10 +1456,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1667,10 +1499,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": true
@@ -1714,10 +1542,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": true,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -1759,10 +1583,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": true,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -1804,10 +1624,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": true,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -1849,10 +1665,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -1894,10 +1706,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": true,
         "varnishPrivate": false,
         "varnishCart": true,
         "varnishTrackingIgnore": false
@@ -1939,10 +1747,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": true,
         "varnishPrivate": false,
         "varnishCart": true,
         "varnishTrackingIgnore": false
@@ -1984,10 +1788,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": true,
         "varnishTrackingIgnore": false
@@ -2029,10 +1829,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -2074,10 +1870,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -2119,10 +1911,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": true,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -2164,10 +1952,6 @@
         "sameSite": "provider"
       },
       "consumers": {
-        "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": false,
-        "wordpressResponsePrivate": false,
         "varnishPrivate": true,
         "varnishCart": false,
         "varnishTrackingIgnore": false
@@ -2177,6 +1961,90 @@
         "basic": "private",
         "ultracache": "private"
       }
+    },
+    {
+      "id": "wcml-client-currency",
+      "match": {
+        "kind": "exact",
+        "value": "wcml_client_currency"
+      },
+      "provider": "WooCommerce Multilingual",
+      "integration": "wcml-public-variants",
+      "htmlEffect": "public-variant",
+      "cacheKey": "variant",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [],
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "description": "Resolved WCML client currency"
+    },
+    {
+      "id": "wcml-client-currency-language",
+      "match": {
+        "kind": "exact",
+        "value": "wcml_client_currency_language"
+      },
+      "provider": "WooCommerce Multilingual",
+      "integration": "wcml-public-variants",
+      "htmlEffect": "public-variant",
+      "cacheKey": "variant",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [],
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "description": "WCML currency language context"
     }
   ]
 }
