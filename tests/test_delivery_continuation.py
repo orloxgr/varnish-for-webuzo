@@ -39,6 +39,44 @@ def envelope(headers, visitor, change=None):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class DeliveryContinuation(unittest.TestCase):
+    def test_first_native_miss_from_early_public_snapshot_prepares_before_headers(self):
+        calls=[]
+        def origin(path,headers):
+            phase=headers.get('X-UltraCache-Delivery-Phase');calls.append((path,phase))
+            self.assertIsNone(headers.get('X-UltraCache-Delivery-Parent-Source'))
+            if phase=='prepare':
+                return envelope(headers,'first-miss'),[('Cache-Control','private, no-store'),
+                    ('Set-Cookie','owner=first-miss; Path=/; HttpOnly')]
+            self.assertEqual(path,PARENT)
+            return BODY,META+[('X-UltraCache-Delivery-Parent-Source','public-snapshot-v1')]
+        with proxy('ultracache',origin) as get:
+            status,fields,result=get(PARENT,'_fbp=visitor')
+            self.assertEqual(status,200)
+            self.assertEqual(result,'<html>parent[private:first-miss][private:first-miss][nonce:first-miss]</html>')
+            self.assertEqual(cookies(fields),['owner=first-miss; Path=/; HttpOnly'])
+            self.assertEqual(calls,[(PARENT,None),(PARENT,'prepare')])
+            self.assertNotIn('X-UltraCache-Delivery-Parent-Source',dict(fields))
+            self.assertNotIn('X-SCP-Delivery-Public-Snapshot',dict(fields))
+
+    def test_origin_cookie_or_spoofed_snapshot_proof_cannot_start_first_miss_prepare(self):
+        for origin_proof in (False,True):
+            calls=[]
+            def origin(path,headers):
+                self.assertIsNone(headers.get('X-UltraCache-Delivery-Parent-Source'))
+                phase=headers.get('X-UltraCache-Delivery-Phase');calls.append((path,phase))
+                self.assertIsNone(phase,'No first-MISS prepare after a provider may already have run')
+                if path==PARENT:
+                    extra=[('X-UltraCache-Delivery-Parent-Source','public-snapshot-v1'),
+                        ('Set-Cookie','_fbp=actual-origin; Path=/')] if origin_proof else []
+                    return BODY,META+extra
+                return 'cold',[('Cache-Control','private, no-store')]
+            with self.subTest(origin_proof=origin_proof),proxy('ultracache',origin) as get:
+                status,fields,_=get(PARENT,extra={'X-UltraCache-Delivery-Parent-Source':'public-snapshot-v1',
+                    'X-SCP-Delivery-Public-Snapshot':'1'})
+                self.assertEqual(status,200)
+                self.assertEqual(cookies(fields),['_fbp=actual-origin; Path=/'] if origin_proof else [])
+                self.assertTrue(all(phase is None for _,phase in calls))
+
     def test_request_snapshot_survives_publication_loss_without_an_origin_recovery_fetch(self):
         for fresh,aggressive in ((120,False),(0,False),(0,True)):
             calls=[]

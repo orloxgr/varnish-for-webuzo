@@ -539,3 +539,28 @@ fields/attributes, repeated fragments with one provider execution, nonce action
 success after state changes, TTL 0/positive/expiry, targeted invalidation,
 spoofed headers, prepare failures, eviction/restart/abort and no-JavaScript
 composition. These are pending requirements, not claims of completed tests.
+
+### Initial native MISS from an early existing public publication
+
+The application's normal early publication reader may emit the ephemeral
+`X-UltraCache-Delivery-Parent-Source: public-snapshot-v1` only when it serves
+already stored public bytes before WordPress/provider bootstrap, with no
+Set-Cookie. It is not UC publication metadata, a fresh WP response marker,
+or a declaration for the prepare/parent-snapshot endpoints. Native receive
+and backend-fetch remove caller copies. Backend-response captures proof
+before cookie detachment and only when the actual origin has no Set-Cookie.
+The public marker and internal marker are removed before browser delivery.
+
+An otherwise cacheable approved ESI parent with positive privateCount and
+bound Prepare may start the existing pre-header continuation on this proven
+MISS as well as on a HIT. It uses the same selected object/request ownership,
+two-restart prepare and parent-loss recovery. It does not add a preliminary
+restart or repeat the early reader's provider work (there was none). Native
+MISS/PASS after a fresh WP bootstrap remains a separate initial-MISS issuer
+contract; do not emit this proof to conceal that gap.
+
+Candidate fixtures verify the first parent response contains actual prepare
+cookies and prepared private output, no cold child/provider replay, and that
+a browser spoof or origin Set-Cookie prevents first-MISS preparation. These
+new cases require native execution; prior tenets of HIT/recovery acceptance
+do not automatically qualify them. Basic stays outside this path.

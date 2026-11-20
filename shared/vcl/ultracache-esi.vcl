@@ -214,7 +214,8 @@ sub scp_ultracache_backend_response {
 }
 
 sub scp_ultracache_deliver {
-    if (req.esi_level == 0 && req.method == "GET" && obj.hits > 0 &&
+    if (req.esi_level == 0 && req.method == "GET" &&
+        (obj.hits > 0 || resp.http.X-SCP-Delivery-Public-Snapshot == "1") &&
         req.http.X-SCP-Pass != "1" && !obj.uncacheable && resp.status == 200 &&
         resp.http.X-UltraCache-ESI-Shared-Parent == "1" &&
         resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" &&

@@ -3,6 +3,8 @@
 sub scp_init {
     cookie_handoff.reset();
     unset req.http.X-SCP-Cookie-Handoff;
+    unset req.http.X-UltraCache-Delivery-Parent-Source;
+    unset req.http.X-SCP-Delivery-Public-Snapshot;
     unset req.http.X-UltraCache-Delivery-Authorization;
     unset req.http.X-UltraCache-Delivery-Manifest;
     unset req.http.X-UltraCache-Delivery-Recovery-Version;
@@ -92,6 +94,8 @@ sub scp_hit {
 sub scp_backend_fetch {
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     unset bereq.http.X-SCP-Cookie-Handoff;
+    unset bereq.http.X-UltraCache-Delivery-Parent-Source;
+    unset bereq.http.X-SCP-Delivery-Public-Snapshot;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-UltraCache-Delivery-Manifest;
     unset bereq.http.X-UltraCache-Delivery-Recovery-Version;
@@ -120,9 +124,18 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
+    unset beresp.http.X-SCP-Delivery-Public-Snapshot;
     if (bereq.http.X-SCP-Profile == "ultracache") {
+        # Only the application's early publication reader may declare this:
+        # no WP/provider ran and no issuer fields can be discarded/repeated.
+        # Capture before response-cookie detachment or any local rewriting.
+        if (beresp.http.X-UltraCache-Delivery-Parent-Source == "public-snapshot-v1" &&
+            !beresp.http.Set-Cookie && beresp.status == 200) {
+            set beresp.http.X-SCP-Delivery-Public-Snapshot = "1";
+        }
         if (cookie_handoff.delivery_recovery_response()) {}
     }
+    unset beresp.http.X-UltraCache-Delivery-Parent-Source;
     # An origin echo must never put the backend-only credential in an object.
     unset beresp.http.X-UltraCache-Delivery-Authorization;
     unset beresp.http.X-UltraCache-Delivery-Manifest;
@@ -161,6 +174,8 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-Delivery-Recovery-Version;
     unset resp.http.X-UltraCache-Delivery-Request-Snapshot-Version;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
+    unset resp.http.X-UltraCache-Delivery-Parent-Source;
+    unset resp.http.X-SCP-Delivery-Public-Snapshot;
     cookie_handoff.deliver();
     if (req.http.X-SCP-Aggressive == "1") { set resp.http.X-Cache-Mode = "aggressive"; }
     else { set resp.http.X-Cache-Mode = "standard"; }
