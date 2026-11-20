@@ -1,6 +1,6 @@
-"""Persisted .9 execution metadata and manual choices for real adapter apply tests.
+"""Persisted .9/.10 execution metadata and manual choices for real adapter apply tests.
 
-No old runtime code is substituted: only the metadata a .9 installation saved.
+No old runtime code is substituted: only the metadata a .9 or .10 installation saved.
 The maintained adapter tests run the current normal apply with owned fake I/O.
 """
 import json
@@ -14,8 +14,8 @@ import cookie_admin as admin
 VARIANTS=('default','shared','variant','private','reset')
 
 
-def previous_metadata():
-    return json.loads((ROOT/'tests/fixtures/cookie-defaults-2026.11.20.9.json').read_text(encoding='utf-8'))['saved']
+def previous_metadata(version="2026.11.20.10"):
+    return json.loads((ROOT/('tests/fixtures/cookie-defaults-'+version+'.json')).read_text(encoding='utf-8'))['saved']
 
 
 def central_choices():
@@ -27,8 +27,8 @@ def central_choices():
 def site_choices(profile,choice):
     if choice=='default':return None
     actions={p:(None if p==profile else 'variant') if choice=='reset' else choice for p in ('basic','ultracache')}
-    return admin.normalize(dict(schemaVersion=2,rules=[dict(id='custom:cart-hash',
-        match=dict(kind='exact',value='woocommerce_cart_hash'),description='Saved site choice',actions=actions)]))
+    return admin.normalize(dict(schemaVersion=2,rules=[dict(id='custom:user-switching',
+        match=dict(kind='prefix',value='wordpress_user_sw_'),description='Saved site choice',actions=actions)]))
 
 
 def expected_action(profile,choice):

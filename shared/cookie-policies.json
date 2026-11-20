@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.10",
+  "version": "2026.11.20.11",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -2221,6 +2221,52 @@
         "basic": "variant",
         "ultracache": "variant"
       }
+    },
+    {
+      "id": "wordpress-user-switching-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "wordpress_user_sw_"
+      },
+      "provider": "User Switching",
+      "integration": "wordpress-user-switching-return",
+      "htmlEffect": "private-fragment",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "user-switching",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://plugins.svn.wordpress.org/user-switching/tags/1.12.2/user-switching.php",
+        "https://github.com/johnbillion/user-switching/blob/97e2d56b56d82bd75ea00bffbf832ad883ccae88/user-switching.php",
+        "https://github.com/orloxgr/ultracache-dev/blob/f77863bb38756dfd439b55afcd2bded18f26c3c7/includes/core/class-esi-user-switching.php"
+      ],
+      "actions": {
+        "basic": "private",
+        "ultracache": "shared"
+      },
+      "description": "User Switching 1.12.2 plain, secure and old-user authentication cookies select the personal switch-back region. Basic passes matching requests; UltraCache isolates the actual provider return link in a request-owned private fragment."
     }
   ]
 }

@@ -471,3 +471,53 @@ the mocked upgrade/apply regression. They qualify this diagnostic follow-up;
 final coordinated WordPress artifact checks and distribution/publication remain
 pending. They do not upgrade the separate Aelia declared-model evidence to a
 commercial-provider runtime claim. No further cookie policy was changed.
+
+## User Switching standalone boundary — bundle 2026.11.20.11
+
+The presented policy delta adds one ordinary visible prefix row,
+`wordpress_user_sw_`, with **Basic Private / UltraCache Shared**. This covers
+User Switching's native plain, secure and old-user cookie names. No native C,
+VCL, module builder, hidden consumer flag or provider-specific bypass changes.
+Manual Shared/Variant/Private choices remain authoritative in each profile, and
+reset restores only the selected profile's inherited action.
+
+The Lab owner's actual counter on both adapters used WordPress login and User
+Switching 1.12.2 switch-off, without UltraCache or its advanced-cache drop-in in
+Basic. The provider issued its real plain and old-user cookies. The actor's
+personal switch-back region was stored and then delivered to an independent
+empty-cookie guest; the direct origin guest had no such region. HTTPS secure
+cookie issuance was not claimed. This is tracked separately in WordPress issue
+[#983](https://github.com/orloxgr/ultracache-dev/issues/983). Integrated UC's real
+private return fragment had already passed its four ON/OFF scenarios; retaining
+Shared there makes its existing effective action explicit.
+
+The actual official provider source file has SHA256
+`ae7a3d463ea97400abd778100e9539536aebd42f027f9b1764ebc2866a6206f5`.
+Its normalized text matches the pinned User Switching 1.12.2 Git commit
+`97e2d56b56d82bd75ea00bffbf832ad883ccae88`. The catalogue records both the
+official versioned source URL and pinned provider/application source references.
+The official SVN URL was inaccessible to the web tool; provenance was verified
+from the retained official package and pinned Git source, not a claimed web fetch.
+
+There are now 2285 default rules, 53 reviewed catalogue policies and 2300 editor
+rows. The 2288 recognition assessments retain their actions; only their bundle
+version changes. A regular new UC Shared prefix changes the structural execution
+fingerprint even though its effective behavior was already Shared:
+
+| Profile | .10 fingerprint | .11 fingerprint |
+| --- | --- | --- |
+| Basic | `55f20fa87d3485c919b4ecf4f89d96724ceba5e2c339679012c452b8cfc77f1b` | `6a62e15e995289153845506ee62c6cb9e08b4f767602479bbce9ece050d0e293` |
+| UltraCache | `3eb248933875ea1cf865818f4107015ba1f9bf09526d7f9185d2a71614cb1279` | `910058d667375bfa57c1eaf7275e8ace00b76574d2105b22bb10969acbf29b45` |
+
+Normal apply therefore invalidates enabled sites in **both** profiles once. The
+maintained `.10` saved-state fixture contains actual prior fingerprints and its
+defaults artifact hash. Each adapter's
+`test_bundle_10_to_11_apply_invalidates_both_profiles_and_preserves_manual_choices`
+exercises ten sites through normal apply with actual local persistence/rendering
+and mocked external management/routing/purge endpoints, checking unchanged saved
+central/site choices and reset values, both profile invalidations, and no repeat
+purge/activation. `test_user_switching_defaults.py` separately checks the visible
+row, compiled request/response choices, exact profile fingerprint delta, manual
+choices/reset and native declared-origin request/issuer ownership. These new .11
+Linux apply/native tests and the fixed actual Basic counter await separate Lab
+qualification; earlier .10 results do not establish their acceptance.

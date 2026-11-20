@@ -27408,8 +27408,20 @@
         "basic": "variant",
         "ultracache": "variant"
       }
+    },
+    {
+      "id": "bundled:policy:wordpress-user-switching-prefix",
+      "match": {
+        "kind": "prefix",
+        "value": "wordpress_user_sw_"
+      },
+      "description": "User Switching 1.12.2 plain, secure and old-user authentication cookies select the personal switch-back region. Basic passes matching requests; UltraCache isolates the actual provider return link in a request-owned private fragment.",
+      "actions": {
+        "basic": "private",
+        "ultracache": "shared"
+      }
     }
   ],
-  "version": "2026.11.20.10",
+  "version": "2026.11.20.11",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

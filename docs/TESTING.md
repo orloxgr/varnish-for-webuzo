@@ -26,6 +26,12 @@ detection and six country/currency visits without manual capability flags.
 See [the common qualification](../shared/PUBLIC-SELECTION.md#diagnostic-routing-qualification--21-november-2026).
 These receipts qualify the follow-up; final coordinated distribution is pending.
 
+Bundle `2026.11.20.11` adds the visible User Switching Basic Private / UC Shared
+prefix. Both fingerprints change; the new normal `.10 → .11` apply test checks
+both invalidations and preserves saved actions/reset. See the common .11 section
+for exact provenance, counter scope, hashes and pending qualification. Prior .10
+qualification does not establish .11 acceptance.
+
 ## Bundled cookie database
 
 Recognition metadata and reviewed executable defaults ship with the addon.

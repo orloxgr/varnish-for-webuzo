@@ -34,7 +34,7 @@ class WooCartDefaults(unittest.TestCase):
     def test_three_exact_profile_choices_match_assessments_artifact_and_catalogue(self):
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         catalogue=load_catalogue();policy,metadata=defaults.bundle()
-        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.20.10',)*3)
+        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.20.11',)*3)
         for ident in ASSESSMENTS:self.assertEqual(metadata['records'][ident]['actions'],ACTIONS)
         for source in (artifact['rules'],policy['rules'],catalogue['policies']):
             for kind,name in MATCHES:
