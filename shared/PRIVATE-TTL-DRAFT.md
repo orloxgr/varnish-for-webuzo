@@ -1,7 +1,8 @@
-# Scoped private TTL: native/app design, not implemented (#955)
+# Scoped private TTL: isolated native candidate (#955)
 
-Status: no positive-private-TTL capability is advertised. Current private
-delivery remains TTL 0. This document does not claim runtime equivalence or
+Status: no positive-private-TTL capability is advertised. The isolated native
+lookup/fill candidate below requires native qualification and an authenticated
+application claim producer. Existing published private delivery remains TTL 0. This document does not claim runtime equivalence or
 introduce new controls, cookies, sessions, credentials or classification rules.
 
 ## Evidence and boundary
@@ -76,3 +77,59 @@ expiry with actual REST actions, multiple fragments/TTLs, targeted invalidation,
 concurrency, abort/retry/error and forged claims. Check no personal cookies or
 partition values in public parent objects, client headers or another owner's
 response. TTL 0 remains the comparison baseline. These tests are not yet run.
+
+## Executable isolated candidate wire
+
+The same prepare/bootstrap may perform a lookup at the configured native HTTP
+cache-control endpoint before rendering a private fragment. Method
+`UC-PRIVATE-GET`, exact fragment URI, correct canonical Host/scheme, existing
+`X-UltraCache-Token`, and `X-UltraCache-Private-Key: <64 lowercase hex>` are
+required. The existing adapter site-secret gate plus loopback control-source
+ACL authorize entry; cookies cannot authorize it. Basic, disabled sites,
+wrong credentials/forwarded remote sources cannot enter. The read-only method
+becomes GET inside the private hash namespace. A MISS/expired object returns
+404 from Varnish without any origin fetch. HIT returns its body with literal
+`Cache-Control: private, no-store`, no Set-Cookie, and whole remaining seconds
+in `X-UltraCache-Private-Remaining`. The application validates response success
+and uses actual HIT bytes without executing the renderer. Failures/MISS must
+render only in the already-running original prepare context, not another WP
+request. Positive TTL is for providers with an authoritative current
+identity/state/expiry claim, never a default cookie-presence identity.
+
+The existing `renderedFragments` entry may additionally contain:
+
+```json
+{"cache":{"key":"<64 lowercase keyed application digest>","ttl":30,"tags":"existing application tags"}}
+```
+
+All three fields are required when cache metadata is present. Positive TTL is
+an integer representable by native VCL; embedded controls/CRLF in tags and
+malformed/duplicate/unknown claim fields reject the complete envelope. TTL 0
+uses the original entry without cache metadata. The existing exact URL, HTML
+bytes and occurrences stay required: retained HIT bytes are also the recovery
+source if native eviction/invalidation occurs between lookup and ESI delivery.
+On an authenticated cache HIT the application uses only the remaining native
+lifetime in the returned claim, not the configured original TTL.
+
+Private ESI children with an owned claim use the disjoint namespace
+site+canonical host+exact signed URI+opaque key. They can HIT across top-level
+requests. On MISS, the same native virtual backend/source used for public
+request snapshots supplies only the request-owned prepared fragment bytes.
+Native Varnish stores/evicts/expires that object; the VMOD has no persistent
+private body cache. The refill's TTL subtracts time since prepare response
+receipt and has no new grace/keep. It is re-applied after custom VCL and before
+storage, independent of site aggressive mode. Existing immutable object
+site/host/URL metadata permit scoped native invalidation. Provider Set-Cookie
+stays owned by the current parent prepare and is never stored on these
+objects. Browser responses and authenticated read responses remain private.
+Keys/internal object markers/tags are stripped from delivered responses.
+
+This candidate deliberately **does not emit**
+`X-UltraCache-Delivery-Private-Cache-Version: 1`. Caller and origin echoes of
+that reserved declaration are stripped. A producer must gate optional claims
+on a qualified capability before sending them to older strict parsers.
+The new native mock fixture demonstrates the intended before-render lookup,
+independent owner objects, native expiry, no issuer-cookie replay and failed
+lookup without origin access; it is not real WP/provider acceptance and has
+not yet run on a native engine for this checkpoint. Existing TTL 0, standalone
+UltraCache, actual login/session validation and Basic behavior stay separate.

@@ -5,10 +5,14 @@ sub scp_init {
     unset req.http.X-SCP-Cookie-Handoff;
     unset req.http.X-UltraCache-Delivery-Parent-Source;
     unset req.http.X-SCP-Delivery-Public-Snapshot;
+    unset req.http.X-SCP-Private-Key;
+    unset req.http.X-SCP-Private-Lookup;
+    unset req.http.X-SCP-Site;
     unset req.http.X-UltraCache-Delivery-Authorization;
     unset req.http.X-UltraCache-Delivery-Manifest;
     unset req.http.X-UltraCache-Delivery-Recovery-Version;
     unset req.http.X-UltraCache-Delivery-Request-Snapshot-Version;
+    unset req.http.X-UltraCache-Delivery-Private-Cache-Version;
     unset req.http.X-UltraCache-Delivery-Recovery;
     unset req.http.X-SCP-Cookie-Contract;
     unset req.http.X-UltraCache-Cookie-Settings;
@@ -89,6 +93,7 @@ sub scp_pass {
     set req.http.X-SCP-Pass = "1";
 }
 sub scp_hit {
+    if (req.http.X-SCP-Profile == "ultracache") { call scp_private_hit; }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
 }
 sub scp_backend_fetch {
@@ -100,6 +105,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Delivery-Manifest;
     unset bereq.http.X-UltraCache-Delivery-Recovery-Version;
     unset bereq.http.X-UltraCache-Delivery-Request-Snapshot-Version;
+    unset bereq.http.X-UltraCache-Delivery-Private-Cache-Version;
     unset bereq.http.X-UltraCache-Delivery-Recovery;
     unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
@@ -124,6 +130,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
+    if (bereq.http.X-SCP-Profile == "ultracache") { call scp_private_backend_response; }
     unset beresp.http.X-SCP-Delivery-Public-Snapshot;
     if (bereq.http.X-SCP-Profile == "ultracache") {
         # Only the application's early publication reader may declare this:
@@ -145,6 +152,7 @@ sub scp_backend_response {
     unset beresp.http.X-UltraCache-Delivery-Version;
     unset beresp.http.X-UltraCache-Delivery-Recovery-Version;
     unset beresp.http.X-UltraCache-Delivery-Request-Snapshot-Version;
+    unset beresp.http.X-UltraCache-Delivery-Private-Cache-Version;
     unset beresp.http.X-SCP-Reason;
     unset beresp.http.X-SCP-Client-Vary;
     unset beresp.http.X-SCP-Result;
@@ -168,11 +176,13 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    call scp_private_deliver;
     unset resp.http.X-UltraCache-Delivery-Authorization;
     unset resp.http.X-UltraCache-Delivery-Manifest;
     unset resp.http.X-UltraCache-Delivery-Recovery;
     unset resp.http.X-UltraCache-Delivery-Recovery-Version;
     unset resp.http.X-UltraCache-Delivery-Request-Snapshot-Version;
+    unset resp.http.X-UltraCache-Delivery-Private-Cache-Version;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     unset resp.http.X-UltraCache-Delivery-Parent-Source;
     unset resp.http.X-SCP-Delivery-Public-Snapshot;

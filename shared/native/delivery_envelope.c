@@ -13,7 +13,7 @@ struct text { const char *data; size_t length; };
 void delivery_free_fragments(struct delivery_fragment *f) {
     while (f) {
         struct delivery_fragment *next = f->next;
-        free(f->url); free(f->html); free(f); f = next;
+        free(f->url); free(f->html); free(f->cache_key); free(f->cache_tags); free(f); f = next;
     }
 }
 void delivery_public_parent_free(struct delivery_public_parent *parent) {
@@ -204,12 +204,41 @@ static int number(struct reader *r, uint64_t *out) {
     *out = n;
     return 1;
 }
+static int private_cache(struct reader *r, struct text *identity, struct text *tags, uint64_t *ttl) {
+    unsigned seen = 0;
+    size_t i;
+    if (!take(r,'{')) return 0;
+    for (;;) {
+        struct text key;
+        unsigned bit;
+        if (!string(r,&key) || !take(r,':')) return 0;
+        if (equal(key,"key")) bit = 1;
+        else if (equal(key,"ttl")) bit = 2;
+        else if (equal(key,"tags")) bit = 4;
+        else return 0;
+        if (seen&bit) return 0;
+        seen |= bit;
+        if (bit == 1) { if (!string(r,identity)) return 0; }
+        else if (bit == 4) { if (!string(r,tags)) return 0; }
+        else if (!number(r,ttl) || !*ttl || *ttl > INT64_MAX) return 0;
+        if (take(r,'}')) break;
+        if (!take(r,',')) return 0;
+    }
+    if (seen != 7 || identity->length != 64) return 0;
+    for (i = 0; i < identity->length; ++i)
+        if ((identity->data[i] < '0' || identity->data[i] > '9') &&
+            (identity->data[i] < 'a' || identity->data[i] > 'f')) return 0;
+    /* Existing tags are an HTTP field, not arbitrary response header syntax. */
+    for (i = 0; i < tags->length; ++i)
+        if ((unsigned char)tags->data[i] < 32 || (unsigned char)tags->data[i] == 127) return 0;
+    return 1;
+}
 static int fragment(struct reader *r, uint64_t remaining,
     struct delivery_fragment **output, uint64_t *occurrences) {
-    struct text key, url = {NULL,0}, html = {NULL,0};
+    struct text key, url = {NULL,0}, html = {NULL,0}, identity = {NULL,0}, tags = {NULL,0};
     struct delivery_fragment *f;
     unsigned seen = 0;
-    uint64_t n = 0;
+    uint64_t n = 0, ttl = 0;
     if (!take(r,'{')) return 0;
     for (;;) {
         unsigned bit;
@@ -217,21 +246,26 @@ static int fragment(struct reader *r, uint64_t remaining,
         if (equal(key,"url")) bit = 1;
         else if (equal(key,"html")) bit = 2;
         else if (equal(key,"occurrences")) bit = 4;
+        else if (equal(key,"cache")) bit = 8;
         else return 0;
         if (seen&bit) return 0;
         seen |= bit;
         if (bit == 1) { if (!string(r,&url)) return 0; }
         else if (bit == 2) { if (!string(r,&html)) return 0; }
+        else if (bit == 8) { if (!private_cache(r,&identity,&tags,&ttl)) return 0; }
         else if (!number(r,&n) || !n || n > remaining) return 0;
         if (take(r,'}')) break;
         if (!take(r,',')) return 0;
     }
-    if (seen != 7 || strlen(url.data) != url.length || !delivery_relative(url.data)) return 0;
+    if ((seen&7) != 7 || strlen(url.data) != url.length || !delivery_relative(url.data)) return 0;
     for (f = *output; f; f = f->next) if (!strcmp(f->url,url.data)) return 0;
     f = calloc(1,sizeof(*f));
     if (!f) return 0;
     f->url = copy(url); f->html = copy(html); f->length = html.length;
-    if (!f->url || !f->html) { delivery_free_fragments(f); return 0; }
+    if (seen&8) { f->cache_key = copy(identity); f->cache_tags = copy(tags); f->cache_ttl = ttl; }
+    if (!f->url || !f->html || ((seen&8) && (!f->cache_key || !f->cache_tags))) {
+        delivery_free_fragments(f); return 0;
+    }
     f->next = *output; *output = f; *occurrences = n;
     return 1;
 }

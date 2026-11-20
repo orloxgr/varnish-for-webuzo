@@ -31,6 +31,7 @@ struct continuation {
 };
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static const char filter_task_token;
+static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
 static const hdr_t h_version = HDR("X-UltraCache-Delivery-Version");
 static const hdr_t h_phase = HDR("X-UltraCache-Delivery-Phase");
@@ -40,6 +41,7 @@ static const hdr_t h_manifest = HDR("X-UltraCache-Delivery-Manifest");
 static const hdr_t h_recovery = HDR("X-UltraCache-Delivery-Recovery");
 static const hdr_t h_recovery_version = HDR("X-UltraCache-Delivery-Recovery-Version");
 static const hdr_t h_request_snapshot_version = HDR("X-UltraCache-Delivery-Request-Snapshot-Version");
+static const hdr_t h_private_key = HDR("X-SCP-Private-Key");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -49,6 +51,12 @@ static struct handoff *delivery_entry(uint64_t key) {
     struct handoff *e = buckets[key % BUCKETS];
     while (e && e->key != key) e = e->next;
     return e;
+}
+static const struct delivery_fragment *delivery_fragment_named(const struct continuation *d, const char *url) {
+    const struct delivery_fragment *f;
+    if (!d || !url) return NULL;
+    for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) return f;
+    return NULL;
 }
 
 static void delivery_fini(VRT_CTX, void *value) {
@@ -152,7 +160,14 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         const struct delivery_fragment *f;
         if (d->phase != D_DELIVERED) return -1;
         url = ctx->http_req->hd[HTTP_HDR_URL].b;
-        for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) return 2;
+        for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) {
+            if (!f->cache_key || !f->cache_ttl) return 2;
+            http_ForceHeader(ctx->http_req,h_private_key,f->cache_key);
+            http_ForceHeader(ctx->http_req,h_key,d->request_id);
+            http_Unset(ctx->http_req,H_Cookie);
+            http_Unset(ctx->http_req,H_Accept_Encoding);
+            return WS_Overflowed(ctx->ws) ? -1 : 3;
+        }
         return 0; /* ordinary public child remains on its existing path */
     }
     if ((d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||

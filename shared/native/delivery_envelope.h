@@ -9,6 +9,9 @@ struct delivery_fragment {
     char *url;
     char *html;
     size_t length;
+    char *cache_key; /* optional authenticated application claim, never public */
+    char *cache_tags;
+    uint64_t cache_ttl;
 };
 struct delivery_public_parent {
     char generation[65];

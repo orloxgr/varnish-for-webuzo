@@ -78,6 +78,21 @@ $Restrict vcl_backend_response
 
 Select the request snapshot source filter before the ordinary native ESI parser.
 
+$Function BACKEND delivery_private_backend(PRIV_TASK, PRIV_VCL)
+$Restrict vcl_backend_fetch
+
+Select a scoped fragment source only from the authenticated prepared claim.
+
+$Function BOOL delivery_private_source()
+$Restrict vcl_backend_response
+
+Identify a backend task which owns the prepared private fragment source.
+
+$Function INT delivery_private_remaining()
+$Restrict vcl_deliver
+
+Whole remaining seconds for an authenticated read-only private cache lookup.
+
 $Function BOOL delivery_recovery_response(PRIV_TASK)
 $Restrict vcl_backend_response
 

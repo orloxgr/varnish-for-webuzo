@@ -21,7 +21,8 @@ CC=shutil.which('cc') or shutil.which('gcc')
 class Fragment(ctypes.Structure):pass
 Pointer=ctypes.POINTER(Fragment)
 Fragment._fields_=[('next',Pointer),('url',ctypes.c_void_p),('html',ctypes.c_void_p),
-                  ('length',ctypes.c_size_t)]
+                  ('length',ctypes.c_size_t),('cache_key',ctypes.c_void_p),
+                  ('cache_tags',ctypes.c_void_p),('cache_ttl',ctypes.c_uint64)]
 class PublicParent(ctypes.Structure):
     _fields_=[('generation',ctypes.c_char*65),('body',ctypes.c_void_p),
               ('length',ctypes.c_size_t),('fresh_remaining',ctypes.c_uint64)]
@@ -73,13 +74,13 @@ class DeliveryEnvelope(unittest.TestCase):
         assert folder.name.startswith('uc-delivery-envelope-')
         cls.folder.cleanup()
 
-    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False):
+    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False,with_cache=False):
         data=json.dumps(value,ensure_ascii=True).encode() if isinstance(value,dict) else value
         out=Pointer()
         parent=ParentPointer()
         ok=self.lib.delivery_envelope_parse(data,len(data),request.encode(),url.encode(),occurrences,
             ctypes.byref(out),ctypes.byref(parent))
-        result={}
+        result={};cache={}
         try:
             if not ok:
                 self.assertFalse(out,'Failure must discard the complete partial envelope')
@@ -89,7 +90,11 @@ class DeliveryEnvelope(unittest.TestCase):
             while f:
                 row=f.contents
                 result[ctypes.string_at(row.url).decode('utf-8')]=ctypes.string_at(row.html,row.length)
+                if row.cache_key:
+                    cache[ctypes.string_at(row.url).decode()]=dict(key=ctypes.string_at(row.cache_key).decode(),
+                        ttl=row.cache_ttl,tags=ctypes.string_at(row.cache_tags).decode())
                 f=row.next
+            if with_cache:return result,cache
             if not with_snapshot:return result
             snapshot=None
             if parent:
@@ -243,6 +248,22 @@ class DeliveryEnvelope(unittest.TestCase):
             self.assertEqual(parent,dict(generation=generation,body=body,freshRemaining=0))
             self.assertEqual(len(fragments),2)
         self.assertIsNone(self.parse(sample(),with_snapshot=True)[1])
+
+    def test_optional_private_cache_claim_has_exact_owned_key_expiry_and_tags(self):
+        value=sample();claim=dict(key='a'*64,ttl=61,tags='product-17 widget-9')
+        value['renderedFragments'][0]['cache']=claim
+        bodies,claims=self.parse(value,with_cache=True)
+        self.assertEqual(claims,{value['renderedFragments'][0]['url']:claim})
+        self.assertEqual(bodies[value['renderedFragments'][0]['url']],b'<div>actual output</div>')
+        for invalid in (dict(claim,key='A'*64),dict(claim,key='a'*63),dict(claim,key='z'*64),
+                dict(claim,ttl=0),dict(claim,ttl=-1),dict(claim,ttl=True),dict(claim,ttl=2**63),
+                dict(claim,tags='safe\r\nSet-Cookie: bad'),dict(claim,tags='a\x00b'),
+                dict(claim,extra=True),dict(key='a'*64,ttl=3)):
+            value['renderedFragments'][0]['cache']=invalid
+            with self.subTest(claim=invalid):self.assertIsNone(self.parse(value))
+        value['renderedFragments'][0]['cache']=claim
+        raw=json.dumps(value).encode()
+        self.assertIsNone(self.parse(raw.replace(b'"ttl": 61',b'"ttl":61,"t\\u0074l":61')))
 
     def test_optional_public_parent_rejects_invalid_base64_generation_and_unknown_keys(self):
         good=dict(generation='a'*64,bodyBase64='Zg==',freshRemaining=9)

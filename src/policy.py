@@ -104,18 +104,20 @@ sub vcl_recv {
         cookie_contract=cookie_bridge.cookie_control.cache_contract(site.get('cookie_integration'),site['domain'],site['names'],config.get('cookie_policies'),site.get('cookie_policies'))
         text.append(' if ('+cond+') {\n set req.http.X-WV-Site = '+quoted(site['id'])+';\n'+
             ' set req.http.X-WV-Profile = '+quoted(profile)+';\n set req.http.X-SCP-Profile = '+quoted(profile)+';\n'+
+            ' set req.http.X-SCP-Site = '+quoted(site['id'])+';\n'+
             (' set req.http.X-SCP-Aggressive = "1"; set req.http.X-SCP-Aggressive-TTL = '+quoted(str(override['aggressive_ttl']))+';\n' if override['aggressive'] else '')+
             (' set req.http.X-SCP-Cookie-Contract = '+quoted(cookie_contract)+';\n' if cookie_contract else '')+
             (' set req.http.X-WV-Disabled = "1";\n' if not site.get('enabled') else '')+
             ' if (req.method == "HEAD" && req.http.X-WV-Control-Discovery == "1" && local.socket == "public") { return (synth(405, "HTTP cache control endpoint")); }\n'+
-            ' if (req.method == "PURGE" || req.method == "BAN") {\n'+
+            ' if (req.method == "PURGE" || req.method == "BAN" || req.method == "UC-PRIVATE-GET") {\n'+
             ' if (req.http.X-WV-Disabled || req.esi_level > 0 || local.socket != "public" || (req.http.X-Webuzo-Varnish-Token != '+quoted(site['token'])+' &&\n'+
             ' req.http.X-UltraCache-Token != '+quoted(site['token'])+')) { return (synth(403)); }\n'+
+            ' if (req.method == "UC-PRIVATE-GET") { call scp_private_lookup; }\n'+
             ' if (req.http.X-UltraCache-Token == '+quoted(site['token'])+') { call wvw_http_control; }\n'+
             ' if (req.method != "PURGE") { return (synth(403)); }\n'+
             ' ban("obj.http.X-WV-Site == '+site['id']+'"); return (synth(200, "Site cache cleared")); }\n }')
     text.append('''
- if (req.method == "PURGE" || req.method == "BAN") { return (synth(403)); }
+ if (req.method == "PURGE" || req.method == "BAN" || req.method == "UC-PRIVATE-GET") { return (synth(403)); }
  if (!req.http.X-WV-Site) { return (synth(421)); }
  if (req.esi_level > 0) {
    if (req_top.http.X-WV-Site != req.http.X-WV-Site || req_top.http.X-WV-Profile != "ultracache") { return (synth(403)); }
@@ -124,6 +126,7 @@ sub vcl_recv {
  unset req.http.X-WV-Gateway;
  unset req.http.X-Webuzo-Varnish-Token;
  unset req.http.X-UltraCache-Token;
+ unset req.http.X-UltraCache-Private-Key;
  unset req.http.X-WV-Control-Discovery;
  unset req.http.X-Ban-Expression;
  unset req.http.X-UltraCache-Contract;
@@ -159,6 +162,7 @@ sub vcl_recv {
 }
 sub vcl_pass { call scp_pass; }
 sub vcl_hash {
+ call scp_private_hash;
  call scp_key;
  call scp_cookie_hash;
  hash_data("webuzo-shared-policy-v10");
@@ -171,7 +175,7 @@ sub vcl_hit {
  if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; }
  call scp_hit;
 }
-sub vcl_miss { call scp_cookie_miss; if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; } }
+sub vcl_miss { call scp_private_miss; call scp_cookie_miss; if (req.http.X-WV-Soft-Purge == "1") { call wvw_soft_purge; } }
 sub wvw_soft_purge {
  set req.http.X-WV-Soft-Purge = purge.soft(); return (synth(200, "Soft purge completed"));
 }

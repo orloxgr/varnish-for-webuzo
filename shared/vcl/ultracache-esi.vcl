@@ -11,6 +11,11 @@ unset req.http.X-SCP-Delivery-State;
 set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_recv();
 if (req.http.X-SCP-Delivery-State == "1") { return (pass); }
 if (req.http.X-SCP-Delivery-State == "2") { return (synth(200, "OK")); }
+if (req.http.X-SCP-Delivery-State == "3") {
+    unset req.http.X-SCP-Aggressive;
+    unset req.http.X-SCP-Aggressive-TTL;
+    return (hash);
+}
 if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }
 unset req.http.X-SCP-Delivery-State;
 # Private/session ESI transport.
@@ -101,6 +106,18 @@ if (
 }
 }
 sub scp_ultracache_backend_fetch {
+if (bereq.http.X-SCP-Private-Key) {
+    if (!cookie_handoff.delivery_private_backend()) {
+        return (error(503, "Prepared private source unavailable"));
+    }
+    set bereq.backend = cookie_handoff.delivery_private_backend();
+    unset bereq.http.Cookie;
+    unset bereq.http.Authorization;
+    unset bereq.http.Accept-Encoding;
+    unset bereq.http.X-SCP-Aggressive;
+    unset bereq.http.X-SCP-Aggressive-TTL;
+    return (fetch);
+}
 unset bereq.http.X-SCP-Delivery-State;
 unset bereq.http.X-UltraCache-Delivery-Version;
 unset bereq.http.X-UltraCache-Delivery-Phase;
