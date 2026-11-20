@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.7",
+  "version": "2026.11.20.8",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -1877,7 +1877,7 @@
       "sources": [],
       "actions": {
         "basic": "private",
-        "ultracache": "private"
+        "ultracache": "shared"
       }
     },
     {

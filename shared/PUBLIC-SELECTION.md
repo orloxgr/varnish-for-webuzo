@@ -297,3 +297,29 @@ Normalized LF common artifacts:
 
 - defaults.json: `a750180711d7d299a4086c56eb2986c5f0368bf20902faa27359ab921baf3b9f`
 - catalogue.json: `95ec1d215fb13eb040fb7d2d1eabf7a9df35442a13d6ad135cbc464dc56f4a81`
+
+## YITH profile defaults, 2026.11.20.8
+
+This bundle changes only the exact and prefix `yith_wcwl_session_` choices:
+UltraCache Private becomes Shared; Basic remains Private. The application must
+provide its actual private embedded-table/button/nonce integration for shared
+parent composition. Basic has no such application fragment contract and retains
+its previous behavior. Dedicated private wishlist routes remain application
+decisions. Native does not introduce a YITH-specific transport, VCL rule or
+additional cookie veto. Existing central/site Shared/Variant/Private choices
+remain authoritative, and resetting one column inherits that profile's default.
+
+The native exact rule is generated from assessment record
+`7bbc4d04-8776-45f3-85dc-c474d5907b24`; its UltraCache action mirrors the common
+exact rule. That is the only changed assessment-record field. Other assessment
+records, all other defaults, catalogue metadata, rule counts (2284/52) and editor
+row count (2299) are unchanged; version metadata advances to `.8`. The common
+catalogue prefix retains its previous role/consumer metadata, which cannot
+override the actual profile action. Mock-origin native tests qualify actions
+and inheritance only, not actual YITH REST mutations, table privacy, native
+nonce ageing or ESI-off application fallback. Those require separate WP tests.
+
+Normalized LF common artifacts:
+
+- defaults.json: `91b91be2dc72586cd4fd928cc906aca21a4bbc2703848bc4504eb738880824d8`
+- catalogue.json: `8a9eca3ea5b0523e2369ab9cfe8704bbf394e96eb956b519427653dde19b695e`

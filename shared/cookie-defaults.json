@@ -12142,7 +12142,7 @@
       "description": "YITH WooCommerce Wishlist plugin uses cookies in order to correctly store user wishlists",
       "actions": {
         "basic": "private",
-        "ultracache": "private"
+        "ultracache": "shared"
       }
     },
     {
@@ -27322,7 +27322,7 @@
       "description": "",
       "actions": {
         "basic": "private",
-        "ultracache": "private"
+        "ultracache": "shared"
       }
     },
     {
@@ -27410,6 +27410,6 @@
       }
     }
   ],
-  "version": "2026.11.20.7",
+  "version": "2026.11.20.8",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

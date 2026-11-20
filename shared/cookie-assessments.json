@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "version": "2026.11.20.7",
+  "version": "2026.11.20.8",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f",
   "sourceLicense": "Apache-2.0",
   "sourceLicenseFile": "cookie-recognition/Open-Cookie-Database-LICENSE.txt",
@@ -20475,7 +20475,7 @@
       "dataController": "Yithemes.com",
       "actions": {
         "basic": "private",
-        "ultracache": "private"
+        "ultracache": "shared"
       }
     },
     "f55ad4e8-3628-4673-bbb0-d1ade3ffd763": {

@@ -22,7 +22,7 @@ def dual(basic,ultracache,name='comment_author_',kind='prefix'):
 
 
 class CookieProfiles(unittest.TestCase):
-    def test_all_defaults_have_two_concrete_actions_and_only_comments_differ(self):
+    def test_all_defaults_have_two_concrete_actions_and_only_comments_and_wishlist_differ(self):
         policy,metadata=defaults.bundle()
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         self.assertEqual(policy['schemaVersion'],2)
@@ -33,7 +33,9 @@ class CookieProfiles(unittest.TestCase):
             self.assertEqual(set(r['actions']),{'basic','ultracache'})
             self.assertTrue(all(a in ('shared','variant','private') for a in r['actions'].values()))
             if r['actions']['basic']!=r['actions']['ultracache']:different.append(r['match'])
-        self.assertEqual(different,[dict(kind='prefix',value=n) for n in ('comment_author_','comment_author_url_')])
+        self.assertCountEqual(different,[dict(kind='prefix',value=n) for n in
+            ('comment_author_','comment_author_url_','yith_wcwl_session_')]+[
+            dict(kind='exact',value='yith_wcwl_session_')])
         self.assertTrue(all(set(r['actions'])=={'basic','ultracache'} for r in metadata['records'].values()))
 
     def test_legacy_choices_preserved_in_both_columns_without_mutation(self):
