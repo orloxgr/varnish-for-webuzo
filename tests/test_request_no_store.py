@@ -12,7 +12,11 @@ class RequestNoStore(unittest.TestCase):
     def test_raw_warm_bypasses_existing_esi_parent_and_retired_publication(self):
         for aggressive in (False, True):
             calls=[];retired=False
-            original='PHPSESSID=provider; esi_session=transport; ultracache_esi_optin=1; _ga=visitor'
+            original='PHPSESSID=provider; _ga=visitor'
+            # Ordinary raw Warm does not gain the signed session collector's
+            # transport exception. Application cookies survive; reserved ESI
+            # protocol markers still undergo the existing backend removal.
+            browser_cookie='PHPSESSID=provider; esi_session=transport; ultracache_esi_optin=1; _ga=visitor'
             warm={'Cache-Control':'no-cache, no-store, must-revalidate, max-age=0',
                 'X-UltraCache-Warm':'1', 'X-UltraCache-Internal-Request':'1',
                 'X-UltraCache-Warm-Source':'raw-v1',
@@ -42,7 +46,7 @@ class RequestNoStore(unittest.TestCase):
                 self.assertEqual(body,'<html>parent[private:current][private:current][nonce:current]</html>')
                 retired=True;calls.clear()
                 for _ in range(2):
-                    status,fields,body=get(PARENT,original,extra=warm)
+                    status,fields,body=get(PARENT,browser_cookie,extra=warm)
                     self.assertEqual(status,200);self.assertEqual(body,'fresh raw source')
                     self.assertEqual(dict(fields)['X-Cache'],'PASS')
                     self.assertEqual(cookies(fields),['owner=warm-only; Path=/; HttpOnly'])
@@ -90,7 +94,7 @@ class RequestNoStore(unittest.TestCase):
                 client=http.client.HTTPConnection(*get.endpoint,timeout=10)
                 try:
                     client.putrequest('GET','/directives',skip_host=True)
-                    for name,value in [('Host','example.test'),('X-Forwarded-Proto','https'),
+                    for name,value in [*get.request_headers.items(),
                             ('Cache-Control','no-cache'),('Cache-Control','no-store')]:
                         client.putheader(name,value)
                     client.endheaders();response=client.getresponse();response.read()

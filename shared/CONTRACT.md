@@ -247,7 +247,9 @@ prepare, with reason `request-no-store`. This includes ordinary raw warm request
 they must reach the current origin even when a previous proxy parent is warm and
 its application publication was retired. Repeated Cache-Control fields are
 collected; directive matching is case-insensitive and comma-delimited. The request
-retains its original URL, cookies and application authentication headers. PASS
+retains its original URL, application cookies and application authentication headers.
+The ordinary UltraCache backend still removes its reserved `esi_session` and
+`ultracache_esi_optin` protocol markers; no-store grants no signed-source exception. PASS
 neither fills nor replaces the existing public object, even in Aggressive mode.
 `no-cache`, `max-age=0` and `Pragma: no-cache` alone keep normal server HIT handling;
 the warm/source headers alone grant no additional trust. Owned continuation

@@ -94,6 +94,8 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
                         connection.close()
 
                 get.endpoint=('127.0.0.1',port)
+                # Raw HTTP regressions must use the same adapter entry headers.
+                get.request_headers = {'Host': 'example.test', 'X-WV-Gateway': 'e' * 64, 'X-Forwarded-Proto': 'https'}
                 def stop_origin():
                     origin.shutdown();origin.server_close();thread.join(timeout=5)
                 get.stop_origin=stop_origin
