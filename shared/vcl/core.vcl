@@ -87,6 +87,16 @@ sub scp_recv {
         set req.http.X-SCP-Reason = "ultracache-private-session-source";
         return (pass);
     }
+    # An explicit raw/no-store fetch must reach the current origin before an
+    # ESI parent can start prepare against a retired application publication.
+    # Browser reload no-cache/max-age=0/Pragma alone still use normal lookup.
+    std.collect(req.http.Cache-Control);
+    if (req.esi_level == 0 && req.restarts == 0 &&
+        (req.method == "GET" || req.method == "HEAD") &&
+        req.http.Cache-Control ~ "(?i)(^|,)[[:blank:]]*no-store[[:blank:]]*(,|$)") {
+        set req.http.X-SCP-Reason = "request-no-store";
+        return (pass);
+    }
     if (req.url ~ "[?]") { set req.http.X-SCP-Query = regsub(req.url, "^[^?]*[?]", ""); }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
     call scp_common_recv;

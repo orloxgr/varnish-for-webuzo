@@ -241,8 +241,18 @@ This bounded shape is routing only: it does not authenticate the request, grant
 public HTML eligibility or trust a PHP session. UltraCache still verifies its
 purpose-bound MAC and one-use observation owner. An invalid MAC of the same shape
 also reaches the application for refusal; its response cannot fill a shared object.
-Other requests, including ordinary request `Cache-Control: no-store`, retain their
-existing handling. No generic PHPSESSID Shared choice or native state gate is added.
+An initial top-level GET/HEAD carrying an exact request `Cache-Control: no-store`
+directive also returns PASS before profile cookie transport, parent lookup or ESI
+prepare, with reason `request-no-store`. This includes ordinary raw warm requests:
+they must reach the current origin even when a previous proxy parent is warm and
+its application publication was retired. Repeated Cache-Control fields are
+collected; directive matching is case-insensitive and comma-delimited. The request
+retains its original URL, cookies and application authentication headers. PASS
+neither fills nor replaces the existing public object, even in Aggressive mode.
+`no-cache`, `max-age=0` and `Pragma: no-cache` alone keep normal server HIT handling;
+the warm/source headers alone grant no additional trust. Owned continuation
+restarts and ESI children retain their existing routing. No generic PHPSESSID
+Shared choice or native state gate is added.
 
 1. At the start of `vcl_recv`, call `scp_init` before accepting client metadata.
    It removes forged `X-SCP-*` inputs and inherited ESI carrier/approval headers. The private carrier is
