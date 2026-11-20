@@ -1323,5 +1323,59 @@
       "txreq -url \"/marker\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A\"\nrxresp\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"",
       "txreq -url \"/marker\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B\"\nrxresp\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\""
     ]
+  },
+  {
+    "name": "Adaptive nonce routing reuses one anonymous parent across auth users and Woo sessions",
+    "profiles": [
+      "ultracache"
+    ],
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:adaptive-auth",
+            "match": {
+              "kind": "prefix",
+              "value": "wordpress_logged_in_"
+            },
+            "description": "",
+            "action": "shared"
+          }
+        ]
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/adaptive-parent\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == <undef>\nexpect req.http.X-SCP-Adaptive-Nonce == <undef>\nexpect req.http.X-ESI-Request-Level == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -hdr \"X-UltraCache-ESI-Private-Count: 1\" -body {<html><esi:include src=\"/?ultracache_esi=adaptive-nonce-fixture&amp;esi_identity=wordpress\"/><esi:include src=\"/?ultracache_esi=ordinary-public-fixture\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-nonce-fixture&esi_identity=wordpress\"\nexpect req.http.Cookie == <undef>\nexpect req.http.X-ESI-Private-Request == <undef>\nexpect req.http.X-ESI-Request-Level == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == <undef>\nexpect req.http.X-SCP-Adaptive-Nonce == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {anonymous}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=ordinary-public-fixture\"\nexpect req.http.Cookie == <undef>\nexpect req.http.X-ESI-Request-Level == <undef>\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {common}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-nonce-fixture&esi_identity=wordpress\"\nexpect req.http.Cookie == \"wordpress_logged_in_shop=A%7Cauth\"\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-ESI-Request-Level == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == \"2\"\nexpect req.http.X-SCP-Adaptive-Nonce == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {user-A}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-nonce-fixture&esi_identity=wordpress\"\nexpect req.http.Cookie == \"wordpress_logged_in_shop=B%7Cauth\"\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-ESI-Request-Level == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == \"2\"\nexpect req.http.X-SCP-Adaptive-Nonce == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {user-B}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-nonce-fixture&esi_identity=wordpress\"\nexpect req.http.Cookie == \"wordpress_logged_in_shop=A%7Cauth\"\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-ESI-Request-Level == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == \"2\"\nexpect req.http.X-SCP-Adaptive-Nonce == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {user-A-again}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-nonce-fixture&esi_identity=wordpress\"\nexpect req.http.Cookie == \"wp_woocommerce_session_shop=customer%7Csigned\"\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-ESI-Request-Level == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == \"2\"\nexpect req.http.X-SCP-Adaptive-Nonce == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {woo-session}"
+    ],
+    "requests": [
+      "txreq -url \"/adaptive-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\" -hdr \"Cookie: esi_session=transport; _ga=anonymous\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>anonymouscommon</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/adaptive-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\" -hdr \"Cookie: wordpress_logged_in_shop=A%7Cauth\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>user-Acommon</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/adaptive-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\" -hdr \"Cookie: wordpress_logged_in_shop=B%7Cauth\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>user-Bcommon</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/adaptive-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\" -hdr \"Cookie: wordpress_logged_in_shop=A%7Cauth\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>user-A-againcommon</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/adaptive-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\" -hdr \"Cookie: wp_woocommerce_session_shop=customer%7Csigned\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>woo-sessioncommon</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/adaptive-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\" -hdr \"Cookie: esi_session=another-transport; _ga=another\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>anonymouscommon</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\""
+    ]
+  },
+  {
+    "name": "Adaptive explicitly private actions remain dynamic without identity cookies",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/adaptive-private\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -hdr \"X-UltraCache-ESI-Private-Count: 1\" -body {<html><esi:include src=\"/?ultracache_esi=adaptive-private-action&amp;esi_identity=wordpress&amp;esi_scope=private\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-private-action&esi_identity=wordpress&esi_scope=private\"\nexpect req.http.Cookie == <undef>\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {first}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=adaptive-private-action&esi_identity=wordpress&esi_scope=private\"\nexpect req.http.Cookie == <undef>\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-UltraCache-ESI-Adaptive-Nonce-Version == \"1\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {second}"
+    ],
+    "requests": [
+      "txreq -url \"/adaptive-private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>first</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
+      "txreq -url \"/adaptive-private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>second</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\""
+    ]
   }
 ]

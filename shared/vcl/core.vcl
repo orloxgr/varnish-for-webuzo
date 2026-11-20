@@ -49,6 +49,8 @@ sub scp_init {
     unset req.http.X-ESI-Request-Level;
     unset req.http.X-ESI-Original-Cookie;
     unset req.http.X-UltraCache-ESI-Transport-Version;
+    unset req.http.X-UltraCache-ESI-Adaptive-Nonce-Version;
+    unset req.http.X-SCP-Adaptive-Nonce;
     unset req.http.X-UltraCache-ESI-Candidate;
     unset req.http.X-UltraCache-ESI-Cookie-Check;
     unset req.http.X-UltraCache-ESI-Opt-In;
@@ -100,6 +102,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Cookie-Name;
     unset bereq.http.X-SCP-Cookie-Role;
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_fetch; }
+    unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
     unset beresp.http.X-SCP-Reason;
@@ -148,8 +151,8 @@ sub scp_deliver {
     if (req.http.X-SCP-Profile == "ultracache" &&
         (resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" ||
          (!resp.http.X-UltraCache-ESI-Private-Count && resp.http.X-UltraCache-ESI-Shared-Parent == "1"))) {
-        # The object is a reusable ESI template, but this assembled delivery
-        # contains private fragments. Only its downstream response is private.
+        # The reusable template declares private-capable occurrences, including
+        # adaptive nonces. Protect delivery before ESI selects current identity.
         call scp_private_delivery;
     }
     unset resp.http.X-Cache-Hits;

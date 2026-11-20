@@ -108,6 +108,43 @@ class CookieWireContract(unittest.TestCase):
                          'woocommerce_recently_viewed=10%7C20; wp_woocommerce_session_shop=session; '
                          'woocommerce_items_in_cart=1; wordpress_logged_in_other=other')
 
+    def test_adaptive_nonce_routing_requires_the_exact_selector_and_fragment_query(self):
+        source = (ROOT / 'shared/vcl/ultracache-esi.vcl').read_text()
+        block = source.split('# Routing declaration only.', 1)[1].split(
+            'set req.http.X-SCP-Adaptive-Nonce', 1)[0]
+        predicates = [native_pattern(value) for value in re.findall(
+            r'req.http.X-SCP-Query ~ "([^"\n]+)"', block)]
+        self.assertEqual(len(predicates), 2)
+        for query, expected in [
+            ('ultracache_esi=signed&esi_identity=wordpress', True),
+            ('esi_scope=private&esi_identity=wordpress&ultracache_esi=signed', True),
+            ('ultracache_esi=signed', False),
+            ('ultracache_esi=signed&esi_identity=wordpress-other', False),
+            ('ultracache_esi=signed&esi_identity=WordPress', False),
+            ('ultracache_esi=&esi_identity=wordpress', False),
+            ('other=signed&esi_identity=wordpress', False),
+        ]:
+            with self.subTest(query=query):
+                self.assertEqual(all(pattern.search(query) for pattern in predicates), expected)
+
+    def test_adaptive_identity_candidates_do_not_include_unrelated_cookie_names(self):
+        source = (ROOT / 'shared/vcl/ultracache-esi.vcl').read_text()
+        expression = re.search(r'req_top.http.X-ESI-Original-Cookie ~ \{"([^"\n]+)"\}', source)
+        self.assertIsNotNone(expression)
+        predicate = native_pattern(expression.group(1))
+        for cookie, expected in [
+            ('wordpress_logged_in_shop=actual-auth', True),
+            ('_ga=tracking;\twp_woocommerce_session_shop=actual-session', True),
+            ('wordpress_logged_in_shop=', True),
+            ('woocommerce_recently_viewed=10%7C20', False),
+            ('esi_session=transport; woocommerce_cart_hash=cart', False),
+            ('xwordpress_logged_in_shop=wrong', False),
+            ('Wordpress_logged_in_shop=wrong-case', False),
+            ('', False),
+        ]:
+            with self.subTest(cookie=cookie):
+                self.assertEqual(bool(predicate.search(cookie)), expected)
+
 
 if __name__ == '__main__':
     unittest.main()

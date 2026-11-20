@@ -23,9 +23,19 @@ if (req.esi_level == 0) {
 
 
 } else {
+    # Routing declaration only. UltraCache must verify that esi_identity agrees
+    # with its signed wordpress-nonce-adaptive descriptor/context; an appended
+    # selector cannot authorize an ordinary fragment or assert a user identity.
+    if (req.http.X-SCP-Query ~ "(^|&)ultracache_esi=[^&]+(?:&|$)" &&
+        req.http.X-SCP-Query ~ "(^|&)esi_identity=wordpress(?:&|$)") {
+        set req.http.X-SCP-Adaptive-Nonce = "1";
+        set req.http.X-ESI-Request-Level = "1";
+    }
     if (
-        req.http.X-SCP-Query ~ "(?i)(^|&)esi_scope=private(?:&|$)" &&
-        req.http.X-SCP-Query ~ "(?i)(^|&)(ultracache_esi|ultracache_esi_probe_private_fragment)="
+        (req.http.X-SCP-Query ~ "(?i)(^|&)esi_scope=private(?:&|$)" &&
+         req.http.X-SCP-Query ~ "(?i)(^|&)(ultracache_esi|ultracache_esi_probe_private_fragment)=") ||
+        (req.http.X-SCP-Adaptive-Nonce == "1" &&
+         req_top.http.X-ESI-Original-Cookie ~ {"(^|;[[:blank:]]*)(wordpress_logged_in_|wp_woocommerce_session_)[^=;[:blank:]]+="})
     ) {
         set req.http.X-ESI-Private-Request = "1";
         set req.http.X-ESI-Request-Level = "1";
@@ -40,7 +50,7 @@ if (req.esi_level == 0) {
         return (pass);
     }
 
-    # Public ESI fragments never inherit visitor cookies.
+    # Ordinary public children and anonymous adaptive nonces are cookie-free.
     unset req.http.Cookie;
 }
 
@@ -80,10 +90,16 @@ sub scp_ultracache_backend_fetch {
 # Advertise generic ESI capability to any compatible application.
 set bereq.http.Surrogate-Capability = "varnish=ESI/1.0";
 unset bereq.http.X-UltraCache-ESI-Transport-Version;
+unset bereq.http.X-UltraCache-ESI-Adaptive-Nonce-Version;
 if (bereq.http.X-ESI-Private-Request == "1") {
     # Set only by this carrier, never inherited from the browser or parent.
     # Revision 2 does not advertise private TTL or preflight cookie issuance.
     set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
+}
+if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce == "1") {
+    # The existing signed private probe can observe this capability without
+    # another request. It is separate from extended cookie transport revision 2.
+    set bereq.http.X-UltraCache-ESI-Adaptive-Nonce-Version = "1";
 }
 # Protocol markers are removed only after cookie policy has run. A saved
 # Private/Variant choice on those names must not disappear before resolution.

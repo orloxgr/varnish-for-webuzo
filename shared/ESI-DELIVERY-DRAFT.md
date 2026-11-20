@@ -1,8 +1,10 @@
 # UltraCache delivery continuation: design draft
 
-Status: **not implemented or advertised**. Related UltraCache issues: #955,
-#956, #957, #958, #959. Transport revision 2 below is separate and does not
-enable this draft. Native acceptance must precede release or activation.
+Status: transport revision 2 and adaptive nonce revision 1 have **candidate
+source implementations, without native acceptance**. The pre-header
+continuation and positive private TTL remain **unimplemented and unadvertised**.
+Related UltraCache issues: #955, #956, #957, #958, #959. Native acceptance must
+precede release or activation.
 
 ## Implemented transport revision 2
 
@@ -124,32 +126,57 @@ header. Browser responses containing personal content remain private; private
 fragment objects must not replay personal Set-Cookie. Cookie Database choices
 remain the only classification authority, independent of transport/admission.
 
-## Adaptive nonce identity: separate pending contract (#957)
+## Adaptive nonce identity revision 1: candidate wire contract (#957)
 
 Revision 2 alone does not solve anonymous-parent -> logged-in visitor reuse.
 A cached `wordpress-nonce-public` include still requests a public child; that
 child correctly discards Cookie and generates a UID-0 nonce. Adding an auth
 cookie to the private carrier cannot change that include's semantics.
 
-Candidate contract for coordination, **not implemented**:
+The application signs descriptor `wordpress-nonce-adaptive` with context
+`{action, identity: 'wordpress'}` and emits `esi_identity=wordpress` alongside
+the existing `ultracache_esi=<signed-descriptor>` query argument. It verifies
+that the selector matches that signed claim, and refuses the selector on an
+ordinary public/private fragment. VCL sees a routing selector, not the opaque
+descriptor's verified contents. The descriptor never contains a user ID.
 
-- Use an explicitly identity-adaptive signed nonce descriptor. An exposed
-  selector such as `esi_identity=wordpress-user` must be bound to that signed
-  claim by UltraCache; attaching it to an ordinary public fragment must fail.
-  Do not silently reinterpret all existing public fragments as private.
-- Only the declared adaptive nonce route may inspect the request-local auth
-  carrier. With a logged-in-cookie candidate it takes the private PASS path;
-  WordPress then validates the actual cookie and creates the nonce for the
-  verified current user. A cookie's mere presence is never a validated user ID.
-  Without that candidate it uses the ordinary cookie-free anonymous path/key.
-- The reusable parent must declare its adaptive include count in nonpersonal
-  origin metadata, e.g. `X-UltraCache-ESI-Adaptive-Count`. On an authenticated
-  adaptive delivery VCL marks the final response private/no-store **before**
-  sending headers, even if the originally anonymous parent declared zero
-  private fragments. This does not make the stored parent private.
-- Qualify this capability separately from transport revision 2. Older VCL
-  must retain a native application fallback rather than emit a public nonce
-  and claim authenticated ESI support. No private positive TTL is inferred.
+- An action declared private additionally uses `esi_scope=private`, always
+  taking the existing private PASS path even without any identity cookie.
+- For a public action, a request-local `wordpress_logged_in_*` or
+  `wp_woocommerce_session_*` candidate makes this adaptive child private PASS.
+  The application validates the actual identity/session, selects the declared
+  cookies and renders the appropriate nonce. Cookie presence is only a routing
+  candidate; it is not a validated user or a new cookie classification rule.
+- Without either identity candidate the adaptive child is cookie-free, uses
+  the public nonce/action TTL and can reuse its anonymous fragment object.
+  Ordinary public fragments remain cookie-free for every visitor. History,
+  tracking and `esi_session` alone do not select authenticated nonce identity.
+- Receive strips incoming `X-UltraCache-ESI-Adaptive-Nonce-Version` and
+  `X-SCP-Adaptive-Nonce`. Backend-fetch generates
+  `X-UltraCache-ESI-Adaptive-Nonce-Version: 1` only for internal private children
+  (including the existing signed private capability probe) or adaptive children.
+  It never appears on an ordinary parent/public child merely because the
+  browser supplied it. The internal routing scratch is removed before origin.
+- Capability observation is separate from transport revision 2; it adds no
+  request or UI control. Older VCL must use the native application fallback.
+  A declared version is not native acceptance or positive-private-TTL support.
+
+The application registers this descriptor as **private-capable** and includes
+each adaptive occurrence in the parent's existing
+`X-UltraCache-ESI-Private-Count`. That count must be positive even when the
+parent was produced for an anonymous visitor and that occurrence currently
+renders a public nonce. The existing parent `vcl_deliver` therefore marks the
+assembled browser response private/no-store **before** headers are sent. The
+parent object remains internally reusable across visitors.
+
+A separate adaptive counter is unnecessary for correctness with that invariant.
+Reusing privateCount also marks the anonymous assembled browser delivery
+private/no-store, conservatively; it does not disable Varnish parent HITs or
+the anonymous public fragment's internal TTL. An origin declaring privateCount
+zero while inserting an identity-adaptive include would violate this contract.
+Existing old parents containing `wordpress-nonce-public` cannot gain adaptive
+identity merely by upgrading the carrier; regenerate/invalidate them when the
+application starts emitting the new descriptor.
 
 Required acceptance is one unchanged stored parent reused by anonymous, user A
 and user B, with successful real WordPress REST actions for the respective

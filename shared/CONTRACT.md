@@ -338,8 +338,18 @@ not cookie classification. Public children remain cookie-free; private children
 still PASS. The opt-in composition marker requests an origin-approved parent
 independently of whether any particular WooCommerce cookie is present.
 
-The same document separates the **unimplemented** pre-header cookie delivery
-continuation and positive-private-TTL admission design. Neither is advertised
-by revision 2. These require a coordinated application/native implementation
-and current native acceptance before release. No new panel controls, reverse
-policy bridge, provider-specific issuer or live configuration is introduced.
+The same document defines the candidate `wordpress-nonce-adaptive` /
+`esi_identity=wordpress` routing contract and backend-owned
+`X-UltraCache-ESI-Adaptive-Nonce-Version: 1`. The existing signed private probe
+can observe this capability separately from transport revision 2. Public
+actions use a private PASS child only with a WordPress login/Woo session
+candidate; explicitly private actions always PASS. Ordinary public children
+remain cookie-free. The origin counts adaptive occurrences in the existing
+parent privateCount before header delivery, including anonymous source parents.
+No parallel counter or visitor identity enters shared parent metadata.
+
+Pre-header cookie delivery and positive-private-TTL admission remain
+**unimplemented** and unadvertised by these versions. All candidate routing
+requires current combined application/native acceptance before release.
+No new panel controls, reverse policy bridge, provider-specific issuer or live
+configuration is introduced.
