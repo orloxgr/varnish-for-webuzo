@@ -58,6 +58,15 @@ def infer(name, provider, description, reviewed=None):
             reason=name+' ('+provider+'): '+reason,sources=sources,
             method='literal-name-and-description editorial assessment; not a site-specific execution trace')
     if reviewed:return dict(reviewed,method='existing-reviewed-execution-policy')
+    if provider.lower()=='woocommerce' and name=='store_notice':
+        base='https://github.com/woocommerce/woocommerce/blob/89153b67a27a0bcbf983d4ffd020a86f90e493ec/'
+        result=decision('shared','client-side-notice-dismissal',
+            'WooCommerce 11.3.1 emits the same initially hidden store notice without reading this cookie. Native woocommerce.js reads store_notice + noticeId to show, hide and dismiss it in the browser. Custom server-side notice integrations can override this default.',
+            'source-reviewed')
+        result['sources']=[base+'plugins/woocommerce/includes/wc-template-functions.php',
+            base+'plugins/woocommerce/client/legacy/js/frontend/woocommerce.js']
+        result['method']='WooCommerce 11.3.1 pinned source review; native/browser acceptance pending'
+        return result
     if name in ('GA_OPT_OUT','dnt','eu_cn') or provider=='Joomla!' and name in ('componentType','componentStyle') or provider=='Facebook' and name=='locale':
         return decision('variant','public-preference','This is a consent, locale or template preference, not an account credential. Separate public representations by value without bypassing the cache.')
     for group,action,role,reason in (

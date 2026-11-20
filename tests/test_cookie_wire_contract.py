@@ -44,6 +44,22 @@ def response_action(wire, name):
 
 
 class CookieWireContract(unittest.TestCase):
+    def test_store_notice_default_and_explicit_overrides(self):
+        import cookie_defaults
+        row=cookie_defaults.bundle()[1]['records']['a8a7e455-ceb9-4b31-954f-2e47d64f0a1c']
+        self.assertEqual((row['proposal'],row['confidence']),('shared','source-reviewed'))
+        self.assertEqual(cookie_defaults.infer('store_notice','WooCommerce','')['proposal'],'shared')
+        for name in ('store_notice','store_notice0123456789abcdef'):
+            self.assertEqual(response_action(admin.response_rules(),name),'shared')
+            for action in ('private','variant'):
+                site=choices(('prefix','store_notice',action))
+                self.assertEqual(response_action(admin.response_rules(site=site),name),action)
+                self.assertEqual(selected_action(compiled_selectors(admin.compile_vcl(site=site)),name),action)
+        # This editorial correction does not change the four cart/history roles.
+        for name,action in (('woocommerce_items_in_cart','shared'),('woocommerce_cart_hash','shared'),
+                            ('wp_woocommerce_session_shop','shared'),('woocommerce_recently_viewed','private')):
+            self.assertEqual(response_action(admin.response_rules(),name),action)
+
     def test_saved_choices_override_former_mandatory_roles_in_both_directions(self):
         for name in ('wordpress_logged_in_demo', 'PHPSESSID', 'wp_woocommerce_session_shop',
                      'woocommerce_items_in_cart', '_ga', '_fbp', 'esi_session', 'ultracache_esi_optin'):

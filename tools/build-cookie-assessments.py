@@ -26,7 +26,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True, help='Pinned upstream open-cookie-database.csv')
     parser.add_argument('--revision', required=True, help='Upstream commit containing this source CSV')
-    parser.add_argument('--version', default='2026.11.17.2', help='Editorial assessment version')
+    parser.add_argument('--version', default='2026.11.20.1', help='Editorial assessment version')
     parser.add_argument('--output', type=Path, required=True, help='Versioned concrete editorial default JSON')
     args = parser.parse_args()
     raw = args.source.read_bytes()

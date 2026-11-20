@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.17.2",
+  "version": "2026.11.20.1",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f",
   "sourceLicense": "Apache-2.0",
   "sourceLicenseFile": "cookie-recognition/Open-Cookie-Database-LICENSE.txt",
@@ -16054,14 +16054,15 @@
       "domain": "",
       "description": "Allows customers to dismiss the Store Notice.",
       "wildcard": true,
-      "proposal": "variant",
-      "htmlEffect": "application-dependent-variant",
-      "confidence": "inferred-low",
-      "reason": "store_notice (WooCommerce): The description does not establish identical initial HTML. Our concrete default separates objects per value (including absence), without forcing PASS or ignoring a potentially meaningful value.",
+      "proposal": "shared",
+      "htmlEffect": "client-side-notice-dismissal",
+      "confidence": "source-reviewed",
+      "reason": "store_notice (WooCommerce): WooCommerce 11.3.1 emits the same initially hidden store notice without reading this cookie. Native woocommerce.js reads store_notice + noticeId to show, hide and dismiss it in the browser. Custom server-side notice integrations can override this default.",
       "sources": [
-        "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv"
+        "https://github.com/woocommerce/woocommerce/blob/89153b67a27a0bcbf983d4ffd020a86f90e493ec/plugins/woocommerce/includes/wc-template-functions.php",
+        "https://github.com/woocommerce/woocommerce/blob/89153b67a27a0bcbf983d4ffd020a86f90e493ec/plugins/woocommerce/client/legacy/js/frontend/woocommerce.js"
       ],
-      "method": "literal-name-and-description editorial assessment; not a site-specific execution trace",
+      "method": "WooCommerce 11.3.1 pinned source review; native/browser acceptance pending",
       "matchValue": "store_notice",
       "dataController": "WooCommerce"
     },

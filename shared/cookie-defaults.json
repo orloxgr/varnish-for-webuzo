@@ -8405,7 +8405,7 @@
         "value": "store_notice"
       },
       "description": "Allows customers to dismiss the Store Notice.",
-      "action": "variant"
+      "action": "shared"
     },
     {
       "id": "bundled:5f5b453b-c210-4f12-b886-244bf528b113",
@@ -20504,6 +20504,6 @@
       "action": "private"
     }
   ],
-  "version": "2026.11.17.2",
+  "version": "2026.11.20.1",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }
