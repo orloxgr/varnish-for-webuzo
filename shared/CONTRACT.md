@@ -348,8 +348,14 @@ remain cookie-free. The origin counts adaptive occurrences in the existing
 parent privateCount before header delivery, including anonymous source parents.
 No parallel counter or visitor identity enters shared parent metadata.
 
-Pre-header cookie delivery and positive-private-TTL admission remain
-**unimplemented** and unadvertised by these versions. All candidate routing
+Pre-header cookie delivery now has an UltraCache-only **source candidate**:
+`X-UltraCache-Delivery-Prepare` binds a signed private-renderer manifest; an
+owned prepare PASS captures the actual provider body/Set-Cookie before a
+pre-header restart, then replays its private fragment results without executing
+the provider twice. The exact JSON/headers and explicit parent-eviction 503
+behavior are in `ESI-DELIVERY-DRAFT.md`. Basic does not enter this continuation.
+Positive-private-TTL admission remains **unimplemented** and unadvertised.
+All candidate routing
 requires current combined application/native acceptance before release.
 No new panel controls, reverse policy bridge, provider-specific issuer or live
 configuration is introduced.

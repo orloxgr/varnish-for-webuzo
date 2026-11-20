@@ -1,6 +1,18 @@
 # Shared ultracache-esi policy. GPL-3.0-or-later.
 
 sub scp_ultracache_recv {
+# Browser copies never authorize a continuation. The native PRIV_TOP phase
+# restores prepare/parent state and answers already-rendered private children.
+unset req.http.X-UltraCache-Delivery-Version;
+unset req.http.X-UltraCache-Delivery-Phase;
+unset req.http.X-UltraCache-Delivery-Request;
+unset req.http.X-UltraCache-Delivery-Original-URL;
+unset req.http.X-SCP-Delivery-State;
+set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_recv();
+if (req.http.X-SCP-Delivery-State == "1") { return (pass); }
+if (req.http.X-SCP-Delivery-State == "2") { return (synth(200, "OK")); }
+if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }
+unset req.http.X-SCP-Delivery-State;
 # Private/session ESI transport.
 if (req.esi_level == 0) {
     # Capture the request-side UltraCache opt-in before removing its
@@ -30,6 +42,7 @@ if (req.esi_level == 0) {
         req.http.X-SCP-Query ~ "(^|&)esi_identity=wordpress(?:&|$)") {
         set req.http.X-SCP-Adaptive-Nonce = "1";
         set req.http.X-ESI-Request-Level = "1";
+        if (cookie_handoff.delivery_guard()) { return (synth(503, "Prepared fragment missing")); }
     }
     if (
         (req.http.X-SCP-Query ~ "(?i)(^|&)esi_scope=private(?:&|$)" &&
@@ -40,6 +53,7 @@ if (req.esi_level == 0) {
         set req.http.X-ESI-Private-Request = "1";
         set req.http.X-ESI-Request-Level = "1";
         set req.http.X-SCP-Reason = "private-esi-fragment";
+        if (cookie_handoff.delivery_guard()) { return (synth(503, "Prepared fragment missing")); }
 
         if (req_top.http.X-ESI-Original-Cookie) {
             set req.http.Cookie = req_top.http.X-ESI-Original-Cookie;
@@ -87,6 +101,16 @@ if (
 }
 }
 sub scp_ultracache_backend_fetch {
+unset bereq.http.X-SCP-Delivery-State;
+unset bereq.http.X-UltraCache-Delivery-Version;
+unset bereq.http.X-UltraCache-Delivery-Phase;
+unset bereq.http.X-UltraCache-Delivery-Request;
+unset bereq.http.X-UltraCache-Delivery-Original-URL;
+if (cookie_handoff.delivery_backend()) {
+    # Native state preserved the actual original Cookie and route. No generic
+    # Cookie rewriting or provider retry may happen on this private operation.
+    set bereq.retry_connect = false;
+} else {
 # Advertise generic ESI capability to any compatible application.
 set bereq.http.Surrogate-Capability = "varnish=ESI/1.0";
 unset bereq.http.X-UltraCache-ESI-Transport-Version;
@@ -95,6 +119,7 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     # Set only by this carrier, never inherited from the browser or parent.
     # Revision 2 does not advertise private TTL or preflight cookie issuance.
     set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
+    set bereq.http.X-UltraCache-Delivery-Version = "1";
 }
 if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce == "1") {
     # The existing signed private probe can observe this capability without
@@ -122,7 +147,21 @@ unset bereq.http.X-UltraCache-ESI-Cookie-Check;
 unset bereq.http.X-UltraCache-ESI-Opt-In;
 unset bereq.http.X-UltraCache-ESI-Shared-Parent;
 }
+}
 sub scp_ultracache_backend_response {
+    if (cookie_handoff.delivery_capture()) {
+        # A private transient fetch object is discarded at the prepare restart.
+        # Its complete body must be captured before vcl_deliver can resume.
+        call scp_mark_uncacheable;
+        set beresp.ttl = 0s;
+        set beresp.grace = 0s;
+        set beresp.keep = 0s;
+        set beresp.do_stream = false;
+        set beresp.filters = "uc_delivery_capture";
+        set beresp.http.Cache-Control = "private, no-store";
+        set beresp.http.Surrogate-Control = "no-store";
+        return (deliver);
+    }
     if (bereq.http.X-ESI-Private-Request == "1") {
         set beresp.http.X-SCP-Reason = "private-esi-fragment";
         call scp_mark_uncacheable;
@@ -145,6 +184,34 @@ sub scp_ultracache_backend_response {
             set beresp.http.Cache-Control = "private, no-store";
             call scp_mark_uncacheable;
         }
+    }
+}
+
+sub scp_ultracache_deliver {
+    if (req.esi_level == 0 && req.method == "GET" && obj.hits > 0 &&
+        req.http.X-SCP-Pass != "1" && !obj.uncacheable && resp.status == 200 &&
+        resp.http.X-UltraCache-ESI-Shared-Parent == "1" &&
+        resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" &&
+        resp.http.X-UltraCache-Delivery-Prepare) {
+        set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver(
+            resp.http.X-UltraCache-Delivery-Prepare,
+            std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0));
+    } else {
+        set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver("", 0);
+    }
+    if (req.http.X-SCP-Delivery-State == "1") { return (restart); }
+    if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }
+    unset req.http.X-SCP-Delivery-State;
+    unset resp.http.X-UltraCache-Delivery-Prepare;
+    unset resp.http.X-UltraCache-Delivery-Version;
+    unset resp.http.X-UltraCache-Delivery-Phase;
+    unset resp.http.X-UltraCache-Delivery-Request;
+    unset resp.http.X-UltraCache-Delivery-Original-URL;
+}
+
+sub vcl_synth {
+    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_synth()) {
+        return (deliver);
     }
 }
 

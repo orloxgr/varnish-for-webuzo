@@ -8,6 +8,9 @@ sub scp_private_delivery {
 # Real provider fields are detached before storage and returned only to the
 # client task that caused this fetch. No cookie value is stored in the object.
 sub scp_cookie_miss {
+    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_guard()) {
+        return (synth(503, "Prepared parent unavailable"));
+    }
     if (req.esi_level == 0) {
         set req.http.X-SCP-Cookie-Handoff = cookie_handoff.open();
     }

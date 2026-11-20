@@ -75,7 +75,12 @@ sub scp_recv {
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
     call scp_common_recv;
 }
-sub scp_pass { set req.http.X-SCP-Pass = "1"; }
+sub scp_pass {
+    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_guard()) {
+        return (synth(503, "Prepared parent unavailable"));
+    }
+    set req.http.X-SCP-Pass = "1";
+}
 sub scp_hit {
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
 }
@@ -128,6 +133,7 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     cookie_handoff.deliver();
     if (req.http.X-SCP-Aggressive == "1") { set resp.http.X-Cache-Mode = "aggressive"; }
     else { set resp.http.X-Cache-Mode = "standard"; }

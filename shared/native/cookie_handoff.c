@@ -11,10 +11,12 @@
 /* No global cookie cache: each entry is owned and freed by one client task.
  * Backend access is synchronized with delivery and abort finalization. */
 struct fields { struct fields *next; char *line; };
+struct continuation;
 struct handoff {
     struct handoff *next;
     uint64_t key;
     struct fields *fields;
+    struct continuation *delivery; /* PRIV_TOP-owned; only accessed under lock. */
 };
 struct task { struct handoff *owner; uint64_t key; };
 #define BUCKETS 1024
@@ -208,3 +210,6 @@ VCL_INT vmod_pending(VRT_CTX) {
     pthread_mutex_lock(&lock); count = live; pthread_mutex_unlock(&lock);
     return count;
 }
+
+/* Shares the association table/field ownership, without changing MISS reset. */
+#include "delivery_continuation.c"

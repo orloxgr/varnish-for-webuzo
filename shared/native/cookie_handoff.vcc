@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 $ABI strict
 $Module cookie_handoff 3 "Request-owned response cookie handoff"
+$Event delivery_event
 
 $Function VOID reset(PRIV_TASK)
 $Restrict vcl_recv
@@ -37,3 +38,37 @@ Append the original fields to their owning client response only.
 $Function INT pending()
 
 Number of live handoffs, for lifecycle verification (never cookie contents).
+
+$Function INT delivery_recv(PRIV_TOP)
+$Restrict vcl_recv
+
+UltraCache only: 1 prepare PASS, 2 prepared fragment synth, -1 abort, 0 ordinary.
+The phase is request-owned, never inferred from client headers.
+
+$Function BOOL delivery_guard(PRIV_TOP)
+$Restrict vcl_recv vcl_pass vcl_miss
+
+Reject a post-prepare parent refetch instead of executing its provider twice.
+
+$Function BOOL delivery_backend(PRIV_TASK)
+$Restrict vcl_backend_fetch
+
+Bind the single owned prepare request and set its origin wire from native state.
+
+$Function BOOL delivery_capture(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Capture authentic repeated Set-Cookie and attach the body fetch filter.
+The caller must use uc_delivery_capture with do_stream=false and private PASS.
+
+$Function INT delivery_deliver(PRIV_TOP, STRING target, INT occurrences)
+$Restrict vcl_deliver
+
+UltraCache only: begin an eligible parent HIT prepare, or validate/restore its
+captured response. 1 means restart before headers, -1 means abort. A completed
+continuation appends authentic provider fields and returns 0 for final delivery.
+
+$Function BOOL delivery_synth(PRIV_TOP)
+$Restrict vcl_synth
+
+Replay the request-owned pre-rendered fragment as a private synthetic body.

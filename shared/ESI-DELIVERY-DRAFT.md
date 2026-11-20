@@ -2,7 +2,8 @@
 
 Status: transport revision 2 and adaptive nonce revision 1 have **candidate
 source implementations, without native acceptance**. The pre-header
-continuation and positive private TTL remain **unimplemented and unadvertised**.
+continuation now has **candidate source only**; positive private TTL remains
+**unimplemented and unadvertised**.
 Related UltraCache issues: #955, #956, #957, #958, #959. Native acceptance must
 precede release or activation.
 
@@ -51,66 +52,142 @@ association and finalization. It has no HIT issuer or preflight API.
 References: https://www.varnish.org/docs/users-guide/esi/ and
 https://www.varnish.org/docs/reference/vmod/ .
 
-## Proposed native pre-header continuation (wire not frozen)
+## Native pre-header continuation v1: candidate source (#956)
 
-1. An origin-approved parent advertises a nonpersonal, signed delivery
-   descriptor as object metadata. It binds the canonical host, original page
-   path/query and provider operations using UltraCache's existing signing
-   mechanism. It contains no visitor ID, credentials or cookie values. No
-   prepare request is introduced for ordinary pages without this contract.
-2. Before committing the chosen parent's headers, native request-owned state
-   retains the original GET URL, host/site, scheme, method, original Cookie,
-   selected parent representation and descriptor. An internal restart routes
-   **GET** to the same site's WordPress front controller with
-   `?ultracache_delivery=<signed-descriptor>` (preserving the site's subdirectory).
-   Proposed request headers are `X-UltraCache-Delivery-Version: 1`,
-   `X-UltraCache-Delivery-Phase: prepare`,
-   `X-UltraCache-Delivery-Request: <opaque request handle>` and
-   `X-UltraCache-Delivery-Original-URL: <original path/query>`.
-   All incoming copies are stripped. Native-owned state, not browser headers,
-   authorizes a continuation. The endpoint must verify descriptor, target,
-   phase and the trusted internal route. Direct public requests are refused.
-3. The prepare transaction always PASSes and returns `private,no-store`.
-   UltraCache executes the actual necessary provider hooks, consent checks and
-   state updates once, without running the whole parent template. The proxy
-   creates no application cookie, session, signature or user identity.
-4. Real repeated Set-Cookie fields are retained verbatim in the originating
-   request's native handoff: attributes, empty values, expiration, renewal and
-   deletion remain intact. They are never flattened/comma-split or stored in a
-   reusable object. Existing MISS handoff and this continuation share one
-   ownership implementation; an internal phase cannot erase pending fields.
-5. Proposed private prepare-body envelope is JSON with `schemaVersion: 1`,
-   `requestId`, `originalUrl`, `childContexts` and `renderedFragments`.
-   `childContexts` maps an existing signed fragment descriptor to its effective
-   request Cookie header after the provider operation; it includes new actual
-   session values and omits provider-deleted values. `renderedFragments` holds
-   any stateful renderer output already executed in this phase. The endpoint
-   filters each context to that renderer's declared needs. Native code validates
-   the envelope's request/target binding and retains it only for this request.
-   No context, envelope or body is put into shared parent metadata.
-6. The native continuation restores the original request and does a fresh
-   parent lookup before delivery. The real cookie fields are attached to this
-   final response before headers are committed. Private children use their
-   corresponding effective child context, not a stale copy from the original
-   browser request. Where a renderer had to execute before headers, its result
-   is consumed from the request-local result, rather than executing it twice.
-   This requires an explicit native API; VCL alone does not parse that envelope
-   or retrieve arbitrary child bodies before parent delivery.
+This code runs only for the UltraCache profile. Basic remains a best-effort
+HTTP cache without ESI composition or a prepare operation. This draft is not
+native/compiler/browser acceptance and must not be deployed as qualified code.
 
-HEAD must not perform GET page-view mutations. The continuation must preserve
-native restart bounds, handle cache eviction between phases and never use a
-client-supplied done flag as proof that provider work occurred. Failure before
-headers must select an explicit private origin fallback or an error; no
-uncompleted personalized response may be presented as a successful shared HIT.
-Abort, error and task finalization release all request-owned state. A provider
-operation must not be repeated by restart/retry within that request; concurrent
-requests still require the provider's normal session/transaction semantics.
+### Minimal application wire
 
-Cookie header reconstruction cannot be a blind name substitution: browser
-Cookie lacks Domain/Path attributes and may contain duplicate names. The
-application's per-renderer effective context is required; a generic proxy-only
-jar built from those names would guess at application identity. Validate this
-with same-name/different-path, newly issued and expired session acceptance.
+An otherwise cacheable origin-approved ESI parent supplies:
+
+- `X-UltraCache-ESI-Shared-Parent: 1`
+- `X-UltraCache-ESI-Private-Count: N` (all private-capable occurrences, including
+  anonymous adaptive nonces and repeated includes)
+- `X-UltraCache-Delivery-Prepare: /index.php?ultracache_delivery=<signed-manifest>`
+  (use the actual installation subdirectory; same-host absolute path only).
+
+The manifest must bind the original public route/representation and the full
+set of private-capable include URLs, signed contexts and occurrence counts.
+It must contain no visitor identity, cookie values or private output. Public
+snapshot approval remains distinct from a fresh personalized render.
+
+Before serving an eligible **GET HIT**, native request-owned state saves the
+original URL, Host, complete original Cookie, encoding and conditional/range
+headers. It restarts to the prepare target and always PASSes that request.
+The native backend hook sets these headers afresh:
+
+```http
+X-UltraCache-Delivery-Version: 1
+X-UltraCache-Delivery-Phase: prepare
+X-UltraCache-Delivery-Request: <request-owned decimal handle>
+X-UltraCache-Delivery-Original-URL: /original/path?original=query
+Cookie: <unchanged complete original request Cookie>
+```
+
+All browser copies are stripped. The request handle only associates the two
+native tasks; it is not a session, credential or authentication proof. The
+application must verify its signed manifest, original-route binding and trusted
+proxy entry point. Headers alone do not authenticate direct access to origin.
+Direct untrusted calls must be refused, not treated as approved continuations.
+The existing signed private capability probe can observe
+`X-UltraCache-Delivery-Version: 1` separately from transport revision 2 and
+adaptive nonce revision 1. No new UI/probe/background worker is introduced.
+
+The endpoint executes the real provider lifecycle under the original route,
+then renders **every private-capable include in the manifest**, even when an
+adaptive nonce currently uses anonymous identity. It renders each distinct URL
+once and reuses its output for repeated occurrences. Identity and consent are
+resolved by the actual application/provider, not by rewriting a proxy Cookie
+jar. Return status 200, identity encoding, private/no-store headers, authentic
+repeated `Set-Cookie` fields and this UTF-8 JSON body:
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "123",
+  "originalUrl": "/article?public=1",
+  "renderedFragments": [
+    {
+      "url": "/index.php?ultracache_esi=<signed-private>&esi_scope=private",
+      "html": "<div>actual provider output</div>",
+      "occurrences": 2
+    },
+    {
+      "url": "/index.php?ultracache_esi=<signed-adaptive>&esi_identity=wordpress",
+      "html": "actual identity-bound nonce output",
+      "occurrences": 1
+    }
+  ]
+}
+```
+
+URLs must be the exact relative URLs emitted in the parent's ESI attributes
+(after HTML entity decoding), with no foreign host or fragment. `html` is final
+renderer output, not a request to execute the renderer again. Nested private
+ESI inside that output is not implemented by this synthetic replay path.
+The sum of positive occurrence counts must equal the parent's Private-Count;
+duplicate URL entries, duplicate JSON keys, unexpected schema properties,
+mismatched request/route binding and invalid URL forms are rejected. The UC
+producer must additionally verify that the manifest's complete URL set was
+rendered; the proxy cannot inspect a signed opaque application descriptor.
+No `childContexts`/effective Cookie substitution API is needed for this wire:
+all private-capable results are already rendered against actual provider state.
+
+### Native ownership and control flow
+
+`shared/native/delivery_continuation.c` extends the existing cookie_handoff
+module. Its VFP is registered using the installed engine's `VRT_AddFilter` API.
+The prepare response uses `beresp.filters = "uc_delivery_capture"`, TTL/grace/
+keep zero, uncacheable delivery and `beresp.do_stream = false`. Its full body
+is captured during fetch, **before prepare vcl_deliver**; no late ESI child
+header aggregation is attempted. Repeated provider Set-Cookie fields are copied
+verbatim without comma splitting, expiry rewriting or name reclassification.
+The prepare fetch's private transient object is never a reusable parent object.
+
+Backend/client association uses the existing locked handoff table. Continuation
+ownership is PRIV_TOP so it survives the two trusted restarts and is visible to
+ESI children; ordinary MISS handoff retains its existing PRIV_TASK reset path.
+The capture filter retains an integer backend association, not a client pointer,
+so client abort removes the table entry before private state is freed. Completed
+capture and envelope validation precede restoration/restart of the parent route.
+Native restart bounds apply. Retries cannot repeat an owned prepare operation,
+and connection retry is disabled for that operation.
+
+On return, only the same selected parent object may be delivered. The examined
+9.1 `cnt_deliver` implementation stashes that object across restart until request
+cleanup; this candidate relies on that native lifetime and does not swap engine
+object pointers or call uninstalled private HSH APIs. If the object expires, is
+purged or replaced, a parent MISS/PASS or different selected object returns 503
+**before parent headers**, rather than running the full provider lifecycle a
+second time. Seamless recovery of an evicted parent is not implemented.
+
+Before final parent headers are sent, the authentic provider fields are appended
+only to this visitor's response. The browser response is private/no-store while
+the public parent remains internally reusable. ESI children matching a prepared
+URL are private synthetic bodies from PRIV_TOP; repeated occurrences reuse the
+same output. An unprepared private/adaptive child cannot silently rerun origin.
+Ordinary public children keep their existing cookie-free path. Initial MISS,
+HEAD, private/full-origin PASS, pages without the signed contract and Basic do
+not initiate this HIT continuation. The existing MISS provider-delivery path is
+preserved; its application lifecycle still needs combined acceptance.
+
+Resource bounds in this draft: 8 MiB captured envelope, 1,024 distinct fragments
+and total private occurrences, JSON nesting depth 8. Failure is explicit before
+successful parent delivery where detectable; native/error/abort/retry/eviction
+fixtures and actual provider semantics remain mandatory acceptance.
+
+### APIs verified from primary 9.1 source
+
+Official release: https://vinyl-cache.org/releases/rel9.1.0.html
+(source archive https://vinyl-cache.org/downloads/vinyl-cache-9.1.0.tgz).
+Examined `cache_filter.h`, `cache_fetch_proc.c`, `cache_fetch.c`,
+`cache_req_fsm.c`, `cache_vrt_priv.c`, `cache_vrt_var.c`, `vrt.h`, `vrt_obj.h`
+and `vjsn.h`/`vjsn.c`: VRT_AddFilter/RemoveFilter, VFP init/pull/VFP_Suck,
+non-streaming fetch completion, deliver-to-restart before transmit, PRIV_TOP
+lifetime and VRT_l_resp_body with a magic-initialized blob. The installed
+matching development headers/ABI are still authoritative at compilation.
 
 ## Positive private TTL is a separate admission contract
 

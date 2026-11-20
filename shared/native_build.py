@@ -23,7 +23,7 @@ def build():
     target = Path(command('pkg-config','--variable=vmoddir','varnishapi'))
     if not tool or not target.is_absolute() or not target.is_dir():
         raise RuntimeError('Install the development package matching the native Varnish engine')
-    inputs = {name:(source/name).read_bytes() for name in ('cookie_handoff.c','cookie_handoff.vcc')}
+    inputs = {name:(source/name).read_bytes() for name in ('cookie_handoff.c','cookie_handoff.vcc','delivery_continuation.c')}
     inputs['abi'] = (include/'vmod_abi.h').read_bytes()
     inputs['builder'] = Path(__file__).read_bytes()
     signature = hashlib.sha256(b'cookie-handoff-build-1\0'+b''.join(inputs.values())).hexdigest()
@@ -38,6 +38,7 @@ def build():
         with tempfile.TemporaryDirectory(prefix='.cookie-handoff-',dir=target) as temporary:
             folder=Path(temporary)
             (folder/'cookie_handoff.c').write_bytes(inputs['cookie_handoff.c'])
+            (folder/'delivery_continuation.c').write_bytes(inputs['delivery_continuation.c'])
             # vmodtool hashes directives, not their documentation. Put the
             # source/ABI identity in $Module so a C-only update gets a new DSO
             # identity even while an earlier VCL still holds the old module.

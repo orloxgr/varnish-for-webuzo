@@ -1,0 +1,134 @@
+"""Native-only fixture: pre-header capture and request-owned fragment replay.
+
+Mock origin tests transport/lifecycle, not real WordPress/WooCommerce semantics.
+Do not count skipped tests or this fixture as application/browser acceptance.
+"""
+import concurrent.futures
+import json
+import shutil
+import unittest
+
+from test_cookie_delivery import proxy, cookies
+
+PRIVATE='/index.php?ultracache_esi=signed-private&esi_scope=private'
+ADAPTIVE='/index.php?ultracache_esi=signed-adaptive&esi_identity=wordpress'
+PREPARE='/index.php?ultracache_delivery=signed-manifest'
+PARENT='/article?public=1'
+META=[('Cache-Control','public, max-age=120'),('Surrogate-Control','ESI/1.0'),
+      ('X-UltraCache-ESI-Shared-Parent','1'),('X-UltraCache-ESI-Private-Count','3'),
+      ('X-UltraCache-Delivery-Prepare',PREPARE)]
+BODY='<html>parent[<esi:include src="'+PRIVATE.replace('&','&amp;')+'"/>]['+\
+     '<esi:include src="'+PRIVATE.replace('&','&amp;')+'"/>]['+\
+     '<esi:include src="'+ADAPTIVE.replace('&','&amp;')+'"/>]</html>'
+
+
+def envelope(headers, visitor, change=None):
+    result=dict(schemaVersion=1,requestId=headers.get('X-UltraCache-Delivery-Request'),
+        originalUrl=headers.get('X-UltraCache-Delivery-Original-URL'),renderedFragments=[
+            dict(url=PRIVATE,html='private:'+visitor,occurrences=2),
+            dict(url=ADAPTIVE,html='nonce:'+visitor,occurrences=1)])
+    if change: change(result)
+    return json.dumps(result)
+
+
+@unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
+class DeliveryContinuation(unittest.TestCase):
+    def test_hit_cookie_headers_precede_replayed_private_fragments(self):
+        calls=[]
+        def origin(path,headers):
+            calls.append((path,dict(headers)))
+            if path==PREPARE:
+                visitor=headers.get('Cookie','anonymous')
+                return envelope(headers,visitor),[
+                    ('Content-Type','application/vnd.ultracache.delivery+json'),
+                    ('Cache-Control','private, no-store'),
+                    ('Set-Cookie','session='+visitor+'; Path=/; Secure; HttpOnly; SameSite=Lax'),
+                    ('Set-Cookie','old=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/'),
+                    ('Set-Cookie','session=other-path; Path=/account; Secure')]
+            if path==PARENT:return BODY,META
+            return 'cold-fragment',[('Cache-Control','private, no-store')]
+        with proxy('ultracache',origin) as get:
+            self.assertEqual(get(PARENT)[0],200)
+            calls.clear()
+            for visitor in ('_fbp=alice','_fbp=bob','_fbp=alice'):
+                status,fields,body=get(PARENT,visitor,extra={
+                    'X-UltraCache-Delivery-Phase':'complete',
+                    'X-UltraCache-Delivery-Request':'spoof',
+                    'X-UltraCache-Delivery-Original-URL':'/wrong'})
+                self.assertEqual(status,200)
+                self.assertEqual(body,'<html>parent[private:'+visitor+'][private:'+visitor+'][nonce:'+visitor+']</html>')
+                self.assertEqual(cookies(fields),[
+                    'session='+visitor+'; Path=/; Secure; HttpOnly; SameSite=Lax',
+                    'old=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/',
+                    'session=other-path; Path=/account; Secure'])
+                self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
+                self.assertEqual(dict(fields)['X-Cache'],'HIT')
+                self.assertNotIn('X-UltraCache-Delivery-Prepare',dict(fields))
+            self.assertEqual([p for p,_ in calls],[PREPARE]*3)
+            for _,headers in calls:
+                self.assertEqual(headers['X-UltraCache-Delivery-Phase'],'prepare')
+                self.assertEqual(headers['X-UltraCache-Delivery-Version'],'1')
+                self.assertEqual(headers['X-UltraCache-Delivery-Original-URL'],PARENT)
+                self.assertNotIn('X-SCP-Cookie-Handoff',headers)
+
+    def test_binding_schema_count_and_duplicate_fail_before_successful_parent_delivery(self):
+        def wrong_id(e):e['requestId']='another-request'
+        def wrong_url(e):e['originalUrl']='/another-page'
+        def wrong_count(e):e['renderedFragments'][0]['occurrences']=1
+        def duplicate(e):e['renderedFragments'][1]['url']=PRIVATE
+        def foreign(e):e['renderedFragments'][0]['url']='https://foreign.test/fragment'
+        for change in (wrong_id,wrong_url,wrong_count,duplicate,foreign):
+            calls=[]
+            def origin(path,headers):
+                calls.append(path)
+                if path==PREPARE:return envelope(headers,'test',change),[('Cache-Control','private, no-store')]
+                return (BODY,META) if path==PARENT else ('cold',[])
+            with self.subTest(change=change.__name__),proxy('ultracache',origin) as get:
+                get(PARENT);calls.clear()
+                status,fields,_=get(PARENT)
+                self.assertEqual(status,503);self.assertEqual(cookies(fields),[])
+                self.assertEqual(calls,[PREPARE])
+
+    def test_post_prepare_miss_does_not_run_provider_or_parent_twice(self):
+        calls=[]
+        def origin(path,headers):
+            calls.append(path)
+            if path==PREPARE:return envelope(headers,'test'),[('Cache-Control','private, no-store')]
+            return (BODY,META) if path==PARENT else ('cold',[])
+        def force_miss(source):
+            self.assertIn('call scp_recv;',source)
+            return source.replace('call scp_recv;',
+                'if (req.restarts == 2) { set req.hash_always_miss = true; }\n  call scp_recv;')
+        with proxy('ultracache',origin,transform=force_miss) as get:
+            get(PARENT);calls.clear()
+            self.assertEqual(get(PARENT)[0],503)
+            self.assertEqual(calls,[PREPARE])
+
+    def test_basic_ignores_the_delivery_contract(self):
+        calls=[]
+        def origin(path,headers):calls.append(path);return 'ordinary HTML',META
+        with proxy('basic',origin) as get:
+            self.assertEqual(get(PARENT)[2],'ordinary HTML')
+            self.assertEqual(get(PARENT)[2],'ordinary HTML')
+            self.assertEqual(calls,[PARENT])
+
+    def test_concurrent_visitors_have_request_owned_results(self):
+        def origin(path,headers):
+            if path==PREPARE:
+                visitor=headers.get('Cookie','anonymous')
+                return envelope(headers,visitor),[('Cache-Control','private, no-store'),
+                    ('Set-Cookie','owner='+visitor+'; Path=/; HttpOnly')]
+            return (BODY,META) if path==PARENT else ('cold',[])
+        with proxy('ultracache',origin) as get:
+            get(PARENT)
+            def visit(n):
+                visitor='_fbp=owner'+str(n)
+                status,fields,body=get(PARENT,visitor)
+                self.assertEqual(status,200)
+                self.assertEqual(body,'<html>parent[private:'+visitor+'][private:'+visitor+'][nonce:'+visitor+']</html>')
+                self.assertEqual(cookies(fields),['owner='+visitor+'; Path=/; HttpOnly'])
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                list(pool.map(visit,range(24)))
+
+
+if __name__=='__main__':unittest.main()
