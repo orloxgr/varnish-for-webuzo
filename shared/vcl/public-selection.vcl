@@ -62,6 +62,19 @@ sub scp_selection_capabilities {
 # All ordinary auth/route/cookie decisions have already run. A browser's
 # Cache-Control/Pragma revalidation headers do not disable this lookup.
 sub scp_selection_recv {
+    # These dedicated UltraCache diagnostics publish their own public canary,
+    # before the application's normal template/publication lifecycle. Keep the
+    # actual native cache and invalidation path: only omit application selection.
+    # Existing ESI diagnostic handlers also exit before normal publication;
+    # their WordPress token checks and native child transport remain in charge.
+    # No request header can force this routing, and normal cookie/origin privacy
+    # decisions still apply. Bound every route to its opaque 32-hex identifier.
+    if (req.url ~ "(?i)^[^?]*/ultracache-varnishtest/[0-9a-f]{32}/?([?]|$)" ||
+        req.http.X-SCP-Query ~ "(^|&)ultracache_varnish_canary=(?i:[0-9a-f]{32})(&|$)" ||
+        req.url ~ "(?i)^[^?]*/ultracache/varnishtest/canary-[0-9a-f]{32}[.]html([?]|$)" ||
+        req.http.X-SCP-Query ~ "(^|&)ultracache_esi_probe(_fragment|_private|_private_fragment)?=[^&]+(&|$)") {
+        return;
+    }
     if (req.restarts == 0 &&
         (req.http.Accept ~ "(?i)(^|,)[[:blank:]]*(text/html|application/xhtml[+]xml)([[:blank:];,]|$)" ||
          ((!req.http.Accept || req.http.Accept ~ "(^|,)[[:blank:]]*[*]/[*]([[:blank:];,]|$)") &&

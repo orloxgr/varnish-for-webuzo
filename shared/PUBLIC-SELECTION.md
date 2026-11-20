@@ -414,3 +414,28 @@ values, keep the UC execution identity unchanged, and request no invalidation or
 activation on repeat apply. These tests verify adapter upgrade planning and
 persistence; real native Varnish HTTP, provider/browser and clean WordPress ZIP
 acceptance are separate evidence, not implied by endpoint mocks.
+
+### Dedicated diagnostics and application selection
+
+UltraCache's generation/invalidation canaries and ESI capability probes exit
+before the normal template/publication lifecycle. They use the ordinary native
+cache and composition path, without starting application public selection:
+
+- a path ending `/ultracache-varnishtest/<32 hexadecimal characters>[/]`;
+- the exact query argument `ultracache_varnish_canary=<32 hexadecimal characters>`;
+- a path ending `/ultracache/varnishtest/canary-<32 hexadecimal characters>.html`;
+- the existing nonempty `ultracache_esi_probe`, `ultracache_esi_probe_fragment`,
+  `ultracache_esi_probe_private`, and `ultracache_esi_probe_private_fragment`
+  query arguments.
+
+Path recognition ignores query contents and supports subdirectory installations.
+This routing does not force a cache hit, authorize a token, change cookie actions,
+remove response cookies, or override origin status/privacy. Existing WordPress
+probe signature checks and native public/private child transport still apply.
+Ordinary pages in the registered application scope still use public selection.
+
+The five `PublicSelectionRuntime.test_diagnostic_*` methods cover actual native
+cache storage and exact invalidation, independent root/child scopes, currency
+selection on ordinary pages, route lookalikes, private/404 responses, and native
+public/private ESI composition. Their origin is a declared transport fixture;
+actual WordPress/WCML detection remains a separate application qualification.

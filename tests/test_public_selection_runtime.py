@@ -128,6 +128,136 @@ class PublicSelectionRuntime(unittest.TestCase):
                     self.assertIn('Cookie',dict(fields).get('Vary',''))
                     self.assertNotIn('X-UltraCache-Delivery-Policy',dict(fields))
                 self.assertEqual(resolver.renders,2)
+    def test_diagnostic_canaries_use_native_cache_and_exact_invalidation_without_selection(self):
+        generation=[1];calls=[];root=Resolver();shop=Resolver(scope='/shop/')
+        identifier='a1'*16
+        paths=[prefix+route for prefix in ('','/shop') for route in (
+            '/ultracache-varnishtest/'+identifier+'/',
+            '/?ultracache_varnish_canary='+identifier,
+            '/wp-content/uploads/ultracache/varnishtest/canary-'+identifier+'.html')]
+        def origin(path,headers):
+            if path not in paths:
+                return (shop if path.startswith('/shop/') else root)(path,headers)
+            calls.append((path,dict(headers)))
+            # An unexpected selection must fail this test, just as the real
+            # early canary cannot publish a normal selectedPublic document.
+            self.assertNotIn('X-UltraCache-Delivery-Phase',headers)
+            return 'canary-generation-'+str(generation[0]),[('Cache-Control','public, max-age=120')]
+        with proxy('ultracache',origin,policies=rules(),management=True) as get:
+            self.declare(get);self.declare(get,scope='/shop/')
+            for path in paths:
+                with self.subTest(path=path):
+                    generation[0]=1;before=len(calls)
+                    for expected in ('MISS','HIT'):
+                        status,fields,body=get(path)
+                        self.assertEqual((status,dict(fields)['X-Cache'],body),(200,expected,'canary-generation-1'))
+                    self.assertEqual(len(calls),before+1)
+                    generation[0]=2
+                    self.assertEqual(get(path)[2],'canary-generation-1')
+                    self.assertEqual(len(calls),before+1)
+                    self.assertEqual(control(get,operation='exact-purge',path=path)[0],200)
+                    for expected in ('MISS','HIT'):
+                        status,fields,body=get(path)
+                        self.assertEqual((status,dict(fields)['X-Cache'],body),(200,expected,'canary-generation-2'))
+                    self.assertEqual(len(calls),before+2)
+            # Both registered application scopes still resolve real currency;
+            # diagnostics do not unregister or weaken the application's policy.
+            for path,resolver in (('/book/',root),('/shop/book/',shop)):
+                for country,currency in (('US','USD10'),('DE','EUR20')):
+                    for expected in ('MISS','HIT'):
+                        status,fields,body=get(path,extra={'X-Test-Country':country})
+                        self.assertEqual((status,dict(fields)['X-Cache']),(200,expected))
+                        self.assertIn(currency,body)
+                        self.assertEqual(resolver.calls[-1][1],'public-select')
+
+    def test_canary_lookalikes_and_forged_headers_keep_application_selection(self):
+        resolver=Resolver();identifier='ab'*16
+        paths=('/ultracache-varnishtest/not-an-id/',
+            '/ultracache-varnishtest/'+identifier+'/child/',
+            '/not-ultracache-varnishtest/'+identifier+'/',
+            '/?ultracache_varnish_canary='+identifier+'extra',
+            '/?other_ultracache_varnish_canary='+identifier,
+            '/?next=/ultracache-varnishtest/'+identifier+'/',
+            '/?ultracache_varnish_canary=invalid&next=ordinary',
+            '/ultracache/varnishtest/canary-'+identifier+'.html/child',
+            '/ultracache/varnishtest/not-canary-'+identifier+'.html')
+        with proxy('ultracache',resolver,policies=rules()) as get:
+            self.declare(get)
+            for path in paths:
+                with self.subTest(path=path):
+                    self.assertIn('USD10',get(path,extra={'X-UltraCache-Varnish-Canary':'1'})[2])
+                    self.assertEqual(resolver.calls[-1][1],'public-select')
+
+    def test_diagnostic_routing_retains_origin_private_and_not_found_responses(self):
+        calls=[];identifier='cd'*16
+        def origin(path,headers):
+            calls.append(dict(headers))
+            return 404,'canary absent',[('Cache-Control','private, no-store'),('Set-Cookie','owner=actual; Path=/')]
+        with proxy('ultracache',origin,policies=rules()) as get:
+            self.declare(get)
+            for _ in range(2):
+                status,fields,body=get('/ultracache-varnishtest/'+identifier+'/')
+                self.assertEqual((status,body),(404,'canary absent'))
+                self.assertNotEqual(dict(fields)['X-Cache'],'HIT')
+                self.assertEqual(cookies(fields),['owner=actual; Path=/'])
+            self.assertEqual(len(calls),2)
+            self.assertTrue(all('X-UltraCache-Delivery-Phase' not in headers for headers in calls))
+
+    def test_diagnostic_esi_parents_keep_native_public_and_private_composition(self):
+        # Declared transport fixture, not a WordPress token/signature test.
+        token='declared.'+'a'*64;resolver=Resolver();calls=[]
+        public_parent='/?ultracache_esi_probe='+token
+        public_fragment='/?ultracache_esi_probe_fragment='+token
+        private_parent='/?ultracache_esi_probe_private='+token
+        private_fragment='/?ultracache_esi_probe_private_fragment='+token+'&esi_scope=private'
+        def origin(path,headers):
+            if path not in (public_parent,public_fragment,private_parent,private_fragment):
+                return resolver(path,headers)
+            calls.append((path,dict(headers)))
+            self.assertNotIn('X-UltraCache-Delivery-Phase',headers)
+            if path==private_fragment:
+                self.assertEqual(headers.get('X-ESI-Private-Request'),'1')
+                self.assertEqual(headers.get('X-ESI-Request-Level'),'1')
+                owner=headers.get('Cookie','').split('esi_session=',1)[-1].split(';',1)[0]
+                return 'owner:'+owner,[('Cache-Control','private, no-store'),('X-UltraCache-ESI-Private','1')]
+            if path==public_fragment:
+                self.assertNotIn('Cookie',headers)
+                return 'public-child',[('Cache-Control','public, max-age=120')]
+            child=private_fragment if path==private_parent else public_fragment
+            fields=[('Cache-Control','public, max-age=120'),('Surrogate-Control','content="ESI/1.0"')]
+            if path==private_parent:fields.append(('X-UltraCache-ESI-Shared-Parent','1'))
+            return '<html>[<esi:include src="'+child.replace('&','&amp;')+'"/>]</html>',fields
+        with proxy('ultracache',origin,policies=rules()) as get:
+            self.declare(get)
+            for _ in range(2):
+                self.assertEqual(get(public_parent)[2],'<html>[public-child]</html>')
+            for visitor in ('A','B','A'):
+                self.assertEqual(get(private_parent,'esi_session='+visitor)[2],'<html>[owner:'+visitor+']</html>')
+            self.assertEqual(sum(path==public_fragment for path,_ in calls),1)
+            self.assertEqual(sum(path==private_fragment for path,_ in calls),3)
+            self.assertIn('EUR20',get('/ordinary/',extra={'X-Test-Country':'DE'})[2])
+            self.assertEqual(resolver.calls[-1][1],'public-select')
+
+    def test_diagnostic_esi_invalid_token_retains_error_and_lookalike_keeps_selection(self):
+        resolver=Resolver();calls=[]
+        def origin(path,headers):
+            if path=='/?ultracache_esi_probe=invalid':
+                calls.append(dict(headers))
+                return 404,'invalid probe',[('Cache-Control','private, no-store')]
+            return resolver(path,headers)
+        with proxy('ultracache',origin,policies=rules()) as get:
+            self.declare(get)
+            for _ in range(2):
+                status,fields,body=get('/?ultracache_esi_probe=invalid')
+                self.assertEqual((status,body),(404,'invalid probe'))
+                self.assertNotEqual(dict(fields)['X-Cache'],'HIT')
+            self.assertEqual(len(calls),2)
+            self.assertTrue(all('X-UltraCache-Delivery-Phase' not in headers for headers in calls))
+            for path in ('/?other_ultracache_esi_probe='+('a'*64),
+                    '/?ultracache_esi_probe_other=invalid','/?ultracache_esi_probe='):
+                self.assertIn('USD10',get(path)[2])
+                self.assertEqual(resolver.calls[-1][1],'public-select')
+
     def test_capabilities_declaration_is_scoped_metadata_and_plain_probe_preserves_it(self):
         resolver=Resolver()
         with proxy('ultracache',resolver,policies=rules()) as get:
