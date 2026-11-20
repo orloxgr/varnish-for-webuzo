@@ -63,13 +63,24 @@ Explicit installed central/site Shared/Variant/Private choices retain precedence
 there is no forced migration of a saved choice or expansion of the legacy carrier.
 The new default must be accepted from clean shipped rules, not a fixture override.
 
+Bundle `2026.11.20.9` makes this history default profile-specific: Basic Private,
+UltraCache Shared. A real WooCommerce widget without the WP integration can put
+personal history in the full HTML. Requests with that cookie therefore go to
+the application in Basic; UC keeps its integrated shared-parent/private-widget
+behavior. Saved choices still override each column, and reset restores the
+selected profile's default. No hidden bypass rule or new transport is involved.
+
 The `2026.11.20.5` native storage and common default bundle use schema 2.
 Every rule has one match/description and two equal fields:
 `actions: {basic: "private", ultracache: "shared"}`. Every bundled field is
-concrete. The two commenter prefixes default to Private in Basic and Shared in
-UltraCache; all other paired decisions are identical. There is no exception list
+concrete. In that `.5` bundle the two commenter prefixes default to Private in
+Basic and Shared in UltraCache; all other paired decisions are identical. There is no exception list
 or conditional cookie veto. The application integration supplies personal comments
 for UltraCache; Basic does not acquire ESI.
+
+Current `.9` profile differences also include the YITH wishlist exact/prefix
+(`.8`) and the Recently Viewed exact choice: Basic Private, UC Shared. Currency
+and country variants remain separate public representations in both profiles.
 
 The panel edits both columns independently. Central and website choices use the
 same pair. A null manual field means that column has no local override; Reset

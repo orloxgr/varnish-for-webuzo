@@ -32,7 +32,7 @@ class AeliaCookieDefaults(unittest.TestCase):
     def test_four_exact_default_dimensions_match_common_artifact_and_source_metadata(self):
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         catalogue=load_catalogue();policy,metadata=defaults.bundle()
-        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.20.8',)*3)
+        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.20.9',)*3)
         for source in (artifact['rules'],policy['rules'],catalogue['policies']):
             for name in NAMES:
                 rows=[r for r in source if r['match']==dict(kind='exact',value=name)]

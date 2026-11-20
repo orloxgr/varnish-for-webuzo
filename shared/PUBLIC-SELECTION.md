@@ -323,3 +323,33 @@ Normalized LF common artifacts:
 
 - defaults.json: `91b91be2dc72586cd4fd928cc906aca21a4bbc2703848bc4504eb738880824d8`
 - catalogue.json: `8a9eca3ea5b0523e2369ab9cfe8704bbf394e96eb956b519427653dde19b695e`
+
+## Basic personal history boundary, 2026.11.20.9
+
+Only the exact `woocommerce_recently_viewed` Basic action changes from Shared
+to Private. UltraCache/WP remains Shared. A normal WooCommerce Recently Viewed
+widget without the WP private-fragment integration can put visitor history in
+the full HTML; the actual Basic counterexample reused visitor A's widget for
+visitor B. Basic now sends requests carrying this cookie to the application,
+and an origin response setting that Private cookie remains private. The UC
+application integration continues to share its public parent and deliver the
+personal widget/cookie through its existing owned path.
+
+This is the ordinary visible profile default. It does not add a hidden cookie
+veto, provider check, first-visit bypass, VCL exception or transport change.
+Saved Shared/Variant/Private choices keep their usual authority, including an
+explicit Basic Shared choice. Reset inherits Basic Private or UC Shared.
+
+All other 2284-row default/catalogue metadata and every UltraCache action stay
+unchanged. Assessment record `15b17bfb-d0ef-4806-b2fa-b319185bc3aa` mirrors the
+single Basic action change; its other fields and every other source record are
+unchanged. Version metadata advances to `.9`, with 52 catalogue policies and
+2299 editor rows. Native HTTP fixtures separately test Basic owner isolation,
+UC shared parent/owner-only response-cookie handoff, all three saved actions and
+independent reset. Actual WooCommerce widget/issuer proof is separate app/Lab
+acceptance.
+
+Normalized LF common artifacts:
+
+- defaults.json: `f78381d3c606867fee6a49f10509d8a5552c6fbb18e0ff7d973861607a18f85b`
+- catalogue.json: `206ce788a7939b7f790e2de5e9be04a277170b3932930ea05343060d0aa65dfa`

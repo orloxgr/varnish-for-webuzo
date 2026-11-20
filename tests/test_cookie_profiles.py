@@ -22,7 +22,7 @@ def dual(basic,ultracache,name='comment_author_',kind='prefix'):
 
 
 class CookieProfiles(unittest.TestCase):
-    def test_all_defaults_have_two_concrete_actions_and_only_comments_and_wishlist_differ(self):
+    def test_all_defaults_have_two_concrete_actions_and_only_app_integrated_choices_differ(self):
         policy,metadata=defaults.bundle()
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         self.assertEqual(policy['schemaVersion'],2)
@@ -35,7 +35,8 @@ class CookieProfiles(unittest.TestCase):
             if r['actions']['basic']!=r['actions']['ultracache']:different.append(r['match'])
         self.assertCountEqual(different,[dict(kind='prefix',value=n) for n in
             ('comment_author_','comment_author_url_','yith_wcwl_session_')]+[
-            dict(kind='exact',value='yith_wcwl_session_')])
+            dict(kind='exact',value='yith_wcwl_session_'),
+            dict(kind='exact',value='woocommerce_recently_viewed')])
         self.assertTrue(all(set(r['actions'])=={'basic','ultracache'} for r in metadata['records'].values()))
 
     def test_legacy_choices_preserved_in_both_columns_without_mutation(self):
