@@ -7,6 +7,7 @@ sub scp_init {
     unset req.http.X-SCP-Delivery-Public-Snapshot;
     unset req.http.X-SCP-Personal-Delivery;
     unset req.http.X-SCP-Public-Fragment;
+    unset req.http.X-SCP-Fragment-HTTP-Failure;
     unset req.http.X-UltraCache-Application-Private;
     unset req.http.X-SCP-Private-Key;
     unset req.http.X-SCP-Private-Lookup;
@@ -107,6 +108,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Delivery-Public-Snapshot;
     unset bereq.http.X-SCP-Personal-Delivery;
     unset bereq.http.X-SCP-Public-Fragment;
+    unset bereq.http.X-SCP-Fragment-HTTP-Failure;
     unset bereq.http.X-UltraCache-Application-Private;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-UltraCache-Delivery-Manifest;
@@ -142,6 +144,7 @@ sub scp_backend_response {
     unset beresp.http.X-SCP-Delivery-Public-Snapshot;
     unset beresp.http.X-SCP-Personal-Delivery;
     unset beresp.http.X-SCP-Public-Fragment;
+    unset beresp.http.X-SCP-Fragment-HTTP-Failure;
     if (bereq.http.X-SCP-Profile == "ultracache") {
         # Only the application's early publication reader may declare this:
         # no WP/provider ran and no issuer fields can be discarded/repeated.
@@ -180,6 +183,7 @@ sub scp_backend_response {
     if (bereq.http.X-SCP-Profile == "ultracache") {
         call scp_ultracache_personal_response;
         call scp_ultracache_public_fragment_response;
+        call scp_ultracache_fragment_http_response;
     }
     call scp_aggressive_backend_response;
     call scp_shared_response_cookies;
@@ -194,6 +198,7 @@ sub scp_deliver {
     call scp_private_deliver;
     unset resp.http.X-SCP-Personal-Delivery;
     unset resp.http.X-SCP-Public-Fragment;
+    unset resp.http.X-SCP-Fragment-HTTP-Failure;
     unset resp.http.X-UltraCache-Delivery-Authorization;
     unset resp.http.X-UltraCache-Delivery-Manifest;
     unset resp.http.X-UltraCache-Delivery-Recovery;

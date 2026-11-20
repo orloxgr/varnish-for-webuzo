@@ -228,6 +228,20 @@ sub scp_ultracache_personal_response {
         call scp_mark_uncacheable;
     }
 }
+sub scp_ultracache_fragment_http_response {
+    # An endpoint failure may precede application success metadata entirely.
+    # Never retain that error/redirect as a reusable fragment. Direct endpoint
+    # requests keep their actual status/body; only native ESI children omit it.
+    if (bereq.http.X-SCP-Query ~ "(^|&)(ultracache_esi|ultracache_esi_probe_private_fragment)=[^&]+(?:&|$)" &&
+        beresp.status != 200 && beresp.status != 204) {
+        set beresp.http.X-SCP-Reason = "ultracache-fragment-http-failure";
+        set beresp.http.Cache-Control = "private, no-store";
+        set beresp.http.Surrogate-Control = "no-store";
+        set beresp.grace = 0s;
+        set beresp.keep = 0s;
+        call scp_mark_uncacheable;
+    }
+}
 sub scp_ultracache_backend_response {
     if (cookie_handoff.delivery_capture()) {
         # A private transient fetch object is discarded at the prepare restart.
@@ -276,6 +290,14 @@ sub scp_ultracache_backend_response {
 }
 
 sub scp_ultracache_deliver {
+    if (req.esi_level > 0 && resp.status != 200 && resp.status != 204 &&
+        req.http.X-SCP-Query ~ "(^|&)(ultracache_esi|ultracache_esi_probe_private_fragment)=[^&]+(?:&|$)") {
+        # Only this native child, not an external request or full private
+        # document, becomes an empty delivery. Preserve the original status
+        # in the native log; never embed a backend error page into its parent.
+        set req.http.X-SCP-Fragment-HTTP-Failure = resp.status;
+        return (synth(200, "UltraCache fragment unavailable"));
+    }
     if (req.esi_level == 0 && req.method == "GET" &&
         (obj.hits > 0 || resp.http.X-SCP-Delivery-Public-Snapshot == "1") &&
         req.http.X-SCP-Pass != "1" && !obj.uncacheable && resp.status == 200 &&
@@ -303,7 +325,31 @@ sub scp_ultracache_deliver {
 
 # The complete adapter defines scp_private_document_diagnostics exactly once.
 # Custom VCL subroutines cannot be extended through repeated definitions.
+sub vcl_backend_error {
+    if (bereq.http.X-SCP-Profile == "ultracache" &&
+        bereq.http.X-SCP-Query ~ "(^|&)(ultracache_esi|ultracache_esi_probe_private_fragment)=[^&]+(?:&|$)") {
+        # The default backend-error object must not retain a failed fragment
+        # and delay recovery after the next actual upstream request succeeds.
+        set beresp.ttl = 0s;
+        set beresp.grace = 0s;
+        set beresp.keep = 0s;
+        set beresp.uncacheable = true;
+        set beresp.http.Cache-Control = "private, no-store";
+        set beresp.http.Surrogate-Control = "no-store";
+    }
+}
 sub vcl_synth {
+    if (req.http.X-SCP-Profile == "ultracache" && req.esi_level > 0 &&
+        req.http.X-SCP-Fragment-HTTP-Failure ~ "^[1-5][0-9][0-9]$") {
+        std.log("UltraCache signed child HTTP failure " + req.http.X-SCP-Fragment-HTTP-Failure);
+        unset req.http.X-SCP-Fragment-HTTP-Failure;
+        set resp.http.Cache-Control = "private, no-store";
+        set resp.http.Surrogate-Control = "no-store";
+        set resp.http.X-UltraCache-ESI-Error-Contained = "1";
+        set resp.http.X-Cache = "PASS";
+        synthetic("");
+        return (deliver);
+    }
     if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_synth()) {
         if (req.esi_level == 0) {
             set resp.http.X-Cache = "PASS";

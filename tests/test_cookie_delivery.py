@@ -21,9 +21,13 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
         protocol_version = 'HTTP/1.1'
 
         def do_GET(self):
-            body, headers = respond(self.path, self.headers)
+            result = respond(self.path, self.headers)
+            if result is None:
+                self.close_connection = True # owned upstream EOF/fetch-error fixture
+                return
+            status, body, headers = result if len(result)==3 else (200,*result)
             body = body.encode()
-            self.send_response(200)
+            self.send_response(status)
             if not any(name.lower() == 'content-type' for name, _ in headers):
                 self.send_header('Content-Type', 'text/html')
             if not any(name.lower() == 'content-length' for name, _ in headers):

@@ -787,3 +787,69 @@ metadata, and caller/origin scratch spoofing. Parent and a long-lived public
 sibling must remain HIT/reused. These transport fixtures do not replace actual
 WP registered-renderer/browser/storage acceptance; root owns all native and
 combined runtime qualification. No C/API change is required by this correction.
+
+### Scoped native child HTTP failure containment (candidate, separate source pair)
+
+Root retained a real failed F05 acceptance on application `b177a8f0` and qualified
+Hestia `9bab558`: a valid signed public child returned a nonempty HTTP503 before
+normal application endpoint handling. The parent stayed 200/HIT with its original
+generation, siblings and tail, but embedded the raw failed-child response body.
+This is distinct from a registered renderer WP_Error converted by the application
+to its own noncacheable fallback200, which already worked and remains supported.
+
+Exact engine evidence is Varnish9.1 `ffd36e9db9a1ec2bf6637deda180a87d40a13d0f`:
+cache_esi_deliver.c:885 suppresses non200/non204 children only when the global
+ESI_INCLUDE_ONERROR feature is enabled. cache_req_fsm.c:236 also defaults the
+parent's esi_include_onerror to that feature; cache_esi_parse.c:520 and delivery
+line392 distinguish abort/continue include opcodes. Consequently enabling the
+feature globally, without coordinated attributes on public/nonces/generic ESI,
+would change generic application behavior and could truncate unmarked includes.
+The candidate does not enable a new feature flag or alter the installer/runtime
+feature configuration. Basic remains without ESI.
+
+Instead, UltraCache native ESI delivery contains failures only for its existing
+regular `ultracache_esi` endpoint and private capability-probe endpoint. Routing
+recognition is not signature authentication: the application still validates
+signatures, including an invalid signature's real error response. Actual native
+ESI level, the native adapter profile and parsed endpoint select containment;
+caller headers or cookie names cannot select it. Failure may precede all origin
+success metadata, so no success header is required to omit an error page.
+
+The fragment transport contract accepts HTTP200 and bodyless204. Other statuses,
+including HTTP redirects, are not valid fragment bodies and become an empty,
+noncacheable native child synthesis. Original backend status remains in native
+VSL, plus an explicit status-only containment log without cookie/URL values.
+The derived child marker is cleared from caller, backend and origin echoes.
+Raw failed body, cookies and Location are not copied into the synthesis. The
+parent's status/generation/content, other fragments and following content remain
+available. Successful native prepared children and application fallback200 are
+unchanged. Invalid whole-prepare validation still fails through its existing
+bound continuation contract; this does not convert a failed top-level prepare
+or whole private document into a successful empty page.
+
+Non-success endpoint responses are marked uncacheable with zero grace/keep
+before storage, retaining their original status/body for direct top-level
+requests. Native backend-fetch errors for these endpoints have TTL/grace/keep0
+and uncacheable response metadata too, so the default backend-error object does
+not delay recovery. No failed child is retained as a cached success. The next
+successful positive-TTL child can cache normally. No renderer/provider retries,
+cookie vetoes, new UI/control, or application signature/channel are introduced.
+
+Top-level endpoint requests preserve their actual status/body/provider cookies;
+top-level privateDocument statuses (including404/redirect/503) retain their
+previous qualified semantics. Generic ESI without UltraCache endpoint selectors
+retains native previous behavior, including its raw non200 child body when the
+global feature is disabled. This candidate does not claim global standard
+onerror conformance. The old private capability probe's failing invalid token
+returned an already-empty404, so its tail-only observation was not evidence of
+nonempty HTTP failure containment; actual regression remains separately labeled.
+
+`test_fragment_http_failures.FragmentHTTPFailures` adds seven native methods:
+nonempty public HTTP503 with/without onerror attributes and recovery under
+Normal/Aggressive; private/adaptive/probe errors and redirect/non200 statuses;
+actual upstream EOF and immediate recovery; success200/204 and application
+fallback200; top-level actual status/body/cookies and scratch spoofing; and
+Basic/generic ESI compatibility. The existing HTTP fixture now also permits
+real status responses and upstream EOF. Prior qualified9bab/40c724 worktrees
+remain unchanged; this source-only candidate requires a new root native pair
+and actual WP/browser acceptance before publication.
