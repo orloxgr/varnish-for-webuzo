@@ -1,5 +1,6 @@
 """Real cookie choices, native account isolation and transactional persistence."""
 import copy
+import grp
 import json
 import os
 import pwd
@@ -24,6 +25,7 @@ import cookie_catalogue
 import vcl_source
 import test_profiles as http
 import test_backend
+import native_test_accounts
 
 _read_runtime_source=service.current_source
 
@@ -40,6 +42,7 @@ def account(identity='a', domain='example.test', owner='account_a'):
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid() == 0, 'Linux/root isolated state')
 class NativeScope(unittest.TestCase):
     def setUp(self):
+        native_test_accounts.install(self)
         self.temp = tempfile.TemporaryDirectory(dir='/var/lib', prefix='wvw-cookie-admin-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -52,6 +55,21 @@ class NativeScope(unittest.TestCase):
         self.enterContext(patch.object(native, 'collect', side_effect=lambda: copy.deepcopy(self.sites)))
         self.enterContext(patch.object(cookie_views.recognition, 'database', return_value={'revision':'test','records':[]}))
         state.save(engine.SETTINGS, {'installed':False, 'sites':copy.deepcopy(self.sites)})
+
+    def test_isolated_identities_keep_real_native_ownership_and_mode_checks(self):
+        panel=pwd.getpwnam('webuzo');daemon=grp.getgrnam(service.DAEMON)
+        self.assertNotIn(panel.pw_uid,{entry.pw_uid for entry in pwd.getpwall()})
+        self.assertNotIn(daemon.gr_gid,{entry.gr_gid for entry in grp.getgrall()})
+        nobody=next(entry for entry in pwd.getpwall() if entry.pw_name=='nobody')
+        self.assertEqual(pwd.getpwnam('nobody'),nobody)
+        path=self.root/'native.conf';path.write_bytes(b'owned configuration');path.chmod(0o600)
+        self.assertEqual(native.read(path),b'owned configuration')
+        os.chown(path,panel.pw_uid,panel.pw_gid)
+        self.assertEqual(native.read(path),b'owned configuration')
+        path.chmod(0o602)
+        with self.assertRaises(ValueError):native.read(path)
+        path.chmod(0o600);os.chown(path,nobody.pw_uid,nobody.pw_gid)
+        with self.assertRaises(ValueError):native.read(path)
 
     def request(self, action='cookie_policies_status', actor='account_a', **extra):
         return engine.action(dict(actor=actor, admin=actor == 'root', action=action, **extra))
@@ -485,8 +503,8 @@ class NativeCookieRules(unittest.TestCase):
                 # the historical empty-header caller to reproduce the common
                 # admission defect and prove old bad objects cannot survive it.
                 current=http.program(profile).replace(' call scp_recv;',' set req.http.X-SCP-Cookie-Contract = "";\n call scp_recv;')
-                self.assertIn('webuzo-shared-policy-v8',current)
-                guarded_v7=current.replace('webuzo-shared-policy-v8','webuzo-shared-policy-v7')
+                self.assertIn('webuzo-shared-policy-v10',current)
+                guarded_v7=current.replace('webuzo-shared-policy-v10','webuzo-shared-policy-v7')
                 bad_v7=guarded_v7.replace('bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$"','bereq.http.X-SCP-Cookie-Contract')
                 self.assertNotEqual(bad_v7,guarded_v7)
                 headers=['Vary: Cookie','X-UltraCache-Cookie-Settings:','X-UltraCache-Cookie-Vary: policy-only']
@@ -569,15 +587,15 @@ class NativeCookieRules(unittest.TestCase):
     def test_connected_matching_shared_policy_has_a_digest_and_reuses_shared_html(self):
         original=http.site;rules=choices('shared','site_currency')
         connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
-        expected=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.materialized_snapshot(rules))
-        self.assertEqual(cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules),expected)
         def connected(*args,**kwargs):
             row=original(*args,**kwargs)
             if row['domain']=='example.test':row['cookie_integration']=connection
             return row
-        headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+expected,'X-UltraCache-Cookie-Vary: policy-only']
         for profile in ('basic','ultracache'):
             with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                expected=cookie_bridge.cookie_control.effective_digest('example.test',cookie_bridge.cookie_control.materialized_snapshot(rules,profile=profile))
+                self.assertEqual(cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules,profile=profile),expected)
+                headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+expected,'X-UltraCache-Cookie-Vary: policy-only']
                 self.run_policy(profile,[http.origin('/page','public',headers=headers)],
                     [http.get('/page','public',['Cookie: site_currency=EUR'],cache='MISS'),
                      http.get('/page','public',['Cookie: site_currency=USD'],cache='HIT'),
@@ -618,15 +636,15 @@ class NativeCookieRules(unittest.TestCase):
     def test_connected_private_only_contract_ignores_unrelated_cookie_variation(self):
         original=http.site;rules=choices('private','site_personal')
         connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
-        digest=cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules)
-        self.assertTrue(digest)
         def connected(*args,**kwargs):
             row=original(*args,**kwargs)
             if row['domain']=='example.test':row['cookie_integration']=connection
             return row
-        headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+digest,'X-UltraCache-Cookie-Vary: policy-only']
         for profile in ('basic','ultracache'):
             with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                digest=cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules,profile=profile)
+                self.assertTrue(digest)
+                headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+digest,'X-UltraCache-Cookie-Vary: policy-only']
                 self.run_policy(profile,[http.origin('/page','public',headers=headers),http.origin('/page','private',headers=headers)],
                     [http.get('/page','public',['Cookie: vendor_id=one'],cache='MISS'),
                      http.get('/page','public',['Cookie: vendor_id=two'],cache='HIT'),
@@ -637,13 +655,13 @@ class NativeCookieRules(unittest.TestCase):
     def test_connected_policy_cookie_vary_uses_native_digest_and_keeps_public_variants(self):
         original=http.site;rules=choices('variant','site_currency')
         connection=dict(enabled=True,url='https://example.test'+cookie_bridge.cookie_control.PATH)
-        digest=cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules)
         def connected(*args,**kwargs):
             row=original(*args,**kwargs)
             if row['domain']=='example.test':row['cookie_integration']=connection
             return row
         for profile in ('basic','ultracache'):
             with self.subTest(profile=profile),patch.object(http,'site',side_effect=connected):
+                digest=cookie_bridge.cookie_control.cache_contract(connection,'example.test',['example.test'],rules,profile=profile)
                 headers=['Vary: Cookie','X-UltraCache-Cookie-Settings: '+digest,'X-UltraCache-Cookie-Vary: policy-only']
                 self.run_policy(profile,[http.origin('/page','EUR',headers=headers,expect=['expect req.http.Cookie == "vendor_id=one; site_currency=EUR"']),http.origin('/page','USD',headers=headers)],
                     [http.get('/page','EUR',['Cookie: vendor_id=one; site_currency=EUR'],cache='MISS'),
@@ -722,11 +740,17 @@ class NativeCookieRules(unittest.TestCase):
                  http.get('/page','other',['Cookie: campaign_id=two'],cache='HIT',host='other.test')],
                 config={'cookie_policies':choices()})
 
-    def test_login_and_cart_remain_private_even_with_shared_choice(self):
-        for cookie in ('wordpress_logged_in_hash=secret', 'wp_woocommerce_session_hash=session'):
-            self.run_policy('basic',[http.origin('/page','private')],
-                [http.get('/page','private',['Cookie: '+cookie],cache='PASS')],
-                config={'cookie_policies':choices('shared',cookie.split('=')[0])})
+    def test_login_and_cart_obey_each_explicit_cookie_action(self):
+        for profile in ('basic','ultracache'):
+            for name in ('wordpress_logged_in_hash','wp_woocommerce_session_hash'):
+                for action in ('shared','variant','private'):
+                    with self.subTest(profile=profile,cookie=name,action=action):
+                        bodies=['first'] if action=='shared' else ['first','second']
+                        self.run_policy(profile,[http.origin('/page',body) for body in bodies],
+                            [http.get('/page','first',['Cookie: '+name+'=one'],cache='PASS' if action=='private' else 'MISS'),
+                             http.get('/page','first' if action=='shared' else 'second',['Cookie: '+name+'=two'],
+                                      cache={'shared':'HIT','variant':'MISS','private':'PASS'}[action])],
+                            config={'cookie_policies':choices(action,name)})
 
 
 if __name__ == '__main__': unittest.main()

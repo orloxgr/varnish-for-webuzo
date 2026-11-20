@@ -24,12 +24,14 @@ import connections
 import base64
 import hashlib
 import io
+import native_test_accounts
 
 def site():return dict(id='a'*32,domain='example.test',names=['example.test','www.example.test'],enabled=True,error='',token='b'*64,bypass=[])
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Disposable Linux/root tests')
 class Boundaries(unittest.TestCase):
     def setUp(self):
+        native_test_accounts.install(self)
         self.temp=tempfile.TemporaryDirectory(dir='/var/lib',prefix='wvw-tests-');self.base=Path(self.temp.name)
         self.root=self.base/'state';self.root.mkdir();self.config=self.base/'config';self.config.mkdir()
         self.custom=self.base/'native';self.custom.mkdir()
