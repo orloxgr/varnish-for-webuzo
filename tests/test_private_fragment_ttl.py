@@ -30,6 +30,49 @@ def exchange(get,method,path,key,token,extra=None):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class PrivateFragmentTTL(unittest.TestCase):
+    def test_private_object_evicted_after_lookup_uses_retained_hit_body_without_rendering_again(self):
+        key=hashlib.sha256(b'fixture-authorized-stable-owner-and-state').hexdigest()
+        renders=0;lookups=[];origin_calls=[];evict=False;prepares=0
+        def origin(path,headers):
+            nonlocal renders,prepares
+            phase=headers.get('X-UltraCache-Delivery-Phase');origin_calls.append((path,phase))
+            if phase=='prepare':
+                prepares+=1;token=headers['X-UltraCache-Delivery-Authorization']
+                status,fields,body=exchange(get,'UC-PRIVATE-GET',PRIVATE,key,token)
+                lookups.append(status)
+                if status==200:
+                    self.assertEqual(cookies(fields),[])
+                    ttl=int(dict(fields)['X-UltraCache-Private-Remaining'])
+                    if evict:
+                        # The actual native object disappears AFTER lookup
+                        # returns but BEFORE ESI asks for its private body.
+                        self.assertEqual(exchange(get,'PURGE',PRIVATE,key,token)[0],200)
+                else:
+                    self.assertEqual(status,404)
+                    renders+=1;body='actual-render-'+str(renders);ttl=60
+                def claim(result):
+                    result['renderedFragments'][0]['html']=body
+                    result['renderedFragments'][0]['cache']=dict(key=key,ttl=ttl,tags='widget-race')
+                return envelope(headers,'request',claim),[('Cache-Control','private, no-store'),
+                    ('Set-Cookie','issuer=current-'+str(prepares)+'; Path=/; HttpOnly')]
+            return (BODY,META) if path==PARENT else ('cold-private',[('Cache-Control','private, no-store')])
+        with proxy('ultracache',origin) as get:
+            get(PARENT);origin_calls.clear()
+            self.assertEqual(get(PARENT)[0],200)
+            self.assertEqual(renders,1)
+            evict=True
+            status,fields,body=get(PARENT)
+            self.assertEqual(status,200)
+            self.assertEqual(body,'<html>parent[actual-render-1][actual-render-1][nonce:request]</html>')
+            self.assertEqual(cookies(fields),['issuer=current-2; Path=/; HttpOnly'])
+            self.assertEqual(lookups,[404,200])
+            self.assertEqual(renders,1,'Eviction must refill the retained HIT bytes, never rerun the renderer')
+            self.assertEqual(origin_calls,[(PARENT,'prepare'),(PARENT,'prepare')])
+            evict=False
+            self.assertEqual(get(PARENT)[0],200)
+            self.assertEqual(lookups[-1],200)
+            self.assertEqual(renders,1)
+
     def test_declaration_uses_existing_probe_and_owned_prepare_only(self):
         marker='X-UltraCache-Delivery-Private-Cache-Version'
         probe='/index.php?ultracache_esi_probe_private_fragment=signed-probe&esi_scope=private'

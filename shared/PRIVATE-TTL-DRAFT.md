@@ -160,3 +160,13 @@ wire and spoof/echo stripping against a mock origin. Basic's fixture checks
 ordinary requests stay silent and that its valid site token cannot enter
 private lookup. These new negotiation cases need native execution for this
 checkpoint, separate from the earlier 12-case lookup/fill evidence.
+
+### Native object eviction after a successful private lookup
+
+A separate fixture purges the actual native private object after lookup HIT
+returns but before the parent prepare JSON completes. The ESI child must use
+the request-owned retained HIT bytes to refill that same authorized namespace,
+without another renderer call or origin child fetch, with the current prepare's
+authentic cookie exactly once. A subsequent lookup must HIT the refill with
+its remaining budget. This fault case is not implied by ordinary HIT/expiry
+success; its new native execution remains pending for this checkpoint.
