@@ -384,3 +384,33 @@ Normalized LF common artifacts:
 
 - defaults.json: `c09c05d668ceb096797c77aea1239e4c74570baaa3f515dd90182cb610be4448`
 - catalogue.json: `2ff0592056aaad278d6304cb48aa95d5f9babcf7b1d088173723bed0ae66ab1b`
+
+## Candidate distribution and normal upgrade apply
+
+Prepared package versions are Hestia `0.23.0` and Webuzo `0.12.0`. They remain
+unpublished candidates until final coordinated distribution acceptance. The
+qualified `.10` native C/VCL/module-builder payload is unchanged by packaging;
+no prebuilt engine/module binary is distributed.
+
+Two maintained Linux/root tests exercise the existing normal apply path:
+
+- Hestia `tests/test_cookie_rules.py`,
+  `CookieRules.test_bundle_9_to_10_apply_invalidates_only_basic_and_preserves_manual_choices`,
+  source `f49316b5afdc5c65adcf772530f722c7932f5dc3`: one method passed, no skips,
+  errors or failures.
+- Webuzo `tests/test_cookie_admin_webuzo.py`,
+  `PolicyTransactions.test_bundle_9_to_10_apply_invalidates_only_basic_and_preserves_manual_choices`,
+  source `3b9696fdaa50743259fe404a9479313260f16593`: one method passed, no skips,
+  errors or failures.
+
+The shared previous-state fixture records actual `.9` fingerprints from the
+frozen common defaults artifact, rather than substituting an old renderer.
+Ten sites cover Basic and UC with default, saved Shared/Variant/Private and a
+partial reset. The normal apply uses current real state persistence/rendering
+and profile fingerprints; only external management, routing and purge endpoints
+are mocked inside owned temporary directories. Assertions request invalidation
+for the five Basic IDs only, preserve all saved central/site choices and reset
+values, keep the UC execution identity unchanged, and request no invalidation or
+activation on repeat apply. These tests verify adapter upgrade planning and
+persistence; real native Varnish HTTP, provider/browser and clean WordPress ZIP
+acceptance are separate evidence, not implied by endpoint mocks.
