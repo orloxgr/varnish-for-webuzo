@@ -604,7 +604,9 @@ Basic remains best effort, without ESI or this UC metadata rule.
 cookie visitor, mixed response cookies, exact attributes, literal personal
 body/no cross-visitor replay, aggressive off/on, remaining real public ESI,
 no second prepare, and Basic's unchanged public-cache behavior. Caller and
-origin copies of the derived scratch marker cannot enable the guard. These
-new native cases are pending execution at this checkpoint. Actual cold WP
-collector/visitor-copy separation and genuine renderer-only issuer cookies
-remain root's combined application/browser/storage acceptance.
+origin copies of the derived scratch marker cannot enable the guard. Root
+qualified exact Hestia `34934bb`: all 16 native methods (including these two
+and their four UC subcases) passed, zero skips, 87.424 seconds, using the
+byte-identical `f09eaad` native DSO documented in PRIVATE-TTL-DRAFT.md. Actual
+cold WP collector/visitor-copy separation and genuine renderer-only issuer
+cookies remain root's combined application/browser/storage acceptance.

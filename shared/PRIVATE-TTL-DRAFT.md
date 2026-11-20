@@ -1,12 +1,11 @@
 # Scoped private TTL: isolated native candidate (#955)
 
-Status: isolated native lookup/fill and feature negotiation have actual native
-mock qualification at the exact checkpoints below. An authenticated application
-claim producer is implemented by the UltraCache owner; combined real WP/Woo
-identity/state/lifecycle and independent renderer/storage audits remain the
-acceptance boundary. Existing published private delivery remains TTL 0. This
-document does not claim full-goal runtime equivalence or introduce new controls,
-cookies, sessions, credentials or classification rules.
+Status: native lookup/fill/negotiation and selected actual WP/Woo claim flows
+have exact qualification evidence below. Broader first-cold visitor-copy and
+provider lifecycle completion remain separate goal requirements. This isolated
+source is not a release or a universal claim-provider compatibility claim. It
+introduces no new controls, cookies, sessions or classification authority.
+
 
 ## Evidence and boundary
 
@@ -180,3 +179,41 @@ plus one selected continuation case: five passed, zero skips, 18.717 seconds.
 The private fixture counts actual mock renderer function calls independently
 of cached HTML. Real WP claims require independent application-side execution
 audit too; a counter embedded in cached HTML cannot prove renderer skipping.
+
+## Combined actual application checkpoint reported by the Lab owner
+
+Root qualified exact Hestia `34934bb` on installed Varnish 9.1/VRT 22.2:
+all 16 then-current native tests executed, zero skips, 87.424 seconds. This
+comprises ten continuation, four scoped private TTL and two personal-copy
+transport test methods (including their aggressive/public-ESI subcases). The
+C/build inputs and DSO remain byte-identical to the qualified `f09eaad`
+SHA256 above. The source owner did not operate the Lab in parallel.
+
+Actual UltraCache `1c03c7f8` with that native private wire passed a 31-visit
+owned browser/application actor with independent append-only renderer audit
+and current-owner read-only uncached REST counters. Those counters, rather
+than values embedded in cached HTML, verify actual lookup-before-render reuse.
+The accepted cases include actual WP owners A/B, actual Woo sessions A/B, real
+TTL expiry, targeted fragment/context URL purge with sibling preservation,
+owner A state mutation preserving B, after-render issuers/state mutations
+remaining uncached, eviction after lookup without rerender, new/invalid Woo
+session first request staying TTL 0 with provider-owned cookie replacement,
+cart add/remove, logout/invalidated auth, renderer error retry and recovery.
+URL purge deliberately invalidates all partitions of that fragment/context;
+per-owner state generation makes only that owner's old partition unreachable.
+No new owner-purge control or schema is claimed.
+
+The root audit observed 687 authenticated lookup requests: 214 native HIT and
+473 local 404, with no lookup-origin fetch or stored-cookie replay. Its three
+owned public publications contained none of the observed personal renderer
+bodies, 317 observed opaque private keys, 58 observed cookie values or
+ephemeral delivery headers. This is a bounded fixture/storage audit, not a
+proof about all future provider output. Independent installed-source audit
+matched 3492 files. Broad first-cold application rendering/collector separation
+was not implemented by this checkpoint and is not closed by private TTL.
+
+Webuzo shares the same native and policy bytes, but adapter/runtime evidence
+remains separate: do not present Hestia fixture execution as actual Webuzo
+panel/CLI qualification. Its disposable native harness now accepts the shared
+fixtures' site_settings argument; the Webuzo generated-policy native run is
+still an independent acceptance item.
