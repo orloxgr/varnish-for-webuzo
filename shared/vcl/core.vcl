@@ -5,6 +5,7 @@ sub scp_init {
     unset req.http.X-SCP-Cookie-Handoff;
     unset req.http.X-UltraCache-Delivery-Parent-Source;
     unset req.http.X-SCP-Delivery-Public-Snapshot;
+    unset req.http.X-SCP-Personal-Delivery;
     unset req.http.X-SCP-Private-Key;
     unset req.http.X-SCP-Private-Lookup;
     unset req.http.X-SCP-Site;
@@ -101,6 +102,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-UltraCache-Delivery-Parent-Source;
     unset bereq.http.X-SCP-Delivery-Public-Snapshot;
+    unset bereq.http.X-SCP-Personal-Delivery;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-UltraCache-Delivery-Manifest;
     unset bereq.http.X-UltraCache-Delivery-Recovery-Version;
@@ -132,6 +134,7 @@ sub scp_backend_fetch {
 sub scp_backend_response {
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_private_backend_response; }
     unset beresp.http.X-SCP-Delivery-Public-Snapshot;
+    unset beresp.http.X-SCP-Personal-Delivery;
     if (bereq.http.X-SCP-Profile == "ultracache") {
         # Only the application's early publication reader may declare this:
         # no WP/provider ran and no issuer fields can be discarded/repeated.
@@ -166,6 +169,7 @@ sub scp_backend_response {
             set beresp.http.Vary = beresp.http.Vary + ", X-Forwarded-Proto";
         }
     }
+    if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_personal_response; }
     call scp_aggressive_backend_response;
     call scp_shared_response_cookies;
     call scp_response_privacy;
@@ -177,6 +181,7 @@ sub scp_backend_response {
 }
 sub scp_deliver {
     call scp_private_deliver;
+    unset resp.http.X-SCP-Personal-Delivery;
     unset resp.http.X-UltraCache-Delivery-Authorization;
     unset resp.http.X-UltraCache-Delivery-Manifest;
     unset resp.http.X-UltraCache-Delivery-Recovery;

@@ -571,3 +571,40 @@ cookies and prepared private output, no cold child/provider replay, and that
 a browser spoof or origin Set-Cookie prevents first-MISS preparation. These
 new cases require native execution; prior tenets of HIT/recovery acceptance
 do not automatically qualify them. Basic stays outside this path.
+
+### First-cold personal visitor copy: pre-aggressive native invariant
+
+The application may retain finalized PUBLIC bytes for its existing collector
+and publication, then render distinct private fragments once in the same real
+WP/provider context and inline them only into the visitor delivery copy. The
+collector must never receive that visitor copy. This native guard is not proof
+of that application-side split or of first-cold provider lifecycle completion.
+
+Existing response metadata identifies that actual personal copy: exact
+`X-UltraCache-Cacheable: 0`, a positive canonical
+`X-UltraCache-ESI-Private-Count`, and no
+`X-UltraCache-ESI-Shared-Parent: 1` approval. Only for the UltraCache profile,
+before aggressive override or response-cookie detachment, native VCL marks
+this response uncacheable and forces private/no-store. Its derived internal
+marker prevents aggressive storage override; the normal aggressive scratch
+cleanup still runs. All original repeated Set-Cookie fields stay attached,
+even if every name is Shared in Cookie Database. This is actual body provenance
+and does not change cookie classification, add a cookie list or add a control.
+
+The guard preserves an existing `ESI/1.0` Surrogate-Control token for remaining
+PUBLIC includes while adding no-store. Thus a fully composed personal response
+is delivered literally, or public includes are composed by the existing ESI
+path without caching the personal parent. Uncacheable parent delivery cannot
+start another pre-header prepare, so no second provider bootstrap is added.
+The application omits Parent-Source proof and Shared-Parent approval on this
+fresh personal copy; approved stored public bytes keep their existing path.
+Basic remains best effort, without ESI or this UC metadata rule.
+
+`test_cold_personal_delivery.py` covers anonymous first response, another Shared
+cookie visitor, mixed response cookies, exact attributes, literal personal
+body/no cross-visitor replay, aggressive off/on, remaining real public ESI,
+no second prepare, and Basic's unchanged public-cache behavior. Caller and
+origin copies of the derived scratch marker cannot enable the guard. These
+new native cases are pending execution at this checkpoint. Actual cold WP
+collector/visitor-copy separation and genuine renderer-only issuer cookies
+remain root's combined application/browser/storage acceptance.

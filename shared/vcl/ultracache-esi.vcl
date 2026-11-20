@@ -188,6 +188,24 @@ sub scp_delivery_authorization {
     # This sub is called only after the native task association proves prepare.
     @@DELIVERY_AUTHORIZATION@@
 }
+sub scp_ultracache_personal_response {
+    # Existing metadata identifies the visitor copy, never the public collector
+    # bytes. This is actual body provenance, not a cookie classification rule.
+    if (beresp.http.X-UltraCache-Cacheable == "0" &&
+        beresp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" &&
+        beresp.http.X-UltraCache-ESI-Shared-Parent != "1") {
+        set beresp.http.X-SCP-Personal-Delivery = "1";
+        unset beresp.http.X-SCP-Delivery-Public-Snapshot;
+        set beresp.http.Cache-Control = "private, no-store";
+        # Preserve an existing ESI/1.0 token for remaining PUBLIC includes.
+        if (!beresp.http.Surrogate-Control) {
+            set beresp.http.Surrogate-Control = "no-store";
+        } else if (beresp.http.Surrogate-Control !~ "(?i)(^|[[:space:],])no-store([[:space:],=]|$)") {
+            set beresp.http.Surrogate-Control = beresp.http.Surrogate-Control + ", no-store";
+        }
+        call scp_mark_uncacheable;
+    }
+}
 sub scp_ultracache_backend_response {
     if (cookie_handoff.delivery_capture()) {
         # A private transient fetch object is discarded at the prepare restart.

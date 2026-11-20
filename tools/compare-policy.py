@@ -27,7 +27,7 @@ def main():
                  'shared/CONTRACT.md','shared/ESI-DELIVERY-DRAFT.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
-                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py',
+                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py',
                  'tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)
