@@ -244,7 +244,7 @@
     ]
   },
   {
-    "name": "login and cart session bodies remain per visitor",
+    "name": "Explicit Private login and cart session choices keep bodies per visitor",
     "origin": [
       "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
       "accept\nrxreq\nexpect req.url == \"/private\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}",
@@ -260,7 +260,32 @@
       "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wp_woocommerce_session_demo=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
       "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: woocommerce_cart_hash=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>",
       "txreq -req GET -url \"/private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: woocommerce_cart_hash=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>"
-    ]
+    ],
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:0",
+            "match": {
+              "kind": "prefix",
+              "value": "wp_woocommerce_session_"
+            },
+            "description": "",
+            "action": "private"
+          },
+          {
+            "id": "custom:1",
+            "match": {
+              "kind": "exact",
+              "value": "woocommerce_cart_hash"
+            },
+            "description": "",
+            "action": "private"
+          }
+        ]
+      }
+    }
   },
   {
     "name": "Set-Cookie tracking responses are not replayed to another visitor",
@@ -295,12 +320,12 @@
     "name": "shared ESI parent still fetches separate personal fragments",
     "origin": [
       "accept\nrxreq\nexpect req.url == \"/parent\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -hdr \"X-UltraCache-ESI-Private-Count: 1\" -hdr \"Vary: Cookie\" -body {<html><esi:include src=\"/?ultracache_esi=cart&amp;esi_scope=private\"/></html>}",
-      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=A; woocommerce_items_in_cart=1; wp_woocommerce_session_demo=A\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
-      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=B; woocommerce_items_in_cart=1; wp_woocommerce_session_demo=B\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=A; wp_woocommerce_session_demo=A; woocommerce_items_in_cart=1\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=cart&esi_scope=private\"\nexpect req.http.Cookie == \"esi_session=B; wp_woocommerce_session_demo=B; woocommerce_items_in_cart=1\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=1800\"  -body {B}"
     ],
     "requests": [
-      "txreq -req GET -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A; wp_woocommerce_session_demo=A; woocommerce_items_in_cart=1; ultracache_esi_optin=1; _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>A</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"\nexpect resp.http.X-Cache-Cookie-Role == \"private-fragment\"",
-      "txreq -req GET -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B; wp_woocommerce_session_demo=B; woocommerce_items_in_cart=1; ultracache_esi_optin=1; _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>B</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"\nexpect resp.http.X-Cache-Cookie-Role == \"private-fragment\""
+      "txreq -req GET -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A; wp_woocommerce_session_demo=A; woocommerce_items_in_cart=1; ultracache_esi_optin=1; _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>A</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"\nexpect resp.http.X-Cache-Cookie-Action == \"shared\"",
+      "txreq -req GET -url \"/parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B; wp_woocommerce_session_demo=B; woocommerce_items_in_cart=1; ultracache_esi_optin=1; _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>B</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-SCP-Result == <undef>\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"\nexpect resp.http.X-Cache-Cookie-Action == \"shared\""
     ],
     "profiles": [
       "ultracache"
@@ -1131,6 +1156,172 @@
       "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"",
       "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr {Cookie: PrestaShop-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=encrypted-customer-and-cart}\nrxresp\nexpect resp.status == 200\nexpect resp.body == {private-B}\nexpect resp.http.X-Cache == \"PASS\"",
       "txreq -url \"/product\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Saved Shared overrides former mandatory auth-cookie roles and response cookies never replay",
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:wire0",
+            "match": {
+              "kind": "prefix",
+              "value": "wordpress_logged_in_"
+            },
+            "description": "",
+            "action": "shared"
+          }
+        ]
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/choice\"\nexpect req.http.Cookie == \"wordpress_logged_in_fixture=A\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Vary: Cookie\" -hdr \"Set-Cookie: wordpress_logged_in_fixture=original; Path=/; HttpOnly\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wordpress_logged_in_fixture=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Set-Cookie == \"wordpress_logged_in_fixture=original; Path=/; HttpOnly\"",
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: wordpress_logged_in_fixture=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.X-Cache-Cookie-Action == \"shared\""
+    ]
+  },
+  {
+    "name": "Saved Private cannot reuse a warm public representation",
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:wire0",
+            "match": {
+              "kind": "exact",
+              "value": "visitor_state"
+            },
+            "description": "",
+            "action": "private"
+          }
+        ]
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/choice\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {public}",
+      "accept\nrxreq\nexpect req.url == \"/choice\"\nexpect req.http.Cookie == \"visitor_state=A\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {personal}"
+    ],
+    "requests": [
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: visitor_state=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {personal}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.X-Cache-Cookie-Action == \"private\"",
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ \nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Saved tracker Variant selects A B A despite former tracking-ignore role",
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:wire0",
+            "match": {
+              "kind": "exact",
+              "value": "_ga"
+            },
+            "description": "",
+            "action": "variant"
+          }
+        ]
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/choice\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Vary: Cookie\" -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/choice\"\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Vary: Cookie\" -body {B}"
+    ],
+    "requests": [
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.X-Cache-Cookie-Action == \"variant\"",
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=B\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.X-Cache-Cookie-Action == \"variant\"",
+      "txreq -url \"/choice\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=A\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Cache-Cookie-Action == \"variant\""
+    ]
+  },
+  {
+    "name": "ESI transport revision 2 isolates current auth and Recently Viewed from public children",
+    "profiles": [
+      "ultracache"
+    ],
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:wire0",
+            "match": {
+              "kind": "prefix",
+              "value": "wordpress_logged_in_"
+            },
+            "description": "",
+            "action": "shared"
+          },
+          {
+            "id": "custom:wire1",
+            "match": {
+              "kind": "exact",
+              "value": "woocommerce_recently_viewed"
+            },
+            "description": "",
+            "action": "shared"
+          }
+        ]
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/transport\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == <undef>\nexpect req.http.X-ESI-Private-Request == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -hdr \"X-UltraCache-ESI-Private-Count: 1\" -body {<html><esi:include src=\"/?ultracache_esi=transport-fixture&amp;esi_scope=private\"/><esi:include src=\"/?ultracache_esi=public-fixture\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=transport-fixture&esi_scope=private\"\nexpect req.http.Cookie == \"wordpress_logged_in_shop=A; woocommerce_recently_viewed=A%7C10\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == \"2\"\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-ESI-Original-Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=public-fixture\"\nexpect req.http.Cookie == <undef>\nexpect req.http.X-UltraCache-ESI-Transport-Version == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {public}",
+      "accept\nrxreq\nexpect req.url == \"/?ultracache_esi=transport-fixture&esi_scope=private\"\nexpect req.http.Cookie == \"wordpress_logged_in_shop=B; woocommerce_recently_viewed=B%7C10\"\nexpect req.http.X-UltraCache-ESI-Transport-Version == \"2\"\nexpect req.http.X-ESI-Private-Request == \"1\"\nexpect req.http.X-ESI-Original-Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\"  -body {B}"
+    ],
+    "requests": [
+      "txreq -url \"/transport\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=tracking; wordpress_logged_in_shop=A; woocommerce_recently_viewed=A%7C10; unrelated=private; ultracache_esi_optin=1\" -hdr \"X-UltraCache-ESI-Transport-Version: 99\" -hdr \"X-ESI-Private-Request: 1\" -hdr \"X-ESI-Original-Cookie: wordpress_logged_in_shop=forged\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>Apublic</html>}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/transport\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: _ga=tracking; wordpress_logged_in_shop=B; woocommerce_recently_viewed=B%7C10; unrelated=private; ultracache_esi_optin=1\" -hdr \"X-UltraCache-ESI-Transport-Version: 99\" -hdr \"X-ESI-Private-Request: 1\" -hdr \"X-ESI-Original-Cookie: wordpress_logged_in_shop=forged\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>Bpublic</html>}\nexpect resp.http.X-Cache == \"HIT\""
+    ]
+  },
+  {
+    "name": "Explicit Private protocol marker cannot disappear before classification",
+    "profiles": [
+      "ultracache"
+    ],
+    "site_settings": {
+      "cookie_policies": {
+        "schemaVersion": 1,
+        "rules": [
+          {
+            "id": "custom:protocol",
+            "match": {
+              "kind": "exact",
+              "value": "esi_session"
+            },
+            "description": "",
+            "action": "private"
+          }
+        ]
+      }
+    },
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/marker\"\ntxresp -hdr \"Connection: close\" -hdr \"Cache-Control: public, max-age=120\" -body {private-A}",
+      "accept\nrxreq\nexpect req.url == \"/marker\"\ntxresp -hdr \"Connection: close\" -hdr \"Cache-Control: public, max-age=120\" -body {private-B}"
+    ],
+    "requests": [
+      "txreq -url \"/marker\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A\"\nrxresp\nexpect resp.body == {private-A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.X-Cache-Cookie-Action == \"private\"",
+      "txreq -url \"/marker\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B\"\nrxresp\nexpect resp.body == {private-B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.X-Cache-Cookie-Action == \"private\""
+    ]
+  },
+  {
+    "name": "Unclassified ESI protocol markers do not fragment an ordinary public parent",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/marker\"\nexpect req.http.Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Vary: Cookie\" -body {public}"
+    ],
+    "requests": [
+      "txreq -url \"/marker\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=A\"\nrxresp\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"",
+      "txreq -url \"/marker\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: esi_session=B\"\nrxresp\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\""
     ]
   }
 ]

@@ -5,82 +5,23 @@ sub scp_ultracache_recv {
 if (req.esi_level == 0) {
     # Capture the request-side UltraCache opt-in before removing its
     # marker cookie from the request forwarded to the origin.
-    if (req.http.Cookie ~ "(?i)(^|;[ ]*)ultracache_esi_optin=1(?:;|$)") {
+    if (req.http.Cookie ~ "(^|;[[:blank:]]*)ultracache_esi_optin=1(?:;|$)") {
         set req.http.X-UltraCache-ESI-Opt-In = "1";
+        # Explicit composition opt-in, independent of cookie classification.
+        set req.http.X-UltraCache-ESI-Candidate = "1";
     }
 
-    # Build the private-fragment carrier from allowlisted cookies only.
-    # Never copy the complete browser Cookie header into an ESI subrequest.
-    if (req.http.Cookie ~ "(?i)(^|;[ ]*)esi_session=") {
-        set req.http.X-ESI-Original-Cookie = regsub(
-            req.http.Cookie,
-            "(?i)^.*?(?:^|;[ ]*)(esi_session=[^;]*).*$",
-            "\1"
-        );
-    }
+    # Transport candidates only: these names never grant Shared/Variant/Private.
+    # The signed renderer definition selects its own subset at the endpoint;
+    # WordPress validates the actual logged-in cookie, never a cached user ID.
+    # Preserve raw values and order. Public children still receive no cookies.
+    set req.http.X-ESI-Original-Cookie = regsuball(req.http.Cookie,
+        {"(^|;)(?![[:blank:]]*(?:esi_session|woocommerce_items_in_cart|woocommerce_cart_hash|wp_woocommerce_session_[^=;[:blank:]]+|woocommerce_recently_viewed|wordpress_logged_in_[^=;[:blank:]]+)=)[^;]*"}, "");
+    set req.http.X-ESI-Original-Cookie = regsuball(req.http.X-ESI-Original-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
+    set req.http.X-ESI-Original-Cookie = regsuball(req.http.X-ESI-Original-Cookie, ";[[:blank:]]*", "; ");
+    if (req.http.X-ESI-Original-Cookie == "") { unset req.http.X-ESI-Original-Cookie; }
 
-    if (req.http.Cookie ~ "(?i)(^|;[ ]*)woocommerce_items_in_cart=") {
-        if (req.http.X-ESI-Original-Cookie) {
-            set req.http.X-ESI-Original-Cookie = req.http.X-ESI-Original-Cookie + "; " + regsub(
-                req.http.Cookie,
-                "(?i)^.*?(?:^|;[ ]*)(woocommerce_items_in_cart=[^;]*).*$",
-                "\1"
-            );
-        } else {
-            set req.http.X-ESI-Original-Cookie = regsub(
-                req.http.Cookie,
-                "(?i)^.*?(?:^|;[ ]*)(woocommerce_items_in_cart=[^;]*).*$",
-                "\1"
-            );
-        }
-    }
 
-    if (req.http.Cookie ~ "(?i)(^|;[ ]*)woocommerce_cart_hash=") {
-        if (req.http.X-ESI-Original-Cookie) {
-            set req.http.X-ESI-Original-Cookie = req.http.X-ESI-Original-Cookie + "; " + regsub(
-                req.http.Cookie,
-                "(?i)^.*?(?:^|;[ ]*)(woocommerce_cart_hash=[^;]*).*$",
-                "\1"
-            );
-        } else {
-            set req.http.X-ESI-Original-Cookie = regsub(
-                req.http.Cookie,
-                "(?i)^.*?(?:^|;[ ]*)(woocommerce_cart_hash=[^;]*).*$",
-                "\1"
-            );
-        }
-    }
-
-    if (req.http.Cookie ~ "(?i)(^|;[ ]*)wp_woocommerce_session_[^=; ]+=") {
-        if (req.http.X-ESI-Original-Cookie) {
-            set req.http.X-ESI-Original-Cookie = req.http.X-ESI-Original-Cookie + "; " + regsub(
-                req.http.Cookie,
-                "(?i)^.*?(?:^|;[ ]*)((?:wp_woocommerce_session_[^=; ]+)=[^;]*).*$",
-                "\1"
-            );
-        } else {
-            set req.http.X-ESI-Original-Cookie = regsub(
-                req.http.Cookie,
-                "(?i)^.*?(?:^|;[ ]*)((?:wp_woocommerce_session_[^=; ]+)=[^;]*).*$",
-                "\1"
-            );
-        }
-    }
-
-    # Remove UltraCache-only marker cookies from the origin request.
-    if (req.http.Cookie ~ "(?i)(^|;[ ]*)(esi_session|ultracache_esi_optin)=") {
-        set req.http.Cookie = regsuball(
-            req.http.Cookie,
-            "(?i)(^|;[ ]*)(esi_session|ultracache_esi_optin)=[^;]*",
-            ""
-        );
-        set req.http.Cookie = regsuball(req.http.Cookie, "^[; ]+|[; ]+$", "");
-        set req.http.Cookie = regsuball(req.http.Cookie, ";[ ]*;", ";");
-
-        if (req.http.Cookie == "") {
-            unset req.http.Cookie;
-        }
-    }
 } else {
     if (
         req.http.X-SCP-Query ~ "(?i)(^|&)esi_scope=private(?:&|$)" &&
@@ -121,13 +62,11 @@ if (req.http.Accept-Encoding) {
 
 }
 
-# An explicitly opted-in cart/session visitor may reuse a warmed public async
-# parent approved by the origin. Its private cart is fetched separately. A
-# private cold miss still requires the existing ESI backend handshake.
+# An explicitly opted-in composition request needs an origin-approved parent.
+# This is the ESI application contract, not another cookie classification list.
 sub scp_ultracache_hit {
-# WooCommerce ESI candidates may reuse only objects explicitly approved
-# by UltraCache. Anonymous/non-approved objects are bypassed so a normal
-# WooCommerce site can never receive an empty shared cart parent.
+# UltraCache composition candidates may reuse only origin-approved parents.
+# Saved Private cookie choices have already passed before this lookup.
 if (
     req.http.X-UltraCache-ESI-Candidate == "1" &&
     obj.http.X-UltraCache-ESI-Shared-Parent != "1" &&
@@ -140,6 +79,24 @@ if (
 sub scp_ultracache_backend_fetch {
 # Advertise generic ESI capability to any compatible application.
 set bereq.http.Surrogate-Capability = "varnish=ESI/1.0";
+unset bereq.http.X-UltraCache-ESI-Transport-Version;
+if (bereq.http.X-ESI-Private-Request == "1") {
+    # Set only by this carrier, never inherited from the browser or parent.
+    # Revision 2 does not advertise private TTL or preflight cookie issuance.
+    set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
+}
+# Protocol markers are removed only after cookie policy has run. A saved
+# Private/Variant choice on those names must not disappear before resolution.
+# The existing signed raw-source collector retains its original cookie wire.
+if (bereq.http.X-ESI-Private-Request != "1" &&
+    bereq.http.X-SCP-Reason != "ultracache-private-session-source") {
+    set bereq.http.Cookie = regsuball(bereq.http.Cookie,
+        "(^|;[[:blank:]]*)(esi_session|ultracache_esi_optin)=[^;]*", "");
+    set bereq.http.Cookie = regsuball(bereq.http.Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
+    set bereq.http.Cookie = regsuball(bereq.http.Cookie, ";[[:blank:]]*", "; ");
+    if (bereq.http.Cookie == "") { unset bereq.http.Cookie; }
+}
+
 
 # Never expose internal scratch/cookie-carrier headers to the origin.
 # X-UltraCache-ESI-Candidate intentionally remains: the plugin uses it

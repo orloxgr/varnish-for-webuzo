@@ -169,14 +169,14 @@ class NativeScope(unittest.TestCase):
         self.assertEqual(inherited['effective_action'],'private')
         self.assertEqual(inherited['reason'],original['reason'])
 
-    def test_basic_cart_shared_choice_explains_the_reviewed_private_rule(self):
+    def test_basic_cart_shared_choice_is_not_overridden_by_catalogue_role(self):
         self.request('cookie_policies_save',id=self.first['id'],settings=choices('shared','woocommerce_cart_hash'))
         before=engine.SETTINGS.read_bytes()
         view=self.request()['cookie_policies']
         row=next(row for row in view['rows'] if row['id']=='custom:campaign')
-        self.assertEqual((row['action'],row['effective_action']),('shared','private'))
-        self.assertIn('WooCommerce cart/session protection',row['core_precedence'])
-        self.assertIn('Basic passes',row['core_precedence'])
+        self.assertEqual((row['action'],row['effective_action']),('shared','shared'))
+        self.assertIn('independent of cookie classification',row['core_precedence'])
+        self.assertNotIn('Basic passes',row['core_precedence'])
         self.assertEqual(engine.SETTINGS.read_bytes(),before)
 
     def test_ultracache_and_central_cart_metadata_explain_the_application_contract(self):
@@ -185,19 +185,19 @@ class NativeScope(unittest.TestCase):
         for actor in ('account_a','root'):
             with self.subTest(actor=actor):
                 row=next(row for row in self.request(actor=actor)['cookie_policies']['rows'] if row['name']=='woocommerce_cart_hash')
-                self.assertEqual(row['effective_action'],'application-contract')
-                self.assertIn('approved ESI parent with private fragments',row['core_precedence'])
-                self.assertIn('without that application contract it also passes',row['core_precedence'])
+                self.assertEqual(row['effective_action'],'shared')
+                self.assertIn('independent of cookie classification',row['core_precedence'])
+                self.assertNotIn('takes precedence over the table choice',row['core_precedence'])
 
     def test_saved_cart_rename_reset_keeps_the_inherited_profile_explanation(self):
         identity=self.row_id('woocommerce_cart_hash')
         self.request('cookie_policies_save',id=self.first['id'],settings=choices('shared','campaign_id',identity=identity))
         row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']==identity)
         self.assertEqual(row['effective_action'],'shared')
-        self.assertEqual(row['reset_metadata']['effective_action'],'private')
-        self.assertEqual(row['inherited']['effective_action'],'private')
-        self.assertIn('WooCommerce cart/session protection',row['reset_metadata']['core_precedence'])
-        self.assertIn('Basic passes',row['inherited']['core_precedence'])
+        self.assertEqual(row['reset_metadata']['effective_action'],'shared')
+        self.assertEqual(row['inherited']['effective_action'],'shared')
+        self.assertIn('independent of cookie classification',row['reset_metadata']['core_precedence'])
+        self.assertNotIn('Basic passes',row['inherited']['core_precedence'])
 
     def test_ultracache_explicit_private_cart_passes_entire_request_and_reset_restores_esi_metadata(self):
         previous=engine.settings();previous['sites'][self.first['id']]['profile']='ultracache'
@@ -207,10 +207,10 @@ class NativeScope(unittest.TestCase):
         before=engine.SETTINGS.read_bytes()
         row=next(row for row in self.request()['cookie_policies']['rows'] if row['id']==identity)
         self.assertEqual((row['action'],row['effective_action']),('private','private'))
-        self.assertIn('passes the entire request',row['core_precedence'])
-        self.assertEqual(row['reset_metadata']['effective_action'],'application-contract')
-        self.assertEqual(row['inherited']['effective_action'],'application-contract')
-        self.assertIn('approved ESI parent',row['reset_metadata']['core_precedence'])
+        self.assertIn('independent of cookie classification',row['core_precedence'])
+        self.assertEqual(row['reset_metadata']['effective_action'],'shared')
+        self.assertEqual(row['inherited']['effective_action'],'shared')
+        self.assertIn('independent of cookie classification',row['reset_metadata']['core_precedence'])
         self.assertEqual(engine.SETTINGS.read_bytes(),before)
 
     def test_ultracache_cart_inherits_explicit_central_private_until_site_automatic_override(self):
@@ -220,10 +220,10 @@ class NativeScope(unittest.TestCase):
         inherited=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='custom:campaign')
         self.assertEqual(inherited['effective_action'],'private')
         self.assertEqual(inherited['reset_metadata']['effective_action'],'private')
-        self.assertIn('passes the entire request',inherited['core_precedence'])
+        self.assertIn('independent of cookie classification',inherited['core_precedence'])
         self.request('cookie_policies_save',id=self.first['id'],settings=choices('automatic','woocommerce_cart_hash'))
         override=next(row for row in self.request()['cookie_policies']['rows'] if row['id']=='custom:campaign')
-        self.assertEqual(override['effective_action'],'application-contract')
+        self.assertEqual(override['effective_action'],'shared')
         self.assertEqual(override['reset_metadata']['effective_action'],'private')
         self.assertEqual(override['inherited']['effective_action'],'private')
 

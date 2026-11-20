@@ -40,10 +40,10 @@ class ResponseCookies(unittest.TestCase):
                 self.assertEqual(len(calls),36)
                 self.assertTrue(all(key is None for _,key in calls))
 
-    def test_variant_private_unknown_and_core_private_responses_stay_private(self):
+    def test_variant_private_and_unknown_responses_stay_private(self):
         for profile in ('basic','ultracache'):
             for name,action in [('custom_cookie','variant'),('custom_cookie','private'),
-                                ('unknown_cookie',None),('wordpress_logged_in_demo','shared')]:
+                                ('unknown_cookie',None)]:
                 calls=[]
                 def origin(path,headers):
                     calls.append(path)

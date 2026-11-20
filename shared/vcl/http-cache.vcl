@@ -52,9 +52,6 @@ sub scp_common_recv {
         return (pass);
     }
     }
-    call scp_private_cookie_recv;
-    call scp_cart_cookie_recv;
-
     call scp_representation_recv;
     call scp_cookie_variation;
 }

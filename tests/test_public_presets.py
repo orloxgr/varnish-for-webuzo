@@ -3,6 +3,7 @@ import shutil
 import unittest
 import test_profiles as helpers
 import profiles
+from test_cookie_wire_contract import choices as cookie_choices
 from test_profiles import origin, get, control
 
 WARM = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
@@ -94,13 +95,14 @@ class PublicPresets(unittest.TestCase):
                                      origin('/private','private',cache='private, no-store')],
             [get('/public','public',cache='MISS'),'expect resp.http.X-Cache == "MISS"',
              get('/public','alice',['Cookie: wordpress_logged_in_demo=alice'],cache='PASS'),
-             'expect resp.http.X-Cache == "PASS"','expect resp.http.X-Webuzo-Varnish-Reason == "private-session-cookie"',
+             'expect resp.http.X-Cache == "PASS"','expect resp.http.X-Webuzo-Varnish-Reason == "cookie-policy-private"',
              get('/public','bob',['Cookie: wp_woocommerce_session_demo=bob'],cache='PASS'),
-             'expect resp.http.X-Webuzo-Varnish-Reason == "woocommerce-session-cookie"',
+             'expect resp.http.X-Webuzo-Varnish-Reason == "cookie-policy-private"',
              get('/private','private',cache='PASS'),'expect resp.http.X-Cache == "PASS"',
              'expect resp.http.X-Webuzo-Varnish-Reason == "origin-cache-policy"',
              get('/public','public',cache='HIT'),'expect resp.http.X-Cache == "HIT"',
-             'expect resp.http.X-Webuzo-Varnish-Reason == "cached-response"'])
+             'expect resp.http.X-Webuzo-Varnish-Reason == "cached-response"'],
+            config={'cookie_policies':cookie_choices(('prefix','wp_woocommerce_session_','private'))})
 
     def test_unusual_accept_parameters_do_not_collapse_different_codec_outputs(self):
         unusual='text/html,image/avif;foo=q=0,image/webp'

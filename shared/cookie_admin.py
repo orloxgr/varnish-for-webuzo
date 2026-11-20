@@ -117,14 +117,12 @@ def executable(central=None, site=None):
 def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_shared=()):
     """Same ordered choices for every real response cookie, without values.
 
-    Core authentication/cart contracts remain authoritative in both directions.
+    The same scoped resolver owns request and response cookie classification.
+    HTTP authentication, routes/actions and origin privacy are separate checks.
     Tab/newline cannot occur in normalized literal matches.
     """
     from aggressive import GENERIC_COOKIES
     generic = lambda row: row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES
-    mandatory = [dict(action='private', match=row['match'])
-                 for row in load_catalogue()['policies']
-                 if (row['consumers']['varnishPrivate'] or row['consumers']['varnishCart']) and not (aggressive_mode and generic(row))]
     resolved = active(central, site)
     if aggressive_mode:
         resolved = [dict(row,action='shared') if row['scope']=='central' and row['id'].startswith('bundled:') and generic(row) else row for row in resolved]
@@ -140,7 +138,7 @@ def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_
                 automatic.append(dict(action='shared',match=match))
         resolved=automatic+resolved
     return ''.join(row['action']+'\t'+row['match']['kind']+'\t'+row['match']['value']+'\n'
-                   for row in mandatory + resolved)
+                   for row in resolved)
 
 
 def _recognition_match(row):
@@ -266,12 +264,9 @@ def table(database, catalogue, central=None, site=None):
         reset_reviewed = _proposal(row['reset_match'],catalogue)
         if reset_reviewed:
             reset_metadata.update(reset_reviewed)
-        reset_metadata['core_precedence'] = 'Authentication, private sessions/cart contracts and origin private/no-store remain authoritative.'
+        reset_metadata['core_precedence'] = 'HTTP authentication, private routes/actions and origin private/no-store are independent of cookie classification.'
         reset_metadata['effective_action'] = row['inherited_action']
         reset_metadata['active_rule'] = row['inherited_active_rule']
-        if reset_reviewed and reset_reviewed['proposal']=='private':
-            reset_metadata['effective_action']='private'
-            reset_metadata['core_precedence']=reset_reviewed['reason']+' requires private handling even if a local choice says shared/variant.'
         row['reset_metadata']=reset_metadata
         row['reset_proposal']=reset_metadata['proposal']
         row['reset_provider']=reset_metadata['provider']
@@ -300,13 +295,8 @@ def table(database, catalogue, central=None, site=None):
         row['active_rule'] = bool(winner or rule_for(row['match']))
         row['default_version'] = bundle()[1]['version']
         row['policy_behavior'] = {'shared':'Shares public HTML across visitors. Preserves original provider cookies without storing or replaying their values.', 'variant':'Caches a separate public representation for each cookie value, including absence.', 'private':'Passes matching requests to the application without sharing their response.'}[row['action']]
-        row['core_precedence'] = 'Authentication, private sessions/cart contracts and origin private/no-store remain authoritative.'
-        baseline = _proposal(row['match'], catalogue)
-        if baseline and baseline['proposal'] == 'private':
-            row['core_precedence'] = baseline['reason'] + ' requires private handling even if a local choice says shared/variant.'
-            row['effective_action'] = 'private'
-        else:
-            row['effective_action'] = row['action'] if row['active_rule'] else 'existing-policy'
+        row['core_precedence'] = 'HTTP authentication, private routes/actions and origin private/no-store are independent of cookie classification.'
+        row['effective_action'] = row['action'] if row['active_rule'] else 'existing-policy'
     return sorted(rows, key=lambda row: (row['name'].casefold(), row['id']))
 
 
@@ -324,7 +314,7 @@ def _tidy(header):
 
 
 def compile_vcl(central=None, site=None, *, chain_defaults=False, automatic_shared=()):
-    """Body for scp_admin_cookie_rules, called after core privacy checks.
+    """Body for scp_admin_cookie_rules, after independent HTTP/route checks.
 
     Remove already handled pairs from a working copy so a lower-priority prefix
     cannot undo an exact/site decision. Keep the real origin Cookie unchanged.
@@ -354,7 +344,7 @@ def defaults_vcl():
 def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False):
     if not rules and not chain_defaults:
         return ''
-    code = ['set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Keep;'] if initialize else []
+    code = ['set req.http.X-SCP-Admin-Applied = "1";', 'set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Keep;'] if initialize else []
     # Public responses also need downstream variation when an absent cookie
     # would turn the same URL into a private request. Otherwise an outer cache
     # can answer before the request reaches our private guard.
@@ -419,6 +409,6 @@ def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False)
                      _tidy('X-SCP-Admin-Remaining'), '}'])
     if chain_defaults:code.append('call scp_bundled_cookie_rules;')
     if finish:
-        code.extend(['set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Keep + "; " + req.http.X-SCP-Admin-Remaining;',
+        code.extend(['call scp_protocol_cookie_remainder;', 'set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Keep + "; " + req.http.X-SCP-Admin-Remaining;',
                      _tidy('X-SCP-Admin-Filtered'), _tidy('X-SCP-Admin-Variant')])
     return '\n'.join(code)

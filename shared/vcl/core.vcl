@@ -7,6 +7,7 @@ sub scp_init {
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
     unset req.http.X-SCP-Admin-Remaining;
+    unset req.http.X-SCP-Admin-Applied;
     unset req.http.X-SCP-Admin-Keep;
     unset req.http.X-SCP-Admin-Matched;
     unset req.http.X-SCP-Admin-Filtered;
@@ -47,6 +48,7 @@ sub scp_init {
     unset req.http.X-ESI-Private-Request;
     unset req.http.X-ESI-Request-Level;
     unset req.http.X-ESI-Original-Cookie;
+    unset req.http.X-UltraCache-ESI-Transport-Version;
     unset req.http.X-UltraCache-ESI-Candidate;
     unset req.http.X-UltraCache-ESI-Cookie-Check;
     unset req.http.X-UltraCache-ESI-Opt-In;
@@ -80,6 +82,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
+    unset bereq.http.X-SCP-Admin-Applied;
     unset bereq.http.X-SCP-Admin-Keep;
     unset bereq.http.X-SCP-Admin-Matched;
     unset bereq.http.X-SCP-Admin-Filtered;
@@ -117,7 +120,7 @@ sub scp_backend_response {
     call scp_response_privacy;
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
     # Static and dynamic responses both retain functional Cookie variation.
-    # Only known analytics IDs are omitted from the internal Cookie key.
+    # Only resolved Shared pairs are omitted from the internal Cookie key.
     call scp_representation_response;
     call scp_response_variants;
 }

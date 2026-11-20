@@ -90,11 +90,11 @@
         if (base.active_rule === false) { value.effective_action=draft.action; value.policy_behavior=ACTIONS[draft.action]?.[1] || ''; }
         if (renamed) Object.assign(value, {provider:'', category:'Custom cookie', proposal:null, confidence:'', sources:[], htmlEffect:'site-dependent', valid_match:undefined,
           reason:'This name was edited in this scope. Save & Apply resolves its matching default and protection rules.',
-          policy_behavior:ACTIONS[draft.action]?.[1] || '', core_precedence:model.aggressive ? 'Recognized authentication, private routes and cart contracts take precedence. Aggressive mode can override generic origin privacy for public HTML.' : 'Login, private sessions, cart contracts and origin private/no-store remain authoritative.', effective_action:draft.action});
+          policy_behavior:ACTIONS[draft.action]?.[1] || '', core_precedence:model.aggressive ? 'HTTP authentication and private routes/actions are independent of cookie classification. Aggressive mode can override generic origin privacy for public HTML.' : 'HTTP authentication, private routes/actions and origin private/no-store are independent of cookie classification.', effective_action:draft.action});
         else if (draft.action !== base.action) {
           value.policy_behavior = ACTIONS[draft.action]?.[1] || '';
           if (draft.action === 'private') { value.effective_action = 'private'; value.core_precedence = 'The Private choice passes the entire request before optional shared HTML processing.'; }
-          else if (base.action === 'private') { value.effective_action = draft.action; value.core_precedence = 'Save & Apply resolves the matching login, session and cart protections for this choice.'; }
+          else if (base.action === 'private') { value.effective_action = draft.action; value.core_precedence = 'Save & Apply applies this cookie choice; independent HTTP authentication, private routes/actions and origin privacy still apply.'; }
         }
         return value;
       }

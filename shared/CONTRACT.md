@@ -19,8 +19,8 @@ document roots and static CMS/cookie descriptors during panel reconciliation.
 Aggressive mode is per-site and default OFF. It stores eligible public 200 HTML
 despite generic origin Cache-Control/Surrogate-Control/Pragma/Expires restrictions,
 using the selected TTL without a lower addon cap. Original browser policy is
-restored at delivery. Known private routes/actions, authentication/cart markers
-and explicit administrator Private/Variant choices retain precedence.
+restored at delivery. Known private routes/actions and HTTP authentication retain independent
+reasons; cookie names use the resolved administrator/default action.
 
 Public HIT performs only Varnish work. There is no CMS helper service, session
 database lookup, PHP/HTTP token provider, body inspection or Joomla token ESI.
@@ -51,8 +51,10 @@ a development/import helper; raw upstream categories never activate policy.
 
 The shared `cookie-policies.json` is the reviewed execution catalogue, schema 1.
 `cookie_catalogue.py` validates it and expands `@@COOKIE_PATTERN_<consumer>@@`
-markers when the adapter generates a complete standalone VCL. The three current
-consumers are `varnishPrivate`, `varnishCart`, and `varnishTrackingIgnore`.
+markers for explicit development/metadata consumers. The historical
+`varnishPrivate`, `varnishCart`, and `varnishTrackingIgnore` groups do not run
+a second request/response classifier in the generated runtime VCL. Their
+reviewed proposals feed the ordinary bundled defaults below saved choices.
 Exact and prefix cookie names are case-sensitive and escaped as literal PCRE.
 No recognition category grants an executable policy or a cookie issuer.
 
@@ -127,12 +129,15 @@ still cannot change this version or activate new category-derived rules.
 Site rules precede central choices, which precede bundled defaults; within a scope exact matches precede longest
 prefixes. Higher matches consume pairs from an internal copy so a lower broad
 prefix cannot undo a specific choice. Contradictory equal matches in one scope
-are rejected. Core authentication, cart/ESI contracts, request credentials and
-origin private/no-store decisions remain authoritative. Shared response cookies use the request-owned handoff below.
+are rejected. Exactly this ordered resolution classifies response cookies too;
+no mandatory private/cart prefix or tracking-ignore pass runs afterward. HTTP
+authentication, private routes/actions, explicit composition requests and origin
+private/no-store have independent reasons, not replacement cookie actions.
+Shared response cookies use the request-owned handoff below.
 
 The adapter passes a site-scoped dispatcher body into
 `shared_policy(admin_rules='')` / `render_policy(source,catalogue,admin_rules='')`.
-It executes in `scp_admin_cookie_rules` after core request privacy. Shared removes
+It executes in `scp_admin_cookie_rules` after independent HTTP/route checks. Shared removes
 matching pairs from internal Cookie variation, never the real origin Cookie.
 Variant selects actual cookie pairs, including every matched prefix pair, and
 `scp_cookie_hash` adds their values to lookup even without origin Vary. Call that
@@ -213,7 +218,8 @@ to own identifier creation and consent. The Meta/WooCommerce provider endpoint
 is one existing integration, rather than a special native generator or form.
 
 For an origin-approved shared ESI parent, `Vary: Cookie` uses the internal
-functional remainder without private cart carrier cookies. Original cookies
+same resolved functional remainder, without reclassifying cart carrier names.
+An explicit Variant remains a variant even on an approved parent. Original cookies
 still reach the origin/private children; ordinary objects retain functional
 Vary. `X-UltraCache-ESI-Private-Count` determines downstream privacy: a delivery
 containing private fragments is private/no-store, while public-only ESI keeps
@@ -246,8 +252,9 @@ existing handling. No generic PHPSESSID Shared choice or native state gate is ad
    (`basic` or `ultracache`) before disabled/custom bypasses.
 2. Apply explicit administrator bypasses, then call `scp_recv`. It can return PASS. Otherwise the adapter
    returns hash. It does not strip tracking URL arguments or analytics cookies
-   from the origin request. UltraCache's existing opt-in marker-cookie transport
-   is internal ESI protocol, not analytics-cookie filtering.
+   from the origin request. UltraCache's opt-in marker-cookie transport is internal ESI protocol,
+   not analytics-cookie filtering. Classify marker names before origin cleanup;
+   omit only unhandled protocol pairs, never a saved Private/Variant choice.
 3. In `vcl_pass`, call `scp_pass` (also for administrator/request bypasses).
 4. In `vcl_hash`, call `scp_key`, then hash the adapter cache namespace, immutable
    site scope, host and `req.http.X-SCP-Key-URL`. No profile/scheme hash dimension:
@@ -272,13 +279,15 @@ remove duplicate panel-specific versions of those rules.
 `scp_key` normalizes a copy only, leaving `req.url` untouched. It removes named
 utm_*, gclid/dclid/fbclid/msclkid/gbraid/wbraid/igshid arguments. All functional
 arguments, including search, ref, language, currency, duplicate values and their
-order remain. The Cookie variant ignores only known analytics IDs; unknown,
-referral, language and consent cookies remain. The public stored-HTML response
+order remain. Cookie variation omits only resolved Shared pairs; selected
+Variant pairs retain their values, and unclassified pairs retain ordinary
+HTTP Vary behavior. The public stored-HTML response
 contract can collapse equivalent HTML image capabilities. It accepts origin
 Apache-static provenance or an actual `X-Ultra-Cache: HIT`, with the existing
 public/cacheable/variant/no-Set-Cookie checks. This includes stored ESI parents;
 new dynamic `STORE` responses retain raw Accept variation. Static and dynamic
-HTML both retain functional Cookie variation; only analytics IDs are omitted.
+HTML both retain the Cookie Database projection; no second analytics list
+can undo an explicit Variant or Private choice.
 
 Both presets normalize simple `Accept` and `Accept-Language` lists in internal
 Vary keys without requiring application metadata or a plugin. Case-insensitive
@@ -318,3 +327,19 @@ compares the policy, HTTP cases and runner byte-for-byte. Optional
 `--left-report JSON --right-report JSON` also verifies that both native runs
 used those exact sources and completed every shared case. It is never imported
 or invoked by the installed plugin or installer.
+
+
+## ESI transport revision 2 and pending delivery continuation
+
+See `ESI-DELIVERY-DRAFT.md` for the implemented revision-2 cookie transport,
+its VCL-owned private-backend version header and required signed capability
+observation. Cookie names on this carrier describe possible renderer inputs,
+not cookie classification. Public children remain cookie-free; private children
+still PASS. The opt-in composition marker requests an origin-approved parent
+independently of whether any particular WooCommerce cookie is present.
+
+The same document separates the **unimplemented** pre-header cookie delivery
+continuation and positive-private-TTL admission design. Neither is advertised
+by revision 2. These require a coordinated application/native implementation
+and current native acceptance before release. No new panel controls, reverse
+policy bridge, provider-specific issuer or live configuration is introduced.

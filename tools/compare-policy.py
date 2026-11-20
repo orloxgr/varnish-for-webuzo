@@ -23,9 +23,9 @@ def main():
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
                  'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
                  'shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_recognition.py',
-                 'shared/CONTRACT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
+                 'shared/CONTRACT.md','shared/ESI-DELIVERY-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
-                 'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tools/build-cookie-assessments.py'):
+                 'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)
         digests[name]=hashlib.sha256(left).hexdigest()

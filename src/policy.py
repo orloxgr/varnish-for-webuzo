@@ -157,7 +157,7 @@ sub vcl_pass { call scp_pass; }
 sub vcl_hash {
  call scp_key;
  call scp_cookie_hash;
- hash_data("webuzo-shared-policy-v9");
+ hash_data("webuzo-shared-policy-v10");
  hash_data(req.http.X-SCP-Aggressive); hash_data(req.http.X-SCP-Aggressive-TTL);
  hash_data(req.http.X-WV-Site); hash_data(req.http.host);
  hash_data(req.http.X-SCP-Key-URL);

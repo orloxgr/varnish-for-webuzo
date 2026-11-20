@@ -47,15 +47,18 @@ class CookieCatalogue(unittest.TestCase):
         entry['delivery']['supported'] = True
         self.assertTrue(matches(self.catalogue, 'varnishTrackingIgnore', '_fbp=existing'))
 
-    def test_generation_consumes_local_reviewed_catalogue_only(self):
+    def test_catalogue_does_not_reintroduce_a_second_runtime_cookie_classifier(self):
         source = (ROOT/'shared/cache-policy.vcl').read_text(encoding='utf-8')
         result = render_policy(source, self.catalogue)
         self.assertNotIn('@@COOKIE_PATTERN_', result)
         self.assertEqual(result, cookie_policy.shared_policy())
         self.catalogue['policies'][0]['match']['value'] = '_reviewed_fixture'
         result = render_policy(source, self.catalogue)
-        self.assertIn('_reviewed_fixture', result)
+        self.assertNotIn('_reviewed_fixture', result)
         self.assertNotIn('|_fbp|', result)
+        # Explicit catalogue consumers remain available for development tools;
+        # request/response classification uses the scoped editor projection.
+        self.assertIn('_reviewed_fixture', render_policy('@@COOKIE_PATTERN_varnishTrackingIgnore@@', self.catalogue))
 
     def test_malformed_or_contradictory_catalogue_is_not_generated(self):
         changes = [lambda c: c.update(schemaVersion=2),

@@ -78,25 +78,6 @@ def defaults_vcl():
     return cookie_admin.defaults_vcl()
 
 
-def explain_cart_precedence(metadata, match, profile, catalogue, selected_action=None):
-    cart=next((entry for entry in catalogue['policies'] if entry['consumers']['varnishCart']
-               and cookie_admin._matches(entry['match'],match)),None)
-    if not cart:return
-    metadata['core_precedence']='WooCommerce cart/session protection takes precedence over the table choice. '
-    if profile=='basic':
-        metadata['effective_action']='private'
-        metadata['core_precedence']+='Basic passes this cart/session request to the application.'
-        metadata['policy_behavior']='Basic sends requests carrying this WooCommerce cart/session cookie to the application (PASS).'
-    elif selected_action=='private':
-        metadata['effective_action']='private'
-        metadata['core_precedence']='The explicit Private choice passes the entire request before optional UltraCache ESI sharing.'
-        metadata['policy_behavior']='The explicit Private choice sends the entire request, including its HTML, to the application (PASS).'
-    else:
-        metadata['effective_action']='application-contract'
-        metadata['core_precedence']+='Basic passes this cart/session request. UltraCache shares only an approved ESI parent with private fragments; without that application contract it also passes.'
-        metadata['policy_behavior']='Basic uses PASS. UltraCache shares the HTML only with a verified private-fragment contract; otherwise it also uses PASS.'
-
-
 def view(config, sites, request):
     identity, visible = scope(request, sites)
     site = visible[identity] if identity is not None else None
@@ -112,8 +93,8 @@ def view(config, sites, request):
             explanation='Aggressive mode shares this generic anonymous session cookie. Known authentication, private routes and explicit Private choices still select PASS.'
             for metadata in (row,row['reset_metadata']):
                 metadata['core_precedence']=metadata.get('core_precedence','').replace(
-                    'and origin private/no-store remain authoritative.',
-                    'take precedence. Aggressive mode can override generic origin privacy for anonymous public HTML.')
+                    'origin private/no-store are independent of cookie classification.',
+                    'origin privacy are independent of cookie classification. Aggressive mode can override generic origin privacy for anonymous public HTML.')
             if row['match']['kind']=='exact' and row['match']['value'] in aggressive.GENERIC_COOKIES:
                 if not row.get('override'):
                     row.update(action='shared',effective_action='shared',mode_default_action='shared',
@@ -121,9 +102,6 @@ def view(config, sites, request):
                 if row['inherited_scope']=='bundled':row['inherited_action']='shared'
             if row['reset_match']['kind']=='exact' and row['reset_match']['value'] in aggressive.GENERIC_COOKIES and row['inherited_scope']=='bundled':
                 row['reset_metadata'].update(effective_action='shared',mode_default_action='shared',core_precedence=explanation)
-        explain_cart_precedence(row,row['match'],profile,catalogue,row.get('action') if row.get('override') else None)
-        explain_cart_precedence(row['reset_metadata'],row['reset_match'],profile,catalogue,
-                                row['inherited_action'] if row['inherited_scope']=='central' else None)
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])

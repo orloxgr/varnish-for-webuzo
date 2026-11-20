@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from test_cookie_wire_contract import choices as cookie_choices
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import engine
 import native
@@ -216,28 +217,31 @@ class NativeProfiles(unittest.TestCase):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','public'),origin('/page','A'),origin('/page','B')],
                 [get('/page','public',cache='MISS'),get('/page','A',['Cookie: tracking=1','Cookie: wordpress_logged_in_a=A'],cache='PASS'),get('/page','B',['Cookie: PHPSESSID=B'],cache='PASS'),get('/page','public',cache='HIT')])
-    def test_shop_session_alone_cannot_share_unmarked_personal_html(self):
+    def test_explicit_private_shop_session_cannot_share_unmarked_personal_html(self):
         self.run_policy('basic',
             [origin('/product/example/','public'),origin('/product/example/','notice-A'),origin('/product/example/','visitor-B')],
             [get('/product/example/','public',cache='MISS'),
              get('/product/example/','notice-A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),
              get('/product/example/','visitor-B',['Cookie: wp_woocommerce_session_demo=B'],cache='PASS'),
-             get('/product/example/','public',cache='HIT')])
-    def test_cart_markers_still_bypass_an_existing_public_object(self):
+             get('/product/example/','public',cache='HIT')],
+            config={'cookie_policies':cookie_choices(('prefix','wp_woocommerce_session_','private'))})
+    def test_explicit_private_cart_choice_bypasses_an_existing_public_object(self):
         for marker in ('woocommerce_items_in_cart=1','woocommerce_cart_hash=nonempty'):
             with self.subTest(marker=marker):self.run_policy('basic',
                 [origin('/product/example/','public'),origin('/product/example/','cart-A'),origin('/product/example/','cart-B')],
                 [get('/product/example/','public',cache='MISS'),
                  get('/product/example/','cart-A',['Cookie: wp_woocommerce_session_demo=A; '+marker],cache='PASS'),
                  get('/product/example/','cart-B',['Cookie: wp_woocommerce_session_demo=B; '+marker],cache='PASS'),
-                 get('/product/example/','public',cache='HIT')])
-    def test_session_only_does_not_relax_other_profiles(self):
+                 get('/product/example/','public',cache='HIT')],
+                config={'cookie_policies':cookie_choices(('prefix','wp_woocommerce_session_','private'))})
+    def test_explicit_private_session_does_not_relax_other_profiles(self):
         for profile in profiles.NAMES:
             with self.subTest(profile=profile):self.run_policy(profile,[origin('/page','A'),origin('/page','B')],
-                [get('/page','A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),get('/page','B',['Cookie: wp_woocommerce_session_demo=B'],cache='PASS')])
+                [get('/page','A',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),get('/page','B',['Cookie: wp_woocommerce_session_demo=B'],cache='PASS')],
+                config={'cookie_policies':cookie_choices(('prefix','wp_woocommerce_session_','private'))})
     def test_shop_session_does_not_override_origin_cookie_or_privacy_headers(self):
         responses,requests=[],[]
-        for path,headers,cache in [('/private',[], 'private, no-store'),('/cookie',['Set-Cookie: wp_woocommerce_session_demo=new'],'public, max-age=120')]:
+        for path,headers,cache in [('/private',[], 'private, no-store'),('/cookie',['Set-Cookie: PHPSESSID=new'],'public, max-age=120')]:
             for visitor in ('A','B'):
                 responses.append(origin(path,visitor,headers,cache=cache))
                 requests.append(get(path,visitor,['Cookie: wp_woocommerce_session_demo='+visitor],cache='PASS'))
@@ -289,11 +293,11 @@ class NativeProfiles(unittest.TestCase):
         cookie='wp_woocommerce_session_demo=A; ultracache_esi_optin=1'
         self.run_policy('ultracache',
             [origin('/parent','approved',['X-UltraCache-Woo-Async-Parent: 1']),
-             origin('/parent','logged-in'),origin('/parent','no-optin'),origin('/parent','postpass'),
+             origin('/parent','logged-in'),origin('/parent','postpass'),
              origin('/unapproved','anonymous'),origin('/unapproved','private')],
             [get('/parent','approved',cache='MISS'),
              get('/parent','logged-in',['Cookie: '+cookie+'; wordpress_logged_in_demo=admin'],cache='PASS'),
-             get('/parent','no-optin',['Cookie: wp_woocommerce_session_demo=A'],cache='PASS'),
+             get('/parent','approved',['Cookie: wp_woocommerce_session_demo=A'],cache='HIT'),
              get('/parent','postpass',['Cookie: '+cookie+'; wp-postpass_demo=secret'],cache='PASS'),
              get('/parent','approved',['Cookie: '+cookie],cache='HIT'),
              get('/unapproved','anonymous',cache='MISS'),
@@ -314,8 +318,8 @@ class NativeProfiles(unittest.TestCase):
         self.run_policy('ultracache',[origin('/parent',body,['Surrogate-Control: ESI/1.0, no-store','X-UltraCache-ESI-Shared-Parent: 1']) for body in ('A','B')],
             [get('/parent',body,['Cookie: woocommerce_items_in_cart=1; ultracache_esi_optin=1'],cache='PASS') for body in ('A','B')])
     def test_client_cannot_spoof_cart_esi_opt_in_using_headers(self):
-        self.run_policy('ultracache',[origin('/parent',body) for body in ('A','B')],
-            [get('/parent',body,['Cookie: woocommerce_items_in_cart=1','X-UltraCache-ESI-Opt-In: 1','X-UltraCache-ESI-Candidate: 1'],cache='PASS') for body in ('A','B')])
+        self.run_policy('ultracache',[origin('/parent','public',expect=['expect req.http.X-UltraCache-ESI-Candidate == <undef>'])],
+            [get('/parent','public',['Cookie: woocommerce_items_in_cart=1','X-UltraCache-ESI-Opt-In: 1','X-UltraCache-ESI-Candidate: 1'],cache=result) for result in ('MISS','HIT')])
     def test_esi_subrequest_cannot_read_another_account(self):
         parent='<html><esi:include src="http://other.test/foreign"/></html>'
         self.run_policy('ultracache',[origin('/parent',parent,['Surrogate-Control: ESI/1.0']),origin('/foreign','OTHER-ACCOUNT',expect=['expect req.http.host == "other.test"'])],
