@@ -2,6 +2,8 @@
 
 Mock origin tests transport/lifecycle, not real WordPress/WooCommerce semantics.
 Do not count skipped tests or this fixture as application/browser acceptance.
+Cold private children in this fixture issue no cookie: it does not qualify
+initial-MISS delivery of cookies first created after the parent headers.
 """
 import concurrent.futures
 import json

@@ -288,6 +288,24 @@ adaptive nonce revision 1 does not change that behavior or prove it correct.
 
 ### Combined execution
 
+The following are explicit open acceptance items, not consequences of preserving
+the existing code or of an earlier transport/adaptive-nonce checkpoint:
+
+| Case | Required evidence | Current candidate limitation |
+| --- | --- | --- |
+| Initial parent MISS; provider first creates/renews/deletes a cookie inside a private child | Real WP/Woo/provider execution with issuer counters, original repeated fields in the **first parent response headers**, correct child content and browser session on revisit; two independent visitors and consent denial. | The existing MISS handoff captures only fields available from the top-level origin fetch. It does not prove delivery of a cookie first created after parent headers in an ESI child. The mock fixture's cold children issue no cookie and cannot cover this gap. |
+| Provider bootstrap and repeated private renderers on MISS and HIT | Actual provider bootstrap and each distinct stateful renderer execute the required lifecycle once; repeated occurrences reuse output, with no duplicate issuer side effect and no personal data in the public parent. | HIT preflight has candidate replay code only. Initial MISS may need request-local pre-render handoff within normal WP execution; that mechanism is not implemented or inferred from HIT capture. |
+| Parent expiry, purge or replacement after prepare | Native fault injection between prepare and resumed delivery; valid final page and visitor cookies, no repeated provider/issuer work, no cross-request leakage and correct cleanup. | The temporary pre-header 503 prevents duplicate execution but is **not completed recovery or full-goal acceptance**. Seamless recovery remains open. |
+| Positive private fragment TTL | Native identity/state partitioning, actual reuse before expiry, refresh on expiry/state changes and targeted invalidation; two visitors/two users with no cookie or content replay across owners. | #955 remains unimplemented. TTL 0 or a declared positive header is not evidence of positive private caching. |
+
+Do not hide the initial-MISS case behind a 503 or treat it as covered by the
+temporary post-prepare eviction guard. Any first-MISS handoff must use actual
+application/provider lifecycle and request-local output, preserve standalone
+UltraCache, and remain specific to UltraCache ESI rather than changing Basic.
+An existing parent-HIT/adaptive-nonce browser success must identify its exact
+source checkpoint; it does not qualify a later continuation VMOD or these open
+cookie-lifecycle and private-TTL paths.
+
 Both adapters, actual current UltraCache and native Varnish: MISS/HIT/HIT,
 two anonymous visitors and two logged-in users, empty/new/active/deleted
 sessions, Recently Viewed history updates, consent denial, multiple Set-Cookie
