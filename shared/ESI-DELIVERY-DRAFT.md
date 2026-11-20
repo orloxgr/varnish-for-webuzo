@@ -174,7 +174,8 @@ not initiate this HIT continuation. The existing MISS provider-delivery path is
 preserved; its application lifecycle still needs combined acceptance.
 
 Resource bounds in this draft: 8 MiB captured envelope, 1,024 distinct fragments
-and total private occurrences, JSON nesting depth 8. Failure is explicit before
+and total private occurrences. The portable parser accepts only this fixed
+schema, with no recursive general JSON values. Failure is explicit before
 successful parent delivery where detectable; native/error/abort/retry/eviction
 fixtures and actual provider semantics remain mandatory acceptance.
 
@@ -183,11 +184,24 @@ fixtures and actual provider semantics remain mandatory acceptance.
 Official release: https://vinyl-cache.org/releases/rel9.1.0.html
 (source archive https://vinyl-cache.org/downloads/vinyl-cache-9.1.0.tgz).
 Examined `cache_filter.h`, `cache_fetch_proc.c`, `cache_fetch.c`,
-`cache_req_fsm.c`, `cache_vrt_priv.c`, `cache_vrt_var.c`, `vrt.h`, `vrt_obj.h`
-and `vjsn.h`/`vjsn.c`: VRT_AddFilter/RemoveFilter, VFP init/pull/VFP_Suck,
+`cache_req_fsm.c`, `cache_vrt_priv.c`, `cache_vrt_var.c`, `vrt.h` and `vrt_obj.h`:
+VRT_AddFilter/RemoveFilter, VFP init/pull/VFP_Suck,
 non-streaming fetch completion, deliver-to-restart before transmit, PRIV_TOP
 lifetime and VRT_l_resp_body with a magic-initialized blob. The installed
 matching development headers/ABI are still authoritative at compilation.
+
+The first real installed-9.1 build of candidate `14fe805` failed before tests:
+`vjsn.h` was absent from the development package. An archive header is not proof
+of an installed VMOD API. The revised candidate removes that dependency:
+`delivery_envelope.c/.h` is our bounded, standard-C delivery-v1 schema parser,
+with strict JSON/UTF-8, Unicode escapes/surrogate pairs, decoded duplicate-key
+checks, exact bindings, URL validation and all-or-nothing fragment ownership.
+There is no third-party JSON library, fabricated engine header or added package.
+The normal native builder copies, hashes and compiles this source with the VMOD;
+policy source identity and adapter-parity receipts also include it.
+`tests/test_delivery_envelope.py` compiles and executes that actual portable C
+parser independently of Varnish. Such component tests do not qualify the rest of
+the VMOD; the corrected full native build and continuation tests remain pending.
 
 ## Positive private TTL is a separate admission contract
 

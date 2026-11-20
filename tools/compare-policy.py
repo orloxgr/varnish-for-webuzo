@@ -15,6 +15,7 @@ def main():
     root=Path(__file__).resolve().parents[1]
     digests={}
     for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native/delivery_continuation.c','shared/native_build.py',
+                 'shared/native/delivery_envelope.c','shared/native/delivery_envelope.h',
                  'shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
                  'shared/vcl/aggressive.vcl','shared/vcl/cms-routes.vcl',
@@ -26,7 +27,7 @@ def main():
                  'shared/CONTRACT.md','shared/ESI-DELIVERY-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
-                 'tests/test_delivery_continuation.py','tools/build-cookie-assessments.py'):
+                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)
         digests[name]=hashlib.sha256(left).hexdigest()

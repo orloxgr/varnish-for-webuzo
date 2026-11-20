@@ -100,5 +100,6 @@ def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rule
     # This contains source identity, never visitor state or an engine ABI guess.
     root=Path(__file__).parent
     identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in
-        ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/delivery_continuation.c','native_build.py'))).hexdigest()
+        ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/delivery_continuation.c',
+         'native/delivery_envelope.c','native/delivery_envelope.h','native_build.py'))).hexdigest()
     return '# Native cookie handoff sources: '+identity+'\n'+rendered

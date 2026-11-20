@@ -23,7 +23,9 @@ def build():
     target = Path(command('pkg-config','--variable=vmoddir','varnishapi'))
     if not tool or not target.is_absolute() or not target.is_dir():
         raise RuntimeError('Install the development package matching the native Varnish engine')
-    inputs = {name:(source/name).read_bytes() for name in ('cookie_handoff.c','cookie_handoff.vcc','delivery_continuation.c')}
+    inputs = {name:(source/name).read_bytes() for name in
+              ('cookie_handoff.c','cookie_handoff.vcc','delivery_continuation.c',
+               'delivery_envelope.c','delivery_envelope.h')}
     inputs['abi'] = (include/'vmod_abi.h').read_bytes()
     inputs['builder'] = Path(__file__).read_bytes()
     signature = hashlib.sha256(b'cookie-handoff-build-1\0'+b''.join(inputs.values())).hexdigest()
@@ -39,6 +41,8 @@ def build():
             folder=Path(temporary)
             (folder/'cookie_handoff.c').write_bytes(inputs['cookie_handoff.c'])
             (folder/'delivery_continuation.c').write_bytes(inputs['delivery_continuation.c'])
+            for name in ('delivery_envelope.c','delivery_envelope.h'):
+                (folder/name).write_bytes(inputs[name])
             # vmodtool hashes directives, not their documentation. Put the
             # source/ABI identity in $Module so a C-only update gets a new DSO
             # identity even while an earlier VCL still holds the old module.
@@ -50,7 +54,7 @@ def build():
             (folder/'config.h').write_text('#define PACKAGE_VERSION "'+signature+'"\n')
             command('python3',tool,'cookie_handoff.vcc',cwd=folder)
             command('cc','-Wall','-Wextra','-Werror','-fPIC','-shared','-pthread',
-                    '-I'+str(include),'-I.','cookie_handoff.c','vcc_if.c',
+                    '-I'+str(include),'-I.','cookie_handoff.c','delivery_envelope.c','vcc_if.c',
                     '-o','libvmod_cookie_handoff.so',cwd=folder)
             output=folder/'libvmod_cookie_handoff.so'
             metadata={'signature':signature,'library':hashlib.sha256(output.read_bytes()).hexdigest()}

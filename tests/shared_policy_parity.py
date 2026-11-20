@@ -50,7 +50,8 @@ def main():
             results.append(dict(case=case['name'],profile=profile,result='passed'))
     report=dict(policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
         handoff_sources={name:hashlib.sha256((policy.parent/name).read_bytes()).hexdigest()
-                         for name in ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/delivery_continuation.c','native_build.py')},
+                         for name in ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/delivery_continuation.c',
+                                      'native/delivery_envelope.c','native/delivery_envelope.h','native_build.py')},
         policy_modules=manifest(),
         source_loader_sha256=hashlib.sha256(policy.with_name('vcl_source.py').read_bytes()).hexdigest(),
         defaults_sha256=hashlib.sha256(policy.with_name('cookie-defaults.json').read_bytes()).hexdigest(),

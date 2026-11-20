@@ -4,17 +4,9 @@
 #include <stdio.h>
 #include "cache/cache_filter.h"
 #include "vrt_obj.h"
-#include "vjsn.h"
+#include "delivery_envelope.h"
 
-#define DELIVERY_MAX_BODY (8U * 1024U * 1024U)
-#define DELIVERY_MAX_FRAGMENTS 1024U
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY, D_DELIVERED, D_FAILED };
-struct delivery_fragment {
-    struct delivery_fragment *next;
-    char *url;
-    char *html;
-    size_t length;
-};
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
@@ -47,13 +39,6 @@ static struct handoff *delivery_entry(uint64_t key) {
     return e;
 }
 
-static void delivery_free_fragments(struct delivery_fragment *f) {
-    while (f) {
-        struct delivery_fragment *next = f->next;
-        free(f->url); free(f->html); free(f); f = next;
-    }
-}
-
 static void delivery_fini(VRT_CTX, void *value) {
     struct continuation *d = value;
     unsigned i;
@@ -67,13 +52,6 @@ static void delivery_fini(VRT_CTX, void *value) {
 static const struct vmod_priv_methods delivery_methods = {
     .magic = VMOD_PRIV_METHODS_MAGIC, .type = "ultracache-delivery-top", .fini = delivery_fini,
 };
-
-static int delivery_relative(const char *s) {
-    const unsigned char *p = (const unsigned char *)s;
-    if (!p || p[0] != '/' || p[1] == '/') return 0;
-    for (; *p; ++p) if (*p <= 32 || *p == 127 || *p == '\\' || *p == '#') return 0;
-    return 1;
-}
 
 static int delivery_copy_header(const struct http *hp, hdr_t h, char **out) {
     const char *s;
@@ -102,96 +80,10 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
     return 1;
 }
 
-/* JSON strings may contain decoded NUL. Reject it in binding/URL text. */
-static int delivery_text(const struct vjsn_val *v) {
-    return v && vjsn_is_string(v) &&
-        strlen(v->value) == (size_t)(v->value_e - v->value);
-}
-static int delivery_unsigned(const struct vjsn_val *v, unsigned *result) {
-    const char *p;
-    unsigned n = 0;
-    if (!v || !vjsn_is_number(v) || !v->value || !*v->value) return 0;
-    for (p = v->value; *p; ++p) {
-        if (*p < '0' || *p > '9' || n > (DELIVERY_MAX_FRAGMENTS - (*p-'0')) / 10U) return 0;
-        n = n * 10U + (unsigned)(*p - '0');
-    }
-    *result = n;
-    return 1;
-}
-static int delivery_unique_keys(const struct vjsn_val *v, unsigned expected) {
-    const struct vjsn_val *a, *b;
-    unsigned count = 0;
-    if (!vjsn_is_object(v)) return 0;
-    VTAILQ_FOREACH(a, &v->children, list) {
-        if (++count > expected) return 0;
-        if (!a->name || strlen(a->name) != (size_t)(a->name_e-a->name)) return 0;
-        for (b = VTAILQ_NEXT(a, list); b; b = VTAILQ_NEXT(b, list))
-            if (!strcmp(a->name, b->name)) return 0;
-    }
-    return count == expected;
-}
-
-/* Bound parser recursion before calling the native JSON parser. The schema
- * needs only object -> array -> object, and no raw NUL is meaningful JSON. */
-static int delivery_json_depth(const char *p, size_t length) {
-    unsigned depth = 0;
-    int quoted = 0, escaped = 0;
-    size_t i;
-    for (i = 0; i < length; ++i) {
-        unsigned char c = (unsigned char)p[i];
-        if (!c) return 0;
-        if (quoted) {
-            if (escaped) escaped = 0;
-            else if (c == '\\') escaped = 1;
-            else if (c == '"') quoted = 0;
-        } else if (c == '"') quoted = 1;
-        else if (c == '{' || c == '[') { if (++depth > 8) return 0; }
-        else if (c == '}' || c == ']') { if (!depth--) return 0; }
-    }
-    return !quoted && !depth;
-}
-
 static int delivery_parse(struct continuation *d) {
-    const char *error = NULL;
-    struct vjsn *json = NULL;
-    const struct vjsn_val *root, *v, *array;
-    struct delivery_fragment *f;
-    unsigned schema, total = 0, count = 0;
-    int ok = 0;
-    if (!d->body || !delivery_json_depth(d->body,d->length)) goto done;
-    json = vjsn_parse_end(d->body, d->body+d->length, &error);
-    if (!json || error) goto done;
-    root = json->value;
-    if (!delivery_unique_keys(root,4) ||
-        !delivery_unsigned(vjsn_child(root,"schemaVersion"), &schema) || schema != 1) goto done;
-    v = vjsn_child(root,"requestId");
-    if (!delivery_text(v) || strcmp(v->value,d->request_id)) goto done;
-    v = vjsn_child(root,"originalUrl");
-    if (!delivery_text(v) || strcmp(v->value,d->url)) goto done;
-    array = vjsn_child(root,"renderedFragments");
-    if (!array || !vjsn_is_array(array)) goto done;
-    VTAILQ_FOREACH(v, &array->children, list) {
-        const struct vjsn_val *url, *html;
-        unsigned occurrences;
-        if (++count > DELIVERY_MAX_FRAGMENTS || !delivery_unique_keys(v,3)) goto done;
-        url = vjsn_child(v,"url"); html = vjsn_child(v,"html");
-        if (!delivery_text(url) || !delivery_relative(url->value) || !html || !vjsn_is_string(html) ||
-            !delivery_unsigned(vjsn_child(v,"occurrences"), &occurrences) || !occurrences ||
-            occurrences > d->occurrences-total) goto done;
-        for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url->value)) goto done;
-        f = calloc(1,sizeof(*f));
-        if (!f) goto done;
-        f->url = strdup(url->value); f->length = (size_t)(html->value_e-html->value);
-        f->html = malloc(f->length ? f->length : 1);
-        if (!f->url || !f->html) { delivery_free_fragments(f); goto done; }
-        if (f->length) memcpy(f->html, html->value, f->length);
-        f->next = d->fragments; d->fragments = f; total += occurrences;
-    }
-    ok = total == d->occurrences && count > 0;
-done:
-    if (json) vjsn_delete(&json);
+    int ok = delivery_envelope_parse(d->body,d->length,d->request_id,d->url,
+        d->occurrences,&d->fragments);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
-    if (!ok) { delivery_free_fragments(d->fragments); d->fragments = NULL; }
     return ok;
 }
 
