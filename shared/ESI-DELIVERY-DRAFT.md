@@ -174,10 +174,12 @@ capture and envelope validation precede restoration/restart of the parent route.
 Native restart bounds apply. Retries cannot repeat an owned prepare operation,
 and connection retry is disabled for that operation.
 
-On return, only the same selected parent object may be delivered. The examined
-9.1 `cnt_deliver` implementation stashes that object across restart until request
-cleanup; this candidate relies on that native lifetime and does not swap engine
-object pointers or call uninstalled private HSH APIs. If the object expires, is
+On return, only the same selected parent identity and signed manifest/count may
+be delivered. The examined Vinyl 9.1 `cnt_deliver` source stashes objects across
+restart, but the actual installed Varnish 9.1 reports a different revision/VRT
+API; that source review does not establish the installed lifetime. Native
+retention/eviction qualification remains open. The candidate does not swap
+engine object pointers or call uninstalled private HSH APIs. If the object expires, is
 purged or replaced, a parent MISS/PASS or different selected object returns 503
 **before parent headers**, rather than running the full provider lifecycle a
 second time. Seamless recovery of an evicted parent is not implemented.
