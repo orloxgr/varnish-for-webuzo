@@ -122,7 +122,13 @@ sub vcl_recv {
  if (req.esi_level > 0) {
    if (req_top.http.X-WV-Site != req.http.X-WV-Site || req_top.http.X-WV-Profile != "ultracache") { return (synth(403)); }
    set req.http.X-Forwarded-Proto = req_top.http.X-Forwarded-Proto;
- } else if (req.http.X-WV-Gateway != '''+quoted(gateway)+''') { return (synth(403)); }
+ } else if (req.http.X-WV-Gateway != '''+quoted(gateway)+''') {
+   # Initial requests still require the forwarder secret. A restart can use
+   # only the SAME native-owned phase/site/host/URI proof, never client flags
+   # or a positive req.restarts count alone. The predicate is read-only.
+   if (req.http.X-WV-Profile != "ultracache" ||
+       !cookie_handoff.delivery_resume_authorized(req.http.X-WV-Site)) { return (synth(403)); }
+ }
  unset req.http.X-WV-Gateway;
  unset req.http.X-Webuzo-Varnish-Token;
  unset req.http.X-UltraCache-Token;
@@ -179,9 +185,10 @@ sub vcl_miss { call scp_private_miss; call scp_cookie_miss; if (req.http.X-WV-So
 sub wvw_soft_purge {
  set req.http.X-WV-Soft-Purge = purge.soft(); return (synth(200, "Soft purge completed"));
 }
-sub vcl_backend_fetch { call scp_backend_fetch; }
+sub vcl_backend_fetch { unset bereq.http.X-WV-Gateway; call scp_backend_fetch; }
 sub vcl_backend_error { cookie_handoff.discard(); }
 sub vcl_backend_response {
+ unset beresp.http.X-WV-Gateway;
  set beresp.http.X-WV-Site = bereq.http.X-WV-Site;
  set beresp.http.X-Cache-Object-Host = bereq.http.host;
  set beresp.http.X-Cache-Object-URL = bereq.http.X-SCP-Key-URL;
@@ -198,6 +205,7 @@ sub vcl_backend_response {
  return (deliver);
 }
 sub vcl_deliver {
+ unset resp.http.X-WV-Gateway;
  call scp_deliver;
  set resp.http.X-Webuzo-Varnish = resp.http.X-SCP-Result;
  if (req.http.X-WV-Reason) { set resp.http.X-Webuzo-Varnish-Reason = req.http.X-WV-Reason; }

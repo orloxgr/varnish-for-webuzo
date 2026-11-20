@@ -50,6 +50,13 @@ $Restrict vcl_recv vcl_pass vcl_miss
 
 Reject a post-prepare parent refetch instead of executing its provider twice.
 
+$Function BOOL delivery_resume_authorized(PRIV_TOP, STRING site)
+$Restrict vcl_recv
+
+Read-only ingress proof for the same initially authorized top-level GET.
+Requires exact native phase/restart plus stored adapter site, host and URI.
+No request header, positive restart count alone or other task creates a grant.
+
 $Function BOOL delivery_recover(PRIV_TOP)
 $Restrict vcl_miss
 

@@ -610,3 +610,35 @@ and their four UC subcases) passed, zero skips, 87.424 seconds, using the
 byte-identical `f09eaad` native DSO documented in PRIVATE-TTL-DRAFT.md. Actual
 cold WP collector/visitor-copy separation and genuine renderer-only issuer
 cookies remain root's combined application/browser/storage acceptance.
+
+### Webuzo gateway ingress on an owned continuation restart
+
+The root-owned generated-policy run of frozen Webuzo `358898b` executed 16
+native tests but failed (18 subfailures, primarily 403 before prepare). The
+focused native trace confirmed valid initial gateway authentication followed
+by request-header removal, vcl_deliver restart, then top-level ingress 403
+before any provider prepare. Hestia's separately qualified paths remain valid
+at their exact checkpoints; this Webuzo failure is not hidden by common-byte
+parity or a skipped/relaxed assertion.
+
+The candidate fix keeps the normal Webuzo gateway comparison and removes its
+request copy exactly as before. It does not retain a raw gateway header or
+authorize a positive restart count alone. Only UltraCache may use the read-only
+`delivery_resume_authorized(PRIV_TOP, adapterSite)` fallback: native owned
+queued/return/recovery-queued phase, its exact expected restart, top-level GET,
+no failed state, the stored immutable adapter site, canonical Host and exact
+original URI must all match. The site was captured from native adapter-assigned
+X-SCP-Site when the already authorized parent began its continuation. No
+client header or another request can create/reuse that native PRIV_TOP grant.
+The predicate advances no state; the existing delivery_recv still performs
+the single owned transition after ingress. Basic cannot use the fallback.
+
+The gateway is stripped from every backend request and origin/client echo.
+The Webuzo-only `test_continuation_gateway.py` verifies valid continuation,
+wrong/missing initial gateway and forged client phase/site/association denial,
+no gateway forwarded to ordinary/prepare/public-child origin, no client echo,
+and no cross-request authentication reuse. Independent restart fault cases
+change site, host, URI or the expected native restart and require 403 before
+any origin/provider execution.
+The shared C/API changed for this proof; a matching rebuilt DSO and native
+Hestia/Webuzo reruns are required. This new fix is not yet native-qualified.

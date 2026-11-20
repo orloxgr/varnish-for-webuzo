@@ -20,7 +20,7 @@ struct continuation {
      * qualification. Also revalidate signed manifest/count on final delivery.
      * Never swap engine pointers or call uninstalled private HSH APIs. */
     const struct objcore *parent;
-    char *url, *host, *target, *manifest, *cookie, *encoding;
+    char *url, *host, *site, *target, *manifest, *cookie, *encoding;
     char *conditional[6];
     char request_id[32];
     char *body;
@@ -43,6 +43,7 @@ static const hdr_t h_recovery_version = HDR("X-UltraCache-Delivery-Recovery-Vers
 static const hdr_t h_request_snapshot_version = HDR("X-UltraCache-Delivery-Request-Snapshot-Version");
 static const hdr_t h_private_key = HDR("X-SCP-Private-Key");
 static const hdr_t h_private_cache_version = HDR("X-UltraCache-Delivery-Private-Cache-Version");
+static const hdr_t h_adapter_site = HDR("X-SCP-Site");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -66,7 +67,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     /* The table lock excludes an aborting backend filter before freeing d. */
     close_owner(&d->association);
     (void)ctx;
-    free(d->url); free(d->host); free(d->target); free(d->cookie); free(d->encoding);
+    free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
     free(d->body); delivery_free_fragments(d->fragments);
@@ -201,6 +202,28 @@ VCL_BOOL vmod_delivery_guard(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
     return d && ((ctx->req->esi_level == 0 && d->phase == D_READY) ||
         (ctx->req->esi_level > 0 && d->phase == D_DELIVERED));
+}
+
+/* Initial ingress authorization precedes continuation creation in managed
+ * VCL. Only that SAME owned top request may resume without a client gateway.
+ * Read-only: this does not advance the continuation or create another grant. */
+VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
+    const struct continuation *d = priv->priv;
+    const char *host = NULL, *url, *method;
+    int phase, valid;
+    if (!d || ctx->req->esi_level != 0 || !site || !*site || !ctx->req->restarts) return 0;
+    if (!http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
+    url = ctx->http_req->hd[HTTP_HDR_URL].b;
+    method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
+    pthread_mutex_lock(&lock);
+    phase = (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
+        (d->phase == D_RETURN && ctx->req->restarts == d->restart+2) ||
+        (d->phase == D_RECOVERY_QUEUED && ctx->req->restarts == d->recovery_restart);
+    valid = phase && !d->failed && method && !strcmp(method,"GET") &&
+        d->site && !strcmp(d->site,site) && host && !strcmp(d->host,host) &&
+        url && !strcmp(d->url,url);
+    pthread_mutex_unlock(&lock);
+    return valid;
 }
 
 VCL_BOOL vmod_delivery_recover(VRT_CTX, struct vmod_priv *priv) {
@@ -342,6 +365,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->target = strdup(target);
         d->manifest = delivery_manifest_token(target);
         if (!d->url || !d->target || !d->manifest || !delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
+            !delivery_copy_header(ctx->http_req,h_adapter_site,&d->site) ||
             !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
             !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)) return -1;
         for (i = 0; i < 6; ++i)
