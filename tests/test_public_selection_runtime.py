@@ -139,6 +139,19 @@ class PublicSelectionRuntime(unittest.TestCase):
                 status,fields,body=get('/book/',extra={'Cache-Control':directive,'Pragma':'no-cache'})
                 self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],'HIT');self.assertIn('USD10',body)
             self.assertTrue(all(phase=='public-select' for _,phase,_ in resolver.calls))
+    def test_zero_fragments_without_cookie_issuance_keeps_public_native_hit_but_private_delivery(self):
+        resolver=Resolver()
+        def origin(path,headers):
+            body,fields=resolver(path,headers)
+            return body,[(name,value) for name,value in fields if name.lower() not in ('set-cookie','set-cookie2')]
+        with proxy('ultracache',origin,policies=rules()) as get:
+            self.declare(get)
+            for expected in ('MISS','HIT','HIT'):
+                status,fields,body=get('/book/',extra={'X-Test-Country':'DE'})
+                self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],expected)
+                self.assertIn('EUR20',body);self.assertEqual(cookies(fields),[])
+                self.assertIn('private',dict(fields)['Cache-Control']);self.assertIn('no-store',dict(fields)['Cache-Control'])
+            self.assertEqual(len(resolver.calls),3);self.assertEqual(resolver.renders,1)
     def test_shared_private_and_basic_keep_their_selected_native_actions(self):
         resolver=Resolver()
         with proxy('ultracache',resolver,policies=rules('shared','shared')) as get:

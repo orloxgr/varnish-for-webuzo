@@ -153,7 +153,7 @@ After normal route/auth/cookie decisions: 1 owned original-route preparation,
 0 no negotiated active Variant resolver, -1 allocation/binding error.
 
 $Function STRING selection_manifest(PRIV_TOP)
-$Restrict vcl_recv vcl_hash vcl_hit
+$Restrict vcl_recv vcl_hash vcl_hit vcl_deliver
 
 Only an owned prepared selection exposes its exact signed target publication.
 
