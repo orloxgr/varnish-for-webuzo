@@ -116,6 +116,13 @@ Client copies of owned-entry/reply Scope headers are discarded. The selected
 JSON outcome is unchanged: request ID/URL/two policy identities bind its result
 to that scoped original-route operation.
 
+The new original-route operation preserves the client's Range and If-Range for
+actual download/resume handling. It still captures a complete selected-public
+JSON response before any client range filter; the original Range is restored
+for final native publication delivery. If-None-Match, If-Modified-Since,
+If-Match and If-Unmodified-Since remain withheld during this preparation. The
+old prepare/recovery operation's conditional-header behavior is unchanged.
+
 ## Response
 
 Use HTTP 200, `application/vnd.ultracache.delivery+json`, private/no-store outer

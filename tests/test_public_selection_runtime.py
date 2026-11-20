@@ -301,6 +301,48 @@ class PublicSelectionRuntime(unittest.TestCase):
                 if pending=='pending=0':break
                 self.assertLess(time.monotonic(),deadline,pending);time.sleep(.02)
 
+    def test_original_route_preserves_range_if_range_and_actual_partial_response(self):
+        calls=[];body='0123456789abcdefghijklmnopqrstuvwxyz';etag='"actual-download"'
+        def origin(path,headers):
+            calls.append(dict(headers))
+            fields=[('Content-Type','application/octet-stream'),('ETag',etag),
+                ('Accept-Ranges','bytes'),('Set-Cookie','range=owner; Path=/')]
+            if headers.get('Range')=='bytes=8-15' and headers.get('If-Range')==etag:
+                return 206,body[8:16],fields+[('Content-Range','bytes 8-15/'+str(len(body)))]
+            return body,fields
+        with proxy('ultracache',origin,policies=rules()) as get:
+            self.declare(get)
+            for validator,status,expected in ((etag,206,body[8:16]),('"stale-download"',200,body)):
+                extra={'Range':'bytes=8-15','If-Range':validator,
+                    'If-None-Match':'"not-forwarded"','If-Modified-Since':'Wed, 21 Oct 2015 07:28:00 GMT',
+                    'If-Match':'"not-forwarded"','If-Unmodified-Since':'Wed, 21 Oct 2015 07:28:00 GMT'}
+                actual,fields,output=get('/actual-download',extra=extra)
+                self.assertEqual(actual,status);self.assertEqual(output,expected)
+                self.assertEqual(calls[-1]['Range'],'bytes=8-15');self.assertEqual(calls[-1]['If-Range'],validator)
+                for name in ('If-None-Match','If-Modified-Since','If-Match','If-Unmodified-Since'):
+                    self.assertNotIn(name,calls[-1])
+                self.assertEqual(cookies(fields),['range=owner; Path=/'])
+                self.assertEqual(dict(fields)['X-Cache'],'PASS');self.assertIn('no-store',dict(fields)['Cache-Control'])
+                if status==206:self.assertEqual(dict(fields)['Content-Range'],'bytes 8-15/'+str(len(body)))
+            self.assertEqual(len(calls),2)
+
+    def test_range_selects_complete_public_snapshot_then_ranges_final_native_delivery(self):
+        resolver=Resolver()
+        with proxy('ultracache',resolver,policies=rules()) as get:
+            self.declare(get)
+            for expected in ('MISS','HIT'):
+                status,fields,body=get('/book/',extra={'Range':'bytes=6-10','If-Range':'"not-a-public-validator"'})
+                # A mismatching If-Range preserves the complete representation.
+                self.assertEqual(status,200);self.assertEqual(body,'<html>USD10</html>')
+                self.assertEqual(dict(fields)['X-Cache'],expected)
+                self.assertEqual(resolver.calls[-1][2]['Range'],'bytes=6-10')
+                self.assertEqual(resolver.calls[-1][2]['If-Range'],'"not-a-public-validator"')
+            status,fields,body=get('/book/',extra={'Range':'bytes=6-10'})
+            self.assertEqual(status,206);self.assertEqual(body,'USD10')
+            self.assertEqual(dict(fields)['X-Cache'],'HIT')
+            self.assertEqual(dict(fields)['Content-Range'],'bytes 6-10/'+str(len('<html>USD10</html>')))
+            self.assertEqual(resolver.renders,1);self.assertEqual(len(resolver.calls),3)
+
     def test_abandoned_non_protocol_stream_releases_native_owner(self):
         release=threading.Event();finished=threading.Event()
         def chunks():

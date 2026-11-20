@@ -202,7 +202,12 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     d->restart = ctx->req->restarts; d->phase = D_PREPARE;
     http_ForceHeader(ctx->http_req,h_key,d->request_id);
     http_Unset(ctx->http_req,H_Accept_Encoding);
-    for (i = 0; i < 6; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
+    /* This is the actual application route, which may be a ranged download.
+     * Preserve Range (0) and its If-Range validator (5) upstream. The complete
+     * selection envelope is captured before client range processing; a final
+     * selected publication still receives the original range at delivery.
+     * Old prepare/recovery stripping lives separately and is unchanged. */
+    for (i = 1; i < 5; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
     return WS_Overflowed(ctx->ws) ? -1 : 1;
 }
 static int public_selection_parse(struct continuation *d) {
