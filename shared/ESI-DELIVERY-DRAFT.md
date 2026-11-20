@@ -1,8 +1,9 @@
 # UltraCache delivery continuation: design draft
 
-Status: transport revision 2 and adaptive nonce revision 1 have **candidate
-source implementations, without native acceptance**. The pre-header
-continuation now has **candidate source only**; positive private TTL remains
+Status: **isolated candidates, not release/full-goal acceptance**. The Hestia
+original-URI continuation checkpoint `35b1111` passed its native mock fixture;
+real application/provider acceptance and Webuzo native qualification remain
+separate. Positive private TTL remains
 **unimplemented and unadvertised**.
 Related UltraCache issues: #955, #956, #957, #958, #959. Native acceptance must
 precede release or activation.
@@ -266,8 +267,14 @@ invalid binding/schema/count/duplicate rejection, 24 concurrent owners, Basic
 nonparticipation and the explicit post-prepare-MISS 503 guard. That guard is not
 completed recovery. This is native mock transport/lifecycle evidence for that
 exact old pointer-route checkpoint, not actual WP/provider equivalence.
-The newer unchanged-original-URI/Manifest-header candidate still requires its
-own native rerun and real WP bootstrap/filter_input acceptance. The diagnostic identified actual engine revision
+The newer unchanged-original-URI/Manifest-header Hestia candidate `35b1111`
+also compiled and passed its five adapted native tests, zero skips, in 27.485 s.
+Private DSO SHA256:
+`de0638ce23a27fc1d9062d69e3795035455c7169d583219020045b5b1369d768`.
+This checkpoint covers the exact URI/query and Manifest extraction/spoof/echo
+wire in the mock origin fixture. It does not qualify the new UC bridge's real
+WP bootstrap/filter_input/provider behavior or Webuzo's native adapter merely
+because common sources match. The retained diagnostic identified actual engine revision
 `ffd36e9db9a1ec2bf6637deda180a87d40a13d0f`, VRT API 22.2. The Vinyl 9.1 archive
 review above is not a substitute for this installed engine's headers or exact
 object-lifetime implementation; parent-retention/restart qualification remains
