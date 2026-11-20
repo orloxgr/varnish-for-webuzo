@@ -1,5 +1,24 @@
 # Verification
 
+## 0.12.0 candidate — 21 November 2026
+
+The prepared package includes independent Basic/UC cookie actions and scoped
+original-route public selection, while keeping existing private prepare/recovery
+and manual choices. It streams genuine non-protocol responses privately and
+preserves Range/If-Range, final snapshot ranges and actual owner cookie fields.
+Common cookie bundle `2026.11.20.10` retains best-effort Basic without ESI. Aelia
+source/declared-fixture coverage is not commercial-provider runtime acceptance.
+
+`PolicyTransactions.test_bundle_9_to_10_apply_invalidates_only_basic_and_preserves_manual_choices`
+in `tests/test_cookie_admin_webuzo.py` uses the normal `engine.apply`, owned
+temporary state and existing external-I/O mocks. Persisted `.9` profile
+fingerprints change only in Basic; ten sites cover default, manual three actions
+and partial reset in both profiles. Only Basic is invalidated, stored choices
+remain unchanged and repeat apply neither purges nor reactivates. This adapter
+regression passed on owned Linux/root against source `3b9696fdaa50743259fe404a9479313260f16593`
+(one method, no skip/error/failure). It is separate from actual native Varnish/WP
+and final clean-distribution acceptance, which remains pending for this package.
+
 ## Bundled cookie database
 
 Recognition metadata and reviewed executable defaults ship with the addon.

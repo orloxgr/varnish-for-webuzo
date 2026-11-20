@@ -1,11 +1,16 @@
 # Varnish for Webuzo
 
-Version **0.11.0**. The UltraCache profile adds request-owned pre-header cookie
+Version **0.12.0**. The UltraCache profile adds request-owned pre-header cookie
 delivery, scoped private-fragment TTL, actual application-private documents and
 public-fragment TTL/error containment. **Basic stays best effort without ESI.**
-Cookie Database remains the sole cookie classification authority. See the
-[qualified contract and release evidence](shared/ESI-VALIDATION.md) for the matching
-UltraCache version, source checkpoints and compatibility limits.
+Cookie Database remains the sole cookie classification authority. This candidate
+adds independent profile cookie choices and [application-scoped public selection](shared/PUBLIC-SELECTION.md),
+including actual provider context before lookup and private streaming/range
+delivery. Common bundle `2026.11.20.10` keeps personal commenter, YITH, Recently
+Viewed and cart/session defaults Private in Basic and Shared in the integrated UC
+profile; manual choices still win. Final coordinated distribution acceptance is
+pending. The [earlier qualified release evidence](shared/ESI-VALIDATION.md) remains
+the record for 0.22.0/0.11.0, not publication of this candidate.
 
 Cache public HTTP responses with Varnish while Nginx handles HTTPS and serves existing public images, styles, scripts and fonts directly. Application profiles add WordPress and WooCommerce integration. Cache misses and private requests go to the site's native Apache/PHP backend.
 
