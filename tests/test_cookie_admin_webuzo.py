@@ -318,14 +318,29 @@ class PolicyTransactions(unittest.TestCase):
     def configuration(self):
         sites = {row['id']:row for row in (account(),account('c','other.test','account_b'))}
         return dict(installed=True,sites=sites,gateway='e'*64,origin='f'*64,proxy_timeouts=native.proxy_timeouts(),
-                    cookie_defaults_version=cookie_views.default_version(),cookie_defaults_digest=cookie_views.default_digest())
+                    cookie_defaults_version=cookie_views.default_version(),cookie_defaults_digest=cookie_views.default_digest(),
+                    cookie_defaults_profile_digests=engine.cookie_defaults.profile_digests())
 
     def test_bundle_upgrade_invalidates_enabled_sites_and_records_current_version(self):
         previous=self.configuration();previous['cookie_defaults_digest']='previous-execution'
+        previous['cookie_defaults_profile_digests']={profile:'previous-execution' for profile in ('basic','ultracache')}
         following=copy.deepcopy(previous);service.ACTIVE.write_text('previous VCL')
         _,_,purge=self.apply_settings(previous,following)
         self.assertEqual({call.args[0]['id'] for call in purge.call_args_list},set(previous['sites']))
         self.assertEqual(engine.settings()['cookie_defaults_version'],cookie_views.default_version())
+
+    def test_legacy_default_digest_migration_invalidates_only_changed_profile_once(self):
+        previous=self.configuration();previous['sites']['c'*32]['profile']='ultracache'
+        previous.pop('cookie_defaults_profile_digests')
+        # Before dual actions both profiles used the current Basic defaults.
+        previous['cookie_defaults_digest']=engine.cookie_defaults.fingerprint('basic')
+        service.ACTIVE.write_text(engine.policy.render(previous['sites'],previous['gateway'],previous['origin'],previous))
+        _,_,purge=self.apply_settings(previous,copy.deepcopy(previous))
+        self.assertEqual([call.args[0]['id'] for call in purge.call_args_list],['c'*32])
+        saved=engine.settings()
+        self.assertEqual(saved['cookie_defaults_profile_digests'],engine.cookie_defaults.profile_digests())
+        _,_,purge=self.apply_settings(saved,copy.deepcopy(saved))
+        purge.assert_not_called()
 
     def test_editorial_version_change_does_not_invalidate_or_reload_policy(self):
         previous=self.configuration();previous['cookie_defaults_version']='previous-editorial-version'

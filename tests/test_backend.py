@@ -160,9 +160,22 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(repository.KEY.read_bytes(),b'administrator-change');self.assertFalse(repository.PIN.exists())
     def test_repository_resume_preserves_independent_source_and_avoids_download(self):
         key=self.repository_record();repository.SOURCE.write_text('# independent source\n')
-        with patch.object(repository,'release',return_value='noble'),patch.object(repository.urllib.request,'urlopen') as download:repository.setup()
+        # The independent official source must match this suite/architecture;
+        # do not depend on the disposable machine's actual APT sources.
+        with (patch.object(repository,'release',return_value='noble'),
+              patch.object(repository,'existing_source',return_value=True) as existing,
+              patch.object(repository.urllib.request,'urlopen') as download):repository.setup()
+        existing.assert_called_once_with('noble','amd64')
         download.assert_not_called();self.assertEqual(repository.KEY.read_bytes(),key)
         self.assertEqual(repository.SOURCE.read_text(),'# independent source\n');self.assertFalse(repository.PIN.exists())
+    def test_repository_resume_refuses_unmanaged_path_without_matching_independent_source(self):
+        self.repository_record();repository.SOURCE.write_text('# independent source\n')
+        with (patch.object(repository,'release',return_value='noble'),
+              patch.object(repository,'existing_source',return_value=False),
+              patch.object(repository.urllib.request,'urlopen') as download):
+            with self.assertRaisesRegex(ValueError,'unmanaged repository file'):repository.setup()
+        download.assert_not_called();self.assertEqual(repository.SOURCE.read_text(),'# independent source\n')
+        self.assertFalse(repository.KEY.exists());self.assertFalse(repository.PIN.exists())
     def test_nginx_failure_restores_previous_policy_and_files(self):
         path=self.custom/'global.conf';path.write_text('previous\n');service.ACTIVE.write_text('old VCL')
         previous=dict(installed=True,sites={},manifest={});desired=dict(previous,gateway='e'*64,origin='f'*64)
@@ -196,7 +209,8 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(service.ACTIVE.read_text(),'old VCL')
         self.assertFalse(engine.JOURNAL.exists())
     def test_timeout_refresh_keeps_existing_site_objects_and_persists_allowances(self):
-        current=site();previous=dict(installed=True,sites={current['id']:current},manifest={},gateway='e'*64,origin='f'*64,cookie_defaults_digest=engine.cookie_views.default_digest())
+        current=site();previous=dict(installed=True,sites={current['id']:current},manifest={},gateway='e'*64,origin='f'*64,
+            cookie_defaults_digest=engine.cookie_views.default_digest(),cookie_defaults_profile_digests=engine.cookie_defaults.profile_digests())
         desired=copy.deepcopy(previous);service.ACTIVE.write_text('old VCL')
         with patch.object(engine,'plans',return_value=[]),patch.object(service,'load',return_value=('old','new')),patch.object(service,'admin'),patch.object(service,'prune'),patch.object(service,'write_vcl',side_effect=lambda p,c:p.write_text(c)),patch.object(engine,'reload_servers'),patch.object(service,'purge') as purge:
             engine.apply(previous,desired)
@@ -219,23 +233,36 @@ class Boundaries(unittest.TestCase):
         with patch.object(service,'running',return_value=True),patch.object(service,'admin',side_effect=admin),patch.object(service,'load',return_value=('boot','restored')) as load,patch.object(service,'write_vcl'),patch.object(engine,'reload_servers'):
             engine.restore(journal)
         load.assert_called_once_with('old VCL');self.assertIn(('vcl.use','restored'),calls)
+    def account_helper(self):
+        # Run the actual helper bytes from our traversable isolated directory,
+        # since a source checkout under another user's home may be private.
+        helper=self.base/'account.py'
+        helper.write_bytes((Path(__file__).resolve().parents[1]/'src/account.py').read_bytes())
+        helper.chmod(0o644);self.base.chmod(0o711)
+        return helper
     def test_account_helper_rejects_root_and_cannot_write_through_links(self):
-        helper=Path(__file__).resolve().parents[1]/'src/account.py'
+        helper=self.account_helper()
         root_run=subprocess.run(['/usr/bin/python3',str(helper),'save',str(self.base),'a'*32],capture_output=True)
-        self.assertNotEqual(root_run.returncode,0)
+        self.assertEqual(root_run.returncode,1,root_run.stderr.decode())
+        self.assertEqual(json.loads(root_run.stdout),{'ok':False,'error':'Invalid account credential operation'})
         user=pwd.getpwnam('nobody');home=self.base/'home';home.mkdir();os.chown(home,user.pw_uid,user.pw_gid);self.base.chmod(0o711)
         other=self.base/'untouched';other.mkdir();(other/'data').write_text('keep')
         (home/'.varnish-for-webuzo').symlink_to(other,target_is_directory=True)
         result=subprocess.run(['/usr/bin/python3',str(helper),'save',str(home),'a'*32],input=json.dumps(dict(site='a'*32,names=['example.test'],token='b'*64)).encode(),user=user.pw_uid,group=user.pw_gid,extra_groups=[],capture_output=True)
-        self.assertNotEqual(result.returncode,0);self.assertEqual((other/'data').read_text(),'keep');self.assertEqual(len(list(other.iterdir())),1)
+        self.assertEqual(result.returncode,1,result.stderr.decode())
+        self.assertFalse(json.loads(result.stdout)['ok'])
+        self.assertEqual((other/'data').read_text(),'keep');self.assertEqual(len(list(other.iterdir())),1)
     def test_account_credential_cannot_be_placed_inside_a_web_root(self):
-        helper=Path(__file__).resolve().parents[1]/'src/account.py';user=pwd.getpwnam('nobody')
+        helper=self.account_helper();user=pwd.getpwnam('nobody')
         home=self.base/'home';home.mkdir();os.chown(home,user.pw_uid,user.pw_gid);self.base.chmod(0o711)
         payload=dict(site='a'*32,names=['example.test'],token='b'*64,roots=[str(home)])
         def write():return subprocess.run(['/usr/bin/python3',str(helper),'save',str(home),'a'*32],input=json.dumps(payload).encode(),user=user.pw_uid,group=user.pw_gid,extra_groups=[],umask=0o077,capture_output=True)
-        self.assertNotEqual(write().returncode,0);credential=home/'.varnish-for-webuzo'/('a'*32+'.json');self.assertFalse(credential.exists())
+        denied=write();self.assertEqual(denied.returncode,1,denied.stderr.decode())
+        self.assertIn('outside every document root',json.loads(denied.stdout)['error'])
+        credential=home/'.varnish-for-webuzo'/('a'*32+'.json');self.assertFalse(credential.exists())
         payload['roots']=[str(home/'public_html')]
-        self.assertEqual(write().returncode,0);self.assertEqual(credential.stat().st_mode&0o777,0o600)
+        accepted=write();self.assertEqual(accepted.returncode,0,accepted.stderr.decode())
+        self.assertEqual(json.loads(accepted.stdout),{'ok':True});self.assertEqual(credential.stat().st_mode&0o777,0o600)
         self.assertEqual(set(json.loads(credential.read_text())),{'site','names','token'})
 
 if __name__=='__main__':unittest.main(verbosity=2)
