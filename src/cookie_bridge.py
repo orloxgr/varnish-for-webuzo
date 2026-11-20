@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
 import cookie_control
 import cookie_execution
+import cookie_defaults
 
 
 def configuration(value, site):
@@ -13,7 +14,7 @@ def configuration(value, site):
 
 
 def snapshot(config, site):
-    return cookie_control.materialized_snapshot(config.get('cookie_policies'), site.get('cookie_policies'))
+    return cookie_control.materialized_snapshot(config.get('cookie_policies'), site.get('cookie_policies'),site.get('profile','basic'))
 
 
 def operation(site, integration, policy, kind='apply'):
@@ -38,8 +39,8 @@ def plan(previous, following, force_sites=()):
             operations.append(operation(old, before, cookie_control.snapshot(), 'disconnect'))
         if not selected['enabled']:
             continue
-        changed=(previous.get('cookie_defaults_digest')!=following.get('cookie_defaults_digest') or old is None or
-                 execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(following.get('cookie_policies'),site.get('cookie_policies')))
+        changed=(cookie_defaults.changed(previous,following,site.get('profile','basic'),old.get('profile','basic') if old else None) or old is None or
+                 execution(previous.get('cookie_policies'),old.get('cookie_policies'),old.get('profile','basic'))!=execution(following.get('cookie_policies'),site.get('cookie_policies'),site.get('profile','basic')))
         if identity in force_sites or not before['enabled'] or switched or changed:
             operations.append(operation(site, selected, snapshot(following, site)))
     return operations

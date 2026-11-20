@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.4",
+  "version": "2026.11.20.5",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -78,7 +78,11 @@
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f",
         "https://developers.facebook.com/documentation/ads-commerce/conversions-api/parameters/fbp-and-fbc"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "fbc",
@@ -122,7 +126,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "ga",
@@ -165,7 +173,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gid",
@@ -208,7 +220,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gat",
@@ -251,7 +267,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gac-prefix",
@@ -294,7 +314,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gcl-au",
@@ -337,7 +361,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gcl-aw",
@@ -380,7 +408,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gcl-dc",
@@ -423,7 +455,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "dc-gtm-prefix",
@@ -466,7 +502,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "clck",
@@ -509,7 +549,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "clsk",
@@ -552,7 +596,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "clid",
@@ -595,7 +643,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "uetvid",
@@ -638,7 +690,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "uetsid",
@@ -681,7 +737,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "ttp",
@@ -724,7 +784,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "tt-enable-cookie",
@@ -767,7 +831,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "ttcsid-prefix",
@@ -810,7 +878,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "pin-unauth",
@@ -853,7 +925,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "pinterest-ct-ua",
@@ -896,7 +972,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "ga-prefix",
@@ -939,7 +1019,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "gat-prefix",
@@ -982,7 +1066,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "utma",
@@ -1025,7 +1113,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "utmb",
@@ -1068,7 +1160,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "utmc",
@@ -1111,7 +1207,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "utmt",
@@ -1154,7 +1254,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "utmv",
@@ -1197,7 +1301,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "utmz",
@@ -1240,7 +1348,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-migrations",
@@ -1283,7 +1395,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-current",
@@ -1326,7 +1442,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-current-add",
@@ -1369,7 +1489,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-first",
@@ -1412,7 +1536,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-first-add",
@@ -1455,7 +1583,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-udata",
@@ -1498,7 +1630,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "sbjs-session",
@@ -1541,7 +1677,11 @@
       },
       "sources": [
         "open-cookie-database:7786335566460016f07a50705a92fc781c976f6f"
-      ]
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "wordpress-logged-in-prefix",
@@ -1582,7 +1722,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     },
     {
       "id": "wordpress-sec-prefix",
@@ -1623,7 +1767,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     },
     {
       "id": "wp-postpass-prefix",
@@ -1664,7 +1812,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     },
     {
       "id": "comment-author-prefix",
@@ -1705,7 +1857,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "woocommerce-items-in-cart",
@@ -1746,7 +1902,11 @@
         "varnishCart": true,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "woocommerce-cart-hash",
@@ -1787,7 +1947,11 @@
         "varnishCart": true,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "wp-woocommerce-session-prefix",
@@ -1828,7 +1992,11 @@
         "varnishCart": true,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "woocommerce-recently-viewed",
@@ -1869,7 +2037,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     },
     {
       "id": "yith-wcwl-session-prefix",
@@ -1910,7 +2082,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     },
     {
       "id": "yith-woocompare-prefix",
@@ -1951,7 +2127,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     },
     {
       "id": "phpsessid",
@@ -1992,7 +2172,11 @@
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },
-      "sources": []
+      "sources": [],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     }
   ]
 }

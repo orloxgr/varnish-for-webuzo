@@ -20,7 +20,7 @@ class CookieChoiceError(ValueError):
     pass
 
 
-def normalize(value):
+def _legacy_normalize(value):
     if value is None:
         return {'schemaVersion': 1, 'rules': []}
     if (not isinstance(value, dict) or type(value.get('schemaVersion')) is not int or
@@ -55,11 +55,54 @@ def normalize(value):
     return {'schemaVersion': 1, 'rules': sorted(result, key=lambda row: row['id'])}
 
 
-def resolve(central=None, site=None):
+PROFILES=('basic','ultracache')
+
+
+def normalize(value):
+    """Independent manual choices. Null inherits only that profile's action."""
+    if value is None:return {'schemaVersion':2,'rules':[]}
+    if isinstance(value,dict) and value.get('schemaVersion')==1:
+        old=_legacy_normalize(value)
+        return {'schemaVersion':2,'rules':[dict(id=r['id'],match=r['match'],description=r['description'],
+            actions={profile:assessment(r['match'],profile) if r['action']=='automatic' else r['action']
+                     for profile in PROFILES}) for r in old['rules']]}
+    if (not isinstance(value,dict) or type(value.get('schemaVersion')) is not int or
+            value['schemaVersion']!=2 or set(value)!={'schemaVersion','rules'} or not isinstance(value['rules'],list)):
+        raise CookieChoiceError('Unsupported cookie choices schema')
+    result=[];identities=set()
+    for raw in value['rules']:
+        if not isinstance(raw,dict) or set(raw)!={'id','match','description','actions'}:
+            raise CookieChoiceError('Cookie rules need both Basic and UltraCache actions')
+        actions=raw['actions']
+        if not isinstance(actions,dict) or set(actions)!=set(PROFILES) or all(a is None for a in actions.values()):
+            raise CookieChoiceError('A cookie choice needs both profile fields and at least one action')
+        if any(a is not None and a not in ('shared','variant','private') for a in actions.values()):
+            raise CookieChoiceError('Unknown cookie action')
+        _legacy_normalize({'schemaVersion':1,'rules':[dict(id=raw['id'],match=raw['match'],
+            description=raw['description'],action='variant')]})
+        if raw['id'] in identities:raise CookieChoiceError('Cookie rule identifiers must be unique')
+        identities.add(raw['id']);result.append(copy.deepcopy(raw))
+    for profile in PROFILES:
+        _legacy_normalize({'schemaVersion':1,'rules':[dict(id=r['id'],match=r['match'],
+            description=r['description'],action=r['actions'][profile]) for r in result if r['actions'][profile] is not None]})
+    return {'schemaVersion':2,'rules':sorted(result,key=lambda row:row['id'])}
+
+
+def project(value,profile='basic'):
+    if profile not in PROFILES:raise CookieChoiceError('Unknown cookie profile')
+    # Preserve old authenticated wire/journal bytes and their legacy digest.
+    if value is None or isinstance(value,dict) and value.get('schemaVersion')==1:
+        return _legacy_normalize(value)
+    return _legacy_normalize({'schemaVersion':1,'rules':[dict(id=r['id'],match=r['match'],
+        description=r['description'],action=r['actions'][profile]) for r in normalize(value)['rules']
+        if r['actions'][profile] is not None]})
+
+
+def resolve(central=None, site=None,profile='basic'):
     """Site choices precede central choices; exact then longest literal prefix."""
     result, exact, prefixes = [], set(), {}
     for scope, settings in (('site', site), ('central', central)):
-        rows = normalize(settings)['rules']
+        rows = project(settings,profile)['rules']
         rows.sort(key=lambda row: (row['match']['kind'] != 'exact', -len(row['match']['value'].encode('utf-8')),
                                    row['match']['value'], row['id']))
         seen = set()
@@ -91,30 +134,27 @@ def concrete(value):
     or covering bundled match qualifies; otherwise use an explicit variant.
     Keep the raw stored snapshot intact for rollback to earlier software.
     """
-    result=normalize(value)
-    for row in result['rules']:
-        if row['action']=='automatic':row['action']=assessment(row['match'])
-    return result
+    return normalize(value)
 
 
-def materialize(central=None):
+def materialize(central=None,profile='basic'):
     """Flatten our defaults below admin choices into the existing wire schema."""
-    return normalize({'schemaVersion':1,'rules':[
+    return _legacy_normalize({'schemaVersion':1,'rules':[
         {key:row[key] for key in ('id','match','description','action')}
-        for row in resolve(defaults(),concrete(central))]})
+        for row in resolve(defaults(),concrete(central),profile)]})
 
 
-def active(central=None,site=None):
-    return resolve(materialize(central),concrete(site))
+def active(central=None,site=None,profile='basic'):
+    return resolve(materialize(central,profile),concrete(site),profile)
 
 
-def executable(central=None, site=None):
+def executable(central=None, site=None,profile='basic'):
     """Projection used for targeted invalidation; descriptions/IDs are metadata."""
     return [(row['scope'], row['match']['kind'], row['match']['value'], row['action'])
-            for row in active(central, site)]
+            for row in active(central, site,profile)]
 
 
-def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_shared=()):
+def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_shared=(),profile='basic'):
     """Same ordered choices for every real response cookie, without values.
 
     The same scoped resolver owns request and response cookie classification.
@@ -123,7 +163,7 @@ def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_
     """
     from aggressive import GENERIC_COOKIES
     generic = lambda row: row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES
-    resolved = active(central, site)
+    resolved = active(central, site,profile)
     if aggressive_mode:
         resolved = [dict(row,action='shared') if row['scope']=='central' and row['id'].startswith('bundled:') and generic(row) else row for row in resolved]
         # Explicit site/central choices precede these generic session defaults.
@@ -154,22 +194,21 @@ def _matches(pattern, match):
             match['value'].startswith(pattern['value']))
 
 
-def _proposal(match, catalogue):
+def _proposal(match, catalogue,profile='basic'):
     candidates = [row for row in catalogue['policies'] if _matches(row['match'], match)]
     candidates.sort(key=lambda row: (row['match']['kind'] != 'exact', -len(row['match']['value'].encode('utf-8'))))
     if not candidates:
         return None
     entry = candidates[0]
     consumers = entry['consumers']
-    action = ('private' if consumers['varnishPrivate'] else
-              'shared')
+    action = entry['actions'][profile]
     return dict(proposal=action, htmlEffect=entry['htmlEffect'], confidence='reviewed',
                 reason='Reviewed policy ' + entry['id'] + '; private cart/ESI behavior retains its application contract.'
                        if consumers['varnishCart'] else 'Reviewed policy ' + entry['id'],
                 sources=entry.get('sources', []))
 
 
-def table(database, catalogue, central=None, site=None):
+def _table(database, catalogue, central=None, site=None,profile='basic'):
     """The database has a real admin consumer; values never enter this API."""
     validate(catalogue)
     assessment_path = Path(__file__).with_name('cookie-assessments.json')
@@ -199,15 +238,15 @@ def table(database, catalogue, central=None, site=None):
                    name=match['value'] + ('*' if match['kind'] == 'prefix' else ''),
                    description=entry.get('description') or editorial.get('description', ''),
                    provider=entry.get('provider', ''), category=entry.get('category', ''),
-                   proposal=assessment(match), action=assessment(match), scope='bundled', override=False,
+                   proposal=assessment(match,profile), action=assessment(match,profile), scope='bundled', override=False,
                    htmlEffect='unknown', confidence='unassessed',
                    reason='Our default separates public objects by cookie value unless a concrete reviewed rule applies.', sources=[])
         row.update({k: editorial[k] for k in ('proposal', 'htmlEffect', 'confidence', 'reason', 'sources') if k in editorial})
-        reviewed = _proposal(match, catalogue)
+        reviewed = _proposal(match, catalogue,profile)
         if reviewed:
             row.update(reviewed)
-        row['action'] = assessment(match)
-        row['proposal'] = assessment(match)
+        row['action'] = assessment(match,profile)
+        row['proposal'] = assessment(match,profile)
         if not rule_for(match):row['scope']='recognition'
         rows.append(row)
     existing = {(row['match']['kind'], row['match']['value']) for row in rows}
@@ -218,12 +257,15 @@ def table(database, catalogue, central=None, site=None):
                              name=match['value'] + ('*' if match['kind'] == 'prefix' else ''),
                              description=policy.get('description', ''), provider=policy.get('provider', ''),
                              category='Reviewed policy', scope='bundled', override=False,
-                             action=_proposal(match, catalogue)['proposal'], **_proposal(match, catalogue)))
+                             action=_proposal(match, catalogue,profile)['proposal'], **_proposal(match, catalogue,profile)))
     by_id = {row['id']: row for row in rows}
     # Apply central then site for display. The compiled per-cookie resolution also
     # handles overlapping patterns; table rows expose that winner, not just ID.
-    explicit = resolve(concrete(central), concrete(site))
-    for choice in reversed(explicit):
+    explicit = resolve(concrete(central), concrete(site),profile)
+    # A rule remains one editable row even when this column inherits. Including
+    # its identity here does not add an executable choice to this profile.
+    stored=normalize(central)['rules']+normalize(site)['rules']
+    for choice in reversed(explicit+stored):
         if choice['id'] not in by_id:
             # Old editors created policy:<id> rows when recognition lacked that
             # entry. Retain their original reset identity even when today's
@@ -234,16 +276,16 @@ def table(database, catalogue, central=None, site=None):
                        name=match['value'] + ('*' if match['kind'] == 'prefix' else ''),
                        description=original.get('description','') if original else choice['description'],
                        provider=original.get('provider','') if original else '', category='Custom rule',
-                       proposal=assessment(match), action=assessment(match), scope='bundled', override=False,
+                       proposal=assessment(match,profile), action=assessment(match,profile), scope='bundled', override=False,
                        htmlEffect='site-dependent', confidence='user-choice', reason='Explicit local choice.', sources=[])
             rows.append(row)
             by_id[row['id']] = row
-    inherited = resolve(materialize(central) if site is not None else defaults())
-    selected_rules = normalize(site if site is not None else central)['rules']
+    inherited = resolve(materialize(central,profile) if site is not None else defaults(),profile=profile)
+    selected_rules = project(site if site is not None else central,profile)['rules']
     for row in rows:
-        baseline = _proposal(row['match'], catalogue)
+        baseline = _proposal(row['match'], catalogue,profile)
         inherited_winner = next((rule for rule in inherited if _matches(rule['match'], row['match'])), None)
-        row['inherited_action'] = inherited_winner['action'] if inherited_winner else baseline['proposal'] if baseline else assessment(row['match'])
+        row['inherited_action'] = inherited_winner['action'] if inherited_winner else baseline['proposal'] if baseline else assessment(row['match'],profile)
         row['inherited_scope'] = ('bundled' if inherited_winner['id'].startswith('bundled:') else 'central') if inherited_winner else 'recognition'
         row['inherited_active_rule'] = bool(inherited_winner)
         row['inherited_exists'] = (not row['id'].startswith('custom:') or
@@ -258,10 +300,10 @@ def table(database, catalogue, central=None, site=None):
         reset_metadata = {key: copy.deepcopy(row[key]) for key in
                           ('provider','category','proposal','htmlEffect','confidence','reason','sources')}
         if reset and reset['match'] != row['match']:
-            reset_metadata.update(provider='',category='Renamed inherited snapshot',proposal=assessment(row['reset_match']),
+            reset_metadata.update(provider='',category='Renamed inherited snapshot',proposal=assessment(row['reset_match'],profile),
                                   htmlEffect='site-dependent',confidence='user-choice',sources=[],
                                   reason='This inherited match was renamed; original database metadata does not describe it.')
-        reset_reviewed = _proposal(row['reset_match'],catalogue)
+        reset_reviewed = _proposal(row['reset_match'],catalogue,profile)
         if reset_reviewed:
             reset_metadata.update(reset_reviewed)
         reset_metadata['core_precedence'] = 'HTTP authentication, private routes/actions and origin private/no-store are independent of cookie classification.'
@@ -276,10 +318,10 @@ def table(database, catalogue, central=None, site=None):
             row.update(match=copy.deepcopy(own['match']), description=own['description'])
             row['name'] = own['match']['value'] + ('*' if own['match']['kind'] == 'prefix' else '')
             if renamed:
-                row.update(provider='', category='Renamed local snapshot', proposal=assessment(row['match']),
+                row.update(provider='', category='Renamed local snapshot', proposal=assessment(row['match'],profile),
                            htmlEffect='site-dependent', confidence='user-choice', sources=[],
                            reason='This local match was renamed; the original database provider and HTML assessment do not describe it.')
-                reviewed = _proposal(row['match'], catalogue)
+                reviewed = _proposal(row['match'], catalogue,profile)
                 if reviewed:
                     row.update(reviewed)
         winner = next((rule for rule in explicit if _matches(rule['match'], row['match'])), None)
@@ -293,11 +335,27 @@ def table(database, catalogue, central=None, site=None):
         # valid HTTP token. Invalid upstream notation remains visible metadata.
         row['valid_match'] = valid_name(row['match']['value'])
         row['active_rule'] = bool(winner or rule_for(row['match']))
-        row['default_version'] = bundle()[1]['version']
+        row['default_version'] = bundle()[1]['version'];row['default_profile']=profile
         row['policy_behavior'] = {'shared':'Shares public HTML across visitors. Preserves original provider cookies without storing or replaying their values.', 'variant':'Caches a separate public representation for each cookie value, including absence.', 'private':'Passes matching requests to the application without sharing their response.'}[row['action']]
         row['core_precedence'] = 'HTTP authentication, private routes/actions and origin private/no-store are independent of cookie classification.'
         row['effective_action'] = row['action'] if row['active_rule'] else 'existing-policy'
     return sorted(rows, key=lambda row: (row['name'].casefold(), row['id']))
+
+
+def table(database,catalogue,central=None,site=None,profile='basic'):
+    """Two equal editable columns, each with its own inherited/reset metadata."""
+    if profile is None:profile='basic'
+    tables={name:_table(database,catalogue,central,site,name) for name in PROFILES}
+    indexed={name:{r['id']:r for r in rows} for name,rows in tables.items()}
+    fields=('action','proposal','scope','override','rule_id','inherited_action','inherited_scope',
+            'inherited_active_rule','local_choice','reset_metadata','reset_proposal','active_rule',
+            'default_profile','default_version','effective_action','reason','core_precedence','policy_behavior')
+    result=tables[profile]
+    for row in result:
+        row['profile_actions']={name:{k:copy.deepcopy(indexed[name][row['id']][k]) for k in fields
+            if k in indexed[name][row['id']]} for name in PROFILES}
+        row['actions']={name:row['profile_actions'][name]['action'] for name in PROFILES}
+    return result
 
 
 def _pattern(match):
@@ -313,13 +371,13 @@ def _tidy(header):
             'if (req.http.' + header + ' == "") { unset req.http.' + header + '; }')
 
 
-def compile_vcl(central=None, site=None, *, chain_defaults=False, automatic_shared=()):
+def compile_vcl(central=None, site=None, *, chain_defaults=False, automatic_shared=(),profile='basic'):
     """Body for scp_admin_cookie_rules, after independent HTTP/route checks.
 
     Remove already handled pairs from a working copy so a lower-priority prefix
     cannot undo an exact/site decision. Keep the real origin Cookie unchanged.
     """
-    rules = resolve(concrete(central),concrete(site)) if chain_defaults else active(central, site)
+    rules = resolve(concrete(central),concrete(site),profile) if chain_defaults else active(central, site,profile)
     generated=_compile_rules(rules,chain_defaults=chain_defaults)
     if automatic_shared:
         automatic=[]
@@ -334,11 +392,13 @@ def compile_vcl(central=None, site=None, *, chain_defaults=False, automatic_shar
 def defaults_vcl():
     """Emit once per program; explicit site rules consume their pairs first."""
     from aggressive import GENERIC_COOKIES
-    rows=resolve(defaults())
-    generic=[row for row in rows if row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES]
-    remaining=[row for row in rows if row not in generic]
-    branch='if (req.http.X-SCP-Aggressive == "1") {\n'+_compile_rules([dict(row,action='shared') for row in generic],initialize=False,finish=False)+'\n} else {\n'+_compile_rules(generic,initialize=False,finish=False)+'\n}\n'
-    return 'sub scp_bundled_cookie_rules {\n'+branch+_compile_rules(remaining,initialize=False,finish=False)+'\n}'
+    def body(profile):
+        rows=resolve(defaults(),profile=profile)
+        generic=[row for row in rows if row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES]
+        remaining=[row for row in rows if row not in generic]
+        branch='if (req.http.X-SCP-Aggressive == "1") {\n'+_compile_rules([dict(row,action='shared') for row in generic],initialize=False,finish=False)+'\n} else {\n'+_compile_rules(generic,initialize=False,finish=False)+'\n}\n'
+        return branch+_compile_rules(remaining,initialize=False,finish=False)
+    return 'sub scp_bundled_cookie_rules {\nif (req.http.X-SCP-Profile == "ultracache") {\n'+body('ultracache')+'\n} else {\n'+body('basic')+'\n}\n}'
 
 
 def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False):

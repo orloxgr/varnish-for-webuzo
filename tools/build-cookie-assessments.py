@@ -26,7 +26,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True, help='Pinned upstream open-cookie-database.csv')
     parser.add_argument('--revision', required=True, help='Upstream commit containing this source CSV')
-    parser.add_argument('--version', default='2026.11.20.4', help='Editorial assessment version')
+    parser.add_argument('--version', default='2026.11.20.5', help='Editorial assessment version')
     parser.add_argument('--output', type=Path, required=True, help='Versioned concrete editorial default JSON')
     args = parser.parse_args()
     raw = args.source.read_bytes()
@@ -48,7 +48,9 @@ def main():
         entry['matchValue'] = name.strip()
         if name != entry['matchValue']:
             entry['reason'] += ' Editorial correction: surrounding whitespace in the source cookie name is not part of the literal match.'
-        assert entry['proposal'] in ('shared', 'variant', 'private')
+        basic=entry.pop('proposal')
+        reviewed_uc=_proposal(match,catalogue,'ultracache')
+        entry['actions']={'basic':basic,'ultracache':reviewed_uc['proposal'] if reviewed_uc else basic}
         if source['Data Controller']:
             entry['dataController'] = source['Data Controller']
         assert source['ID'] not in records
@@ -58,14 +60,12 @@ def main():
     for row in records.values():
         groups[(row['name'], row['wildcard'])].append(row)
     for group in groups.values():
-        if len({row['proposal'] for row in group}) > 1:
-            action = max((row['proposal'] for row in group), key={'shared':0,'variant':1,'private':2}.get)
-            providers = ', '.join(sorted({row['provider'] for row in group}))
-            for row in group:
-                row.update(proposal=action, htmlEffect='multiple-provider-literal', confidence='inferred-low')
-                row['reason'] += ' This identical name has multiple provider meanings (' + providers + '); the common ' + action + ' decision covers them. A site can override it.'
+        for profile in ('basic','ultracache'):
+            if len({row['actions'][profile] for row in group}) > 1:
+                action=max((row['actions'][profile] for row in group),key={'shared':0,'variant':1,'private':2}.get)
+                for row in group:row['actions'][profile]=action
 
-    result = dict(schemaVersion=1, version=args.version, sourceRevision=revision,
+    result = dict(schemaVersion=2, version=args.version, sourceRevision=revision,
                   sourceLicense='Apache-2.0', sourceLicenseFile='cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                   sourceSha256=hashlib.sha256(raw).hexdigest(),
                   method='Concrete per-record editorial decisions based on literal names and descriptions. Inference is not site-specific verification. Categories are not inputs. No visitor values or runtime lookup.',
@@ -77,7 +77,7 @@ def main():
         artifact = dict(policy, version=metadata['version'], sourceRevision=metadata['sourceRevision'])
         (SHARED / 'cookie-defaults.json').write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
     print(json.dumps({'assessed': len(records), 'confidence': dict(collections.Counter(row['confidence'] for row in records.values())),
-                      'suggestions': dict(collections.Counter(row['proposal'] for row in records.values()))}))
+                      'suggestions': {p:dict(collections.Counter(row['actions'][p] for row in records.values())) for p in ('basic','ultracache')}}))
 
 
 

@@ -60,18 +60,18 @@ def scope(request, sites, saving=False):
 
 def rules(config, site=None):
     return cookie_admin.active(normalize(config.get('cookie_policies')),
-                                normalize(site.get('cookie_policies')) if site else None)
+                                normalize(site.get('cookie_policies')) if site else None,site.get('profile','basic') if site else 'basic')
 
 
 def executable(config, site):
     # Labels/row IDs are metadata; only the resolved match/action changes cache behavior.
     return cookie_admin.executable(normalize(config.get('cookie_policies')),
-                                   normalize(site.get('cookie_policies')))
+                                   normalize(site.get('cookie_policies')),site.get('profile','basic'))
 
 
 def compile_recv(config, site):
     return cookie_admin.compile_vcl(normalize(config.get('cookie_policies')),
-                                    normalize(site.get('cookie_policies')),chain_defaults=True,automatic_shared=aggressive.session_names(site))
+                                    normalize(site.get('cookie_policies')),chain_defaults=True,automatic_shared=aggressive.session_names(site),profile=site.get('profile','basic'))
 
 
 def defaults_vcl():
@@ -86,26 +86,28 @@ def view(config, sites, request):
     admin = administrator(request)
     database = recognition.database()
     catalogue=load_catalogue();profile=site.get('profile','basic') if site else None
-    rows = cookie_admin.table(database, catalogue, central, local)
-    inherited = cookie_admin.table(database, catalogue, central if site else None, None)
-    for row in rows+inherited:
-        if site and aggressive.settings(site)['aggressive']:
-            explanation='Aggressive mode shares this generic anonymous session cookie. Known authentication, private routes and explicit Private choices still select PASS.'
-            for metadata in (row,row['reset_metadata']):
-                metadata['core_precedence']=metadata.get('core_precedence','').replace(
-                    'origin private/no-store are independent of cookie classification.',
-                    'origin privacy are independent of cookie classification. Aggressive mode can override generic origin privacy for anonymous public HTML.')
-            if row['match']['kind']=='exact' and row['match']['value'] in aggressive.GENERIC_COOKIES:
-                if not row.get('override'):
-                    row.update(action='shared',effective_action='shared',mode_default_action='shared',
-                               core_precedence=explanation,policy_behavior='Shares anonymous public HTML without storing or replaying personal cookie values.')
-                if row['inherited_scope']=='bundled':row['inherited_action']='shared'
-            if row['reset_match']['kind']=='exact' and row['reset_match']['value'] in aggressive.GENERIC_COOKIES and row['inherited_scope']=='bundled':
-                row['reset_metadata'].update(effective_action='shared',mode_default_action='shared',core_precedence=explanation)
+    rows = cookie_admin.table(database, catalogue, central, local,profile)
+    inherited = cookie_admin.table(database, catalogue, central if site else None, None,profile)
+    for parent in rows+inherited:
+        for row in parent['profile_actions'].values():
+            if site and aggressive.settings(site)['aggressive']:
+                explanation='Aggressive mode shares this generic anonymous session cookie. Known authentication, private routes and explicit Private choices still select PASS.'
+                for metadata in (row,row['reset_metadata']):
+                    metadata['core_precedence']=metadata.get('core_precedence','').replace(
+                        'origin private/no-store are independent of cookie classification.',
+                        'origin privacy are independent of cookie classification. Aggressive mode can override generic origin privacy for anonymous public HTML.')
+                if parent['match']['kind']=='exact' and parent['match']['value'] in aggressive.GENERIC_COOKIES:
+                    if not row.get('override'):
+                        row.update(action='shared',effective_action='shared',mode_default_action='shared',
+                                   core_precedence=explanation,policy_behavior='Shares anonymous public HTML without storing or replaying personal cookie values.')
+                    if row['inherited_scope']=='bundled':row['inherited_action']='shared'
+                if parent['reset_match']['kind']=='exact' and parent['reset_match']['value'] in aggressive.GENERIC_COOKIES and row['inherited_scope']=='bundled':
+                    row['reset_metadata'].update(effective_action='shared',mode_default_action='shared',core_precedence=explanation)
+        parent.update(parent['profile_actions'][profile or 'basic'])
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
         fallback = inherited_by_id.get(row['id'])
-        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior','active_rule','mode_default_action') if key in fallback})
+        row['inherited'] = (dict(rule_id=fallback.get('rule_id'),**{key: copy.deepcopy(fallback[key]) for key in ('profile_actions','actions','match','description','action','scope','override','provider','category','proposal','htmlEffect','confidence','reason','sources','core_precedence','effective_action','valid_match','default_version','policy_behavior','active_rule','mode_default_action') if key in fallback})
                             if fallback else None)
     integration=None; integration_error=site.get('cookie_integration_notice','') if site else ''
     precedence=[]

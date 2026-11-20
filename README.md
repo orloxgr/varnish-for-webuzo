@@ -266,3 +266,10 @@ Verification results and runtime test instructions: [Testing](docs/TESTING.md).
 Based on [varnish-for-hestia](https://github.com/orloxgr/varnish-for-hestia). Author: [Byron Iniotakis](https://www.iniotakis.com). GPL-3.0-or-later.
 
 This project is an independent third-party integration. It is not affiliated with, endorsed, sponsored, or supported by Webuzo or Softaculous. The Webuzo name is used only to describe compatibility with the hosting platform.
+
+Cookie policies use two independent Basic and UltraCache columns, each with
+Shared HTML, Public variant or Private and its own inherited/reset behavior.
+Commenter cookies default to Private in Basic and Shared in UltraCache; all other
+paired defaults are identical. Existing choices remain explicit in both columns.
+Connected WordPress receives the selected profile as the existing concrete signed
+snapshot; standalone WordPress uses the UltraCache column.

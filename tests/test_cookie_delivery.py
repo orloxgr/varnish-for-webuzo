@@ -14,8 +14,12 @@ import unittest
 from test_profiles import program
 
 
+def policy_for_choices(profile,choices):
+    return program(profile,config={'cookie_policies':choices},other_profile=profile)
+
+
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None):
+def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -50,7 +54,7 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
             root = Path(folder)
             selected=dict(configuration or {})
             if policies is not None:selected['cookie_policies']=policies
-            source = program(profile, config=selected,site_settings=site_settings).replace('${s1_port}', str(origin.server_port))
+            source = program(profile, config=selected,site_settings=site_settings,other_profile=other_profile).replace('${s1_port}', str(origin.server_port))
             if transform is not None:
                 source = transform(source)
             (root / 'policy.vcl').write_text(source)

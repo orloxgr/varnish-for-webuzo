@@ -20,6 +20,7 @@ import recognition
 import cookie_views
 import cookie_bridge
 import cookie_execution
+import cookie_defaults
 import cms_discovery
 import aggressive
 import cms_inventory
@@ -37,7 +38,8 @@ def inventory(config,discover=False,discover_id=None,refresh_changed=False):
         site.update(enabled=bool(previous.get('enabled')) and not bool(site['error']),token=previous.get('token') or secrets.token_hex(32),bypass=previous.get('bypass',[]))
         site.update(recv_vcl=previous.get('recv_vcl',''),backend_vcl=previous.get('backend_vcl',''))
         site['browser_cache']=browser_cache.validate(previous['browser_cache']) if previous.get('browser_cache') is not None else None
-        site['cookie_policies']=cookie_views.normalize(previous.get('cookie_policies'))
+        cookie_views.normalize(previous.get('cookie_policies'))  # Validate without rewriting a saved snapshot.
+        site['cookie_policies']=copy.deepcopy(previous.get('cookie_policies'))
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
         site.update(aggressive.settings(previous))
         site['cms_excluded_directories']=cms_discovery.exclusions(previous.get('cms_excluded_directories',[]))
@@ -126,6 +128,7 @@ def recover():
 def apply(previous,next_config,cookie_force_sites=()):
     next_config['cookie_defaults_version']=cookie_views.default_version()
     next_config['cookie_defaults_digest']=cookie_views.default_digest()
+    next_config['cookie_defaults_profile_digests']=cookie_defaults.profile_digests()
     if next_config.get('installed'):next_config['proxy_timeouts']=native.proxy_timeouts()
     changes=[change for change in plans(previous,next_config) if change['before']!=change['after']]
     content=policy.render(next_config['sites'],next_config['gateway'],next_config['origin'],next_config)
@@ -135,8 +138,8 @@ def apply(previous,next_config,cookie_force_sites=()):
     execution=cookie_execution.projections()
     for sid,site in next_config['sites'].items():
         old=previous.get('sites',{}).get(sid,{})
-        changed=(previous.get('cookie_defaults_digest')!=next_config.get('cookie_defaults_digest') or
-                 execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies')))
+        changed=(cookie_defaults.changed(previous,next_config,site.get('profile','basic'),old.get('profile','basic')) or
+                 execution(previous.get('cookie_policies'),old.get('cookie_policies'),old.get('profile','basic'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'),site.get('profile','basic')))
         changed=changed or cookie_bridge.configuration(old.get('cookie_integration'),old or site)!=cookie_bridge.configuration(site.get('cookie_integration'),site)
         if changed and site.get('enabled'):cookie_purge_sites.append(sid)
     journal=dict(previous=previous,changes=changes,active_before=native.read(service.ACTIVE).decode() if service.ACTIVE.exists() else None,old_vcl=None,
@@ -167,7 +170,7 @@ def apply(previous,next_config,cookie_force_sites=()):
                 changed=changed or old.get('cms_installations',[])!=site.get('cms_installations',[])
                 changed=changed or old.get('cms_cookies',[])!=site.get('cms_cookies',[])
                 changed=changed or aggressive.settings(old)!=aggressive.settings(site)
-                changed=changed or execution(previous.get('cookie_policies'),old.get('cookie_policies'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'))
+                changed=changed or execution(previous.get('cookie_policies'),old.get('cookie_policies'),old.get('profile','basic'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'),site.get('profile','basic'))
                 changed=changed or sid in cookie_purge_sites
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))
                 if site.get('enabled') and changed:service.purge(site)
@@ -198,6 +201,7 @@ def apply_cookie_only(previous,config,cookie_force_sites=()):
     """A retained panel can sync WordPress without installing/starting a proxy."""
     config['cookie_defaults_version']=cookie_views.default_version()
     config['cookie_defaults_digest']=cookie_views.default_digest()
+    config['cookie_defaults_profile_digests']=cookie_defaults.profile_digests()
     operations=cookie_bridge.plan(previous,config,cookie_force_sites)
     journal=dict(previous=previous,changes=[],active_before=None,old_vcl=None,
                  cookie_operations=operations,local_started=False,cookie_purge_sites=[])

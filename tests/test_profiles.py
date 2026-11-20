@@ -18,9 +18,10 @@ import profiles
 def site(identity='a',domain='example.test',profile='basic',token='b'):
     return dict(id=identity*32,domain=domain,names=[domain],enabled=True,error='',token=token*64,bypass=[],recv_vcl='',backend_vcl='',profile=profile)
 
-def program(profile='basic',config=None,legacy_cookie_delivery=None,site_settings=None):
+def program(profile='basic',config=None,legacy_cookie_delivery=None,site_settings=None,other_profile=None):
     first=site(profile=profile);second=site('c','other.test',profile,'d')
     if site_settings:first.update(site_settings)
+    if other_profile:second['profile']=other_profile
     # Test-only raw historical state: production must ignore this removed field.
     if legacy_cookie_delivery is not None:first['cookie_delivery']=legacy_cookie_delivery
     source=policy.render({first['id']:first,second['id']:second},'e'*64,'f'*64,config)

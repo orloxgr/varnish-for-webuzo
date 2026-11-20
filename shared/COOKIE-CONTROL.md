@@ -63,25 +63,36 @@ Explicit installed central/site Shared/Variant/Private choices retain precedence
 there is no forced migration of a saved choice or expansion of the legacy carrier.
 The new default must be accepted from clean shipped rules, not a fixture override.
 
-The `2026.11.20.4` bundle keeps both the `comment_author_` and more-specific
-`comment_author_url_` prefixes Private by default in every profile. The `.3`
-experimental Shared default was never released: plain WordPress can embed
-commenter identity in HTML without a private response header. A manual Shared
-choice remains authoritative. With the WordPress comments integration it uses
-private template/form/pending-comment delivery and the private fallback when ESI
-is disabled. Native cookie matching does not supply that integration; selecting
-Shared without it can share personal HTML. Prepared delivery preserves actual
-commenter cookies; the legacy unprepared carrier is unchanged and Basic still
-has no ESI. Existing explicit Shared/Variant/Private choices retain priority.
+The `2026.11.20.5` native storage and common default bundle use schema 2.
+Every rule has one match/description and two equal fields:
+`actions: {basic: "private", ultracache: "shared"}`. Every bundled field is
+concrete. The two commenter prefixes default to Private in Basic and Shared in
+UltraCache; all other paired decisions are identical. There is no exception list
+or conditional cookie veto. The application integration supplies personal comments
+for UltraCache; Basic does not acquire ESI.
 
-For connected apply, native adapters call `materialized_snapshot(central,site)`:
-`central` contains versioned bundled defaults underneath explicit admin choices;
-`site` contains concrete site choices. Rule fields and schema 1 are unchanged.
-Descriptions and provenance remain outside execution/digest semantics. The same
-resolved rule list is compiled natively and executed by the application.
-`shared/cookie-defaults.json` supplies the standalone application's identical
-bundled rules. A nonempty panel-managed committed snapshot remains authoritative until
-the next ordinary signed commit, even if application code has newer defaults.
+The panel edits both columns independently. Central and website choices use the
+same pair. A null manual field means that column has no local override; Reset
+removes it. It is not a fourth executable action. Both null fields remove a local
+row. A legacy schema-1 choice is read as the same explicit action in both columns;
+reading/updating defaults never rewrites the stored choices. Each column resolves
+site > central > bundled, with exact/longest-prefix priority inside each scope.
+
+For connected apply, native adapters call
+`materialized_snapshot(central,site,profile)` after selecting the domain profile.
+The signed protocol remains schema 1: `central` contains only that profile's
+concrete bundled defaults underneath admin choices, and `site` only its concrete
+site choices. No dual metadata crosses the existing signed control wire. The
+application executes exactly this frozen managed snapshot. Standalone WordPress
+builds its concrete schema-1 defaults from the UltraCache column of the common
+schema-2 JSON. No frontend JSON lookup or new protocol/capability is required.
+
+IDs/descriptions are metadata. Request and response compilers, UI inherited/reset
+metadata, native execution digests and targeted invalidation all select the same
+column. Changing Basic alone does not alter UltraCache's execution/digest, or vice
+versa. Existing journal snapshots and empty disconnect/rollback remain schema 1.
+A nonempty committed application snapshot stays authoritative until its next
+ordinary signed commit, even when the application code has newer defaults.
 
 `automatic` remains accepted for old snapshots/recovery. New native targets
 materialize it to an identical/covering bundled match or Variant, never the first

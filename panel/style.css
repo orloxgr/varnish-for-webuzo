@@ -34,13 +34,13 @@
 #wvw-cookie-admin input[type=text], #wvw-cookie-admin input[type=search] { box-sizing: border-box; padding: 8px; border: 1px solid #b4bfd6; border-radius: 4px; color: #172644; background: white; }
 #wvw-cookie-admin input[type=text] { width: 100%; min-width: 170px; }
 #wvw-cookie-admin input[type=search] { min-width: 280px; }
-#wvw-cookie-admin .wvw-cookie-sheet td:nth-child(2) { width: 25%; min-width: 220px; overflow-wrap: anywhere; }
-#wvw-cookie-admin .wvw-cookie-sheet td:nth-child(3) { width: 35%; }
-#wvw-cookie-admin .wvw-cookie-sheet td:nth-child(4) { min-width: 190px; }
+#wvw-cookie-admin .wvw-cookie-sheet td:nth-child(2) { width: 18%; min-width: 0; overflow-wrap: anywhere; }
+#wvw-cookie-admin .wvw-cookie-sheet td:nth-child(3) { width: 29%; }
+#wvw-cookie-admin .wvw-cookie-sheet td:nth-child(4), #wvw-cookie-admin .wvw-cookie-sheet td:nth-child(5) { width: 17%; min-width: 0; }
 #wvw-cookie-admin textarea { box-sizing: border-box; min-width: 210px; }
 #wvw-cookie-admin td:last-child { min-width: 190px; }
 #wvw-cookie-admin .wvw-cookie-sheet .wvw-cookie-field { display: block; width: 100%; height: 44px; min-height: 44px; margin: 0; box-sizing: border-box; font: inherit; line-height: 1.4; padding: 10px; }
-#wvw-cookie-admin .wvw-cookie-sheet textarea.wvw-cookie-field { resize: vertical; }
+#wvw-cookie-admin .wvw-cookie-sheet textarea.wvw-cookie-field { height: 85px; max-height: 85px; overflow-y: auto; resize: vertical; }
 #wvw-cookie-admin .wvw-cookie-why { display: block; margin-top: 10px; min-height: 44px; font-weight: 600; }
 #wvw-cookie-admin .wvw-cookie-detail-row > td { padding: 0; max-width: none; }
 #wvw-cookie-admin .wvw-cookie-explanation { padding: 18px 24px; background: #f4f6fc; border-left: 4px solid #484eaa; overflow-wrap: anywhere; }

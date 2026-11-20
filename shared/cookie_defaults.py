@@ -95,36 +95,49 @@ def bundle():
     data=json.loads(Path(__file__).with_name('cookie-assessments.json').read_text(encoding='utf-8'))
     rules=[]
     for identity,row in data['records'].items():
-        action=row['proposal']
+        actions=row['actions']
         literal=row.get('matchValue',row['name'])
-        if action not in ('shared','variant','private') or not valid_name(literal):
+        if set(actions)!={'basic','ultracache'} or any(a not in ('shared','variant','private') for a in actions.values()) or not valid_name(literal):
             raise ValueError('Bundled cookie defaults need concrete actions and safe literal names')
         rules.append(dict(id='bundled:'+identity,match=dict(kind='prefix' if row.get('wildcard') else 'exact',
-            value=literal.removesuffix('*') if row.get('wildcard') else literal),description=row['description'],action=action))
+            value=literal.removesuffix('*') if row.get('wildcard') else literal),description=row['description'],actions=copy.deepcopy(actions)))
     from cookie_catalogue import load_catalogue
     for row in load_catalogue()['policies']:
-        action='private' if row['consumers']['varnishPrivate'] else 'shared'
-        rules.append(dict(id='bundled:policy:'+row['id'],match=row['match'],description=row.get('description',''),action=action))
+        rules.append(dict(id='bundled:policy:'+row['id'],match=row['match'],description=row.get('description',''),actions=copy.deepcopy(row['actions'])))
     # Duplicate provider names use the editorial common decision from the build.
     # Reviewed catalogue matches remain authoritative over inferred duplicates.
     unique={}
     for rule in rules:unique[(rule['match']['kind'],rule['match']['value'])]=rule
-    return dict(schemaVersion=1,rules=list(unique.values())),data
+    return dict(schemaVersion=2,rules=list(unique.values())),data
 
 
 def defaults():
     return copy.deepcopy(bundle()[0])
 
 
-def fingerprint():
+def fingerprint(profile=None):
     """Execution identity, unaffected by an editorial text/version-only edit."""
-    projection=sorted((row['match']['kind'],row['match']['value'],row['action']) for row in bundle()[0]['rules'])
+    if profile is not None and profile not in ('basic','ultracache'):raise ValueError('Unknown cookie profile')
+    def projection_for(name):
+        return sorted((r['match']['kind'],r['match']['value'],r['actions'][name]) for r in bundle()[0]['rules'])
+    projection=projection_for(profile) if profile else {name:projection_for(name) for name in ('basic','ultracache')}
     return hashlib.sha256(json.dumps(projection,ensure_ascii=True,separators=(',',':')).encode()).hexdigest()
 
 
-def assessment(match):
+def profile_digests():
+    return {profile:fingerprint(profile) for profile in ('basic','ultracache')}
+
+
+def changed(before,after,profile='basic',before_profile=None):
+    def digest(state,name):
+        state=state or {}
+        return state.get('cookie_defaults_profile_digests',{}).get(name,state.get('cookie_defaults_digest'))
+    return digest(before,before_profile or profile)!=digest(after,profile)
+
+
+def assessment(match,profile='basic'):
     rule=rule_for(match)
-    return rule['action'] if rule else 'variant'
+    return rule['actions'][profile] if rule else 'variant'
 
 
 def rule_for(match):

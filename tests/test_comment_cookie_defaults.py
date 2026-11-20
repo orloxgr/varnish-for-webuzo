@@ -1,8 +1,8 @@
 """Shipped commenter rules and native transport, not real WordPress integration.
 
 Template fields, pending visibility, wpDiscuz and ESI-off application fallback
-require separate actual WordPress acceptance. Defaults stay Private; Shared
-transport scenarios below declare their manual choice explicitly.
+require separate actual WordPress acceptance. Basic defaults stay Private; UltraCache defaults share the public parent.
+Explicit-choice scenarios declare the selected profile action separately.
 """
 import copy
 import json
@@ -34,20 +34,21 @@ class CommentCookiePolicy(unittest.TestCase):
         row=next(r for r in load_catalogue()['policies'] if r['id']=='comment-author-prefix')
         self.assertEqual((row['integration'],row['htmlEffect'],row['cacheKey']),
             ('wordpress-comments-esi','private','private'))
-        self.assertTrue(row['consumers']['varnishPrivate'])
+        self.assertEqual(row['actions'],{'basic':'private','ultracache':'shared'})
         policy,metadata=defaults.bundle()
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         self.assertEqual(artifact['version'],metadata['version'])
         for prefix in PREFIXES:
             assessment=next(r for r in metadata['records'].values() if r['name']==prefix)
-            self.assertEqual((assessment['proposal'],assessment['htmlEffect']),('private','private'))
+            self.assertEqual((assessment['actions'],assessment['htmlEffect']),({'basic':'private','ultracache':'shared'},'private'))
             for rules in (policy['rules'],artifact['rules']):
                 rule=next(r for r in rules if r['match']==dict(kind='prefix',value=prefix))
-                self.assertEqual(rule['action'],'private')
-        selectors=compiled_selectors(admin.compile_vcl())
-        for name in NAMES:
-            self.assertEqual(response_action(admin.response_rules(),name),'private')
-            self.assertEqual(selected_action(selectors,name),'private')
+                self.assertEqual(rule['actions'],{'basic':'private','ultracache':'shared'})
+        for profile,action in (('basic','private'),('ultracache','shared')):
+            selectors=compiled_selectors(admin.compile_vcl(profile=profile))
+            for name in NAMES:
+                self.assertEqual(response_action(admin.response_rules(profile=profile),name),action)
+                self.assertEqual(selected_action(selectors,name),action)
 
     def test_saved_choices_override_both_default_prefixes_without_snapshot_mutation(self):
         for prefix in PREFIXES:
@@ -67,7 +68,7 @@ class CommentCookiePolicy(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skipped is not acceptance')
 class NativeCommentCookieDefaults(unittest.TestCase):
-    def test_private_default_prevents_cold_commenter_leak_and_bypasses_warm_guest(self):
+    def test_basic_private_and_ultracache_shared_defaults_select_their_own_behavior(self):
         for profile in ('basic','ultracache'):
             for aggressive in (False,True):
                 calls=[]
@@ -75,16 +76,16 @@ class NativeCommentCookieDefaults(unittest.TestCase):
                     value=headers.get('Cookie');calls.append(value)
                     # Model a plain app that emits personal HTML without any
                     # Vary/private header. No application isolation is claimed.
-                    return value or 'guest form',[('Cache-Control','public, max-age=120')]
+                    return (value or 'guest form') if profile=='basic' else 'public parent',[('Cache-Control','public, max-age=120')]
                 with self.subTest(profile=profile,aggressive=aggressive),proxy(profile,origin,
                         site_settings={'aggressive':aggressive,'aggressive_ttl':600}) as get:
-                    for value,expected in ((commenter('A'),'PASS'),(None,'MISS'),
-                            (commenter('A'),'PASS'),(commenter('B'),'PASS'),(None,'HIT')):
+                    for visit,(value,expected) in enumerate(((commenter('A'),'PASS'),(None,'MISS'),
+                            (commenter('A'),'PASS'),(commenter('B'),'PASS'),(None,'HIT'))):
                         status,fields,body=get('/public-comments',value)
-                        self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],expected)
-                        self.assertEqual(body,value or 'guest form')
-                        if value:self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
-                    self.assertEqual(calls,[commenter('A'),None,commenter('A'),commenter('B')])
+                        self.assertEqual(status,200);self.assertEqual(dict(fields)['X-Cache'],expected if profile=='basic' else 'MISS' if visit==0 else 'HIT')
+                        self.assertEqual(body,(value or 'guest form') if profile=='basic' else 'public parent')
+                        if value and profile=='basic':self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
+                    self.assertEqual(calls,[commenter('A'),None,commenter('A'),commenter('B')] if profile=='basic' else [commenter('A')])
 
     def test_explicit_saved_shared_variant_and_private_choices_keep_their_behavior(self):
         for profile in ('basic','ultracache'):
@@ -106,7 +107,7 @@ class NativeCommentCookieDefaults(unittest.TestCase):
                         self.assertEqual(body,'public' if action=='shared' else value)
                     self.assertEqual(len(calls),{'shared':1,'variant':2,'private':3}[action])
 
-    def test_manual_shared_prepared_parent_uses_current_cookie_and_owner_only_response(self):
+    def test_ultracache_default_shared_prepared_parent_uses_current_cookie_and_owner_only_response(self):
         calls=[]
         def origin(path,headers):
             phase=headers.get('X-UltraCache-Delivery-Phase')
@@ -118,8 +119,8 @@ class NativeCommentCookieDefaults(unittest.TestCase):
                     ('Set-Cookie','comment_author_url_demo='+value[-3:]+'; Path=/; HttpOnly')]
             if path==PARENT:return BODY,META
             return 'cold child',[('Cache-Control','private, no-store')]
-        # The user explicitly chose Shared; this does not seed a default test.
-        with proxy('ultracache',origin,policies=choices(('prefix','comment_author_','shared'))) as get:
+        # UltraCache's shipped default is Shared; no override is seeded here.
+        with proxy('ultracache',origin) as get:
             self.assertEqual(get(PARENT)[0],200);calls.clear()
             for visitor in ('A','B','A'):
                 value=commenter(visitor)

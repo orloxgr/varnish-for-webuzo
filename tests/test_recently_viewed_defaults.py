@@ -29,11 +29,11 @@ class RecentlyViewedPolicy(unittest.TestCase):
         self.assertFalse(row['consumers']['varnishPrivate'])
         policy,metadata=defaults.bundle()
         assessment=next(r for r in metadata['records'].values() if r['name']==NAME)
-        self.assertEqual(assessment['proposal'],'shared')
+        self.assertEqual(assessment['actions'],{'basic':'shared','ultracache':'shared'})
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         for rules in (policy['rules'],artifact['rules']):
             winner=next(r for r in rules if r['match']==dict(kind='exact',value=NAME))
-            self.assertEqual(winner['action'],'shared')
+            self.assertEqual(winner['actions'],{'basic':'shared','ultracache':'shared'})
         self.assertEqual(artifact['version'],metadata['version'])
         self.assertEqual(response_action(admin.response_rules(),NAME),'shared')
         self.assertEqual(selected_action(compiled_selectors(admin.compile_vcl()),NAME),'shared')

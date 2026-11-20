@@ -51,6 +51,10 @@ def validate(catalogue):
             raise ValueError('Private cookie policy must describe private HTML')
         if consumers['varnishCart'] and policy.get('htmlEffect') != 'private-fragment':
             raise ValueError('Cart cookie policy must describe its private fragment')
+        actions=policy.get('actions')
+        if not isinstance(actions,dict) or set(actions)!={'basic','ultracache'} or any(
+                action not in ('shared','variant','private') for action in actions.values()):
+            raise ValueError('Every cookie policy needs both profile actions')
         for key in ('delivery', 'consent', 'attributes'):
             if not isinstance(policy.get(key), dict):
                 raise ValueError('Cookie policy is missing ' + key)

@@ -73,12 +73,17 @@ not replace executable rules with a category-derived allowlist. All distributed
 copies of the reviewed catalogue and compiler must agree at release time;
 installed servers neither import another checkout nor contact a lookup service.
 
-### Explicit administrator choices (schema 1)
+### Explicit administrator choices (dual-profile schema 2)
 
 `cookie_admin.py` is shared unchanged. Settings are
-`{"schemaVersion":1,"rules":[{"id":"ocd:source-id|policy:reviewed-id|custom:uuid",
-"match":{"kind":"exact|prefix","value":"literal-name"},
-"description":"plain text","action":"shared|variant|private"}]}`.
+`{"schemaVersion":2,"rules":[{"id":"ocd:source-id|policy:reviewed-id|custom:uuid",
+"match":{"kind":"exact|prefix","value":"literal-name"},"description":"plain text",
+"actions":{"basic":"private","ultracache":"shared"}}]}`.
+Both profile keys are required. Bundled actions are concrete; manual null means
+no override for that profile. Reset removes only that column, not the other.
+Legacy schema-1 choices are read as the same explicit choice in both columns.
+There are exactly three executable actions, with independent central/site priority.
+The signed application control protocol stays concrete schema 1; see COOKIE-CONTROL.md.
 Names are case-sensitive escaped literals; a prefix is not arbitrary regex.
 Legacy literal colon/slash/brackets/Unicode/internal spaces are supported.
 Reject empty names, leading/trailing whitespace, controls/DEL and ; = " { }.
@@ -88,8 +93,10 @@ An upstream description is retained by the updater when available. Assessments
 are explicitly reviewed or inferred; external categories do not grant execution.
 
 The API is `normalize(value)`, `table(database,catalogue,central=None,site=None)`,
-`resolve(central=None,site=None)`, `executable(central=None,site=None)` and
-`compile_vcl(central=None,site=None)`. `table` includes the proposal separately
+`resolve(central=None,site=None,profile='basic')`,
+`executable(central=None,site=None,profile='basic')` and
+`compile_vcl(central=None,site=None,profile='basic')`. The table exposes both columns
+and their inherited/reset metadata; compilation selects one before precedence. `table` includes the proposal separately
 from the actual action, origin/scope, inherited action, local snapshot, confidence
 and reason. Recognition rows and their bundled executable choices are versioned together.
 New names outside the versioned bundle are `scope=recognition, active_rule=false`
@@ -103,16 +110,17 @@ uses its first child's decision. New editors offer only the three concrete actio
 
 `cookie_defaults.py` builds the defaults from pinned `cookie-assessments.json`
 and the reviewed catalogue. The generated `cookie-defaults.json` is the identical
-schema-1 rule snapshot for independent consumers, with version/sourceRevision
-metadata outside the inner settings. `materialize(central)` flattens admin choices
-above defaults; `active(central,site)` resolves site above that snapshot. Within
+schema-2 paired-action rule snapshot for independent consumers, with version/sourceRevision
+metadata outside the inner settings. `materialize(central,profile)` selects the
+column and flattens admin choices above defaults into the existing concrete
+schema-1 wire. `active(central,site,profile)` resolves site above that projection. Within
 scope sort exact first, longest UTF-8 byte length first, literal name then ID.
 Empty internal pair/variant headers are unset after normalization: an empty
 header must not add a hash dimension that an authenticated soft purge cannot
 address. Anonymous and Shared-only visitors reuse the same public object.
 Prefix coverage uses a trie; bundled exact names compile into disjoint action
 groups. Prefix action groups exclude more-specific overlapping selectors of
-a different action, preserving nested exceptions without per-record blocks. Adapters emit
+a different action, preserving selector specificity without per-record blocks. Adapters emit
 `defaults_vcl()` once at top level and call `compile_vcl(...,chain_defaults=True)`
 for explicit site/admin choices. The latter initializes a working header, consumes
 explicit pairs first, calls the common defaults on the remainder, then finalizes

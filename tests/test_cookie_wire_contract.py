@@ -47,7 +47,7 @@ class CookieWireContract(unittest.TestCase):
     def test_store_notice_default_and_explicit_overrides(self):
         import cookie_defaults
         row=cookie_defaults.bundle()[1]['records']['a8a7e455-ceb9-4b31-954f-2e47d64f0a1c']
-        self.assertEqual((row['proposal'],row['confidence']),('shared','source-reviewed'))
+        self.assertEqual((row['actions']['basic'],row['confidence']),('shared','source-reviewed'))
         self.assertEqual(cookie_defaults.infer('store_notice','WooCommerce','')['proposal'],'shared')
         for name in ('store_notice','store_notice0123456789abcdef'):
             self.assertEqual(response_action(admin.response_rules(),name),'shared')

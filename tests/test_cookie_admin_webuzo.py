@@ -96,7 +96,7 @@ class NativeScope(unittest.TestCase):
         previous=engine.settings();previous['sites'][self.first['id']]['cookie_policies']=choices('automatic','unknown_legacy_cookie_17')
         state.save(engine.SETTINGS,previous);before=engine.SETTINGS.read_bytes()
         view=self.request()['cookie_policies']
-        self.assertEqual(view['settings']['rules'][0]['action'],'variant')
+        self.assertEqual(view['settings']['rules'][0]['actions'],{'basic':'variant','ultracache':'variant'})
         self.assertEqual(engine.SETTINGS.read_bytes(),before)
 
     def test_owner_sees_only_native_owned_sites_and_no_credentials(self):
@@ -134,7 +134,7 @@ class NativeScope(unittest.TestCase):
         saved = engine.settings()
         self.assertEqual(saved['cookie_policies'], previous['cookie_policies'])
         self.assertEqual(saved['sites'][self.second['id']]['cookie_policies'], previous['sites'][self.second['id']]['cookie_policies'])
-        self.assertEqual(saved['sites'][self.first['id']]['cookie_policies'], choices('automatic'))
+        self.assertEqual(saved['sites'][self.first['id']]['cookie_policies'],cookie_admin.normalize(choices('automatic')))
         self.assertFalse(result['cookie_policies']['enabled'])
 
     def test_transferred_site_is_rechecked_against_native_inventory(self):
@@ -250,7 +250,7 @@ class NativeScope(unittest.TestCase):
         for mocked in (apply,reload,load,stop,command):mocked.assert_not_called()
         self.assertEqual(calls,['status','prepare','commit'])
         self.assertIn('UltraCache',result['message'])
-        self.assertEqual(engine.settings()['sites'][self.first['id']]['cookie_policies'],choices('private'))
+        self.assertEqual(engine.settings()['sites'][self.first['id']]['cookie_policies'],cookie_admin.normalize(choices('private')))
 
     def test_connection_check_uses_the_same_native_owner_boundary(self):
         with patch.object(cookie_bridge,'status') as status,self.assertRaises(ValueError):
