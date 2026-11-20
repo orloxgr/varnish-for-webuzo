@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.17.1",
+  "version": "2026.11.20.2",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -1837,9 +1837,9 @@
         "value": "woocommerce_recently_viewed"
       },
       "provider": "application",
-      "integration": null,
-      "htmlEffect": "private",
-      "cacheKey": "private",
+      "integration": "woocommerce-esi",
+      "htmlEffect": "private-fragment",
+      "cacheKey": "ignore",
       "delivery": {
         "mode": "provider",
         "issuer": "application",
@@ -1863,9 +1863,9 @@
       "consumers": {
         "wordpressSafeTracking": false,
         "wordpressRequiredUnsafe": false,
-        "wordpressDefaultUnsafe": true,
+        "wordpressDefaultUnsafe": false,
         "wordpressResponsePrivate": false,
-        "varnishPrivate": true,
+        "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },

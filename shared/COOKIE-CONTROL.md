@@ -54,6 +54,15 @@ from this transport. Public browser headers cannot impersonate it.
 
 ## Materialized defaults without a wire-schema change
 
+The `2026.11.20.2` bundle changes only `woocommerce_recently_viewed` from
+Private to Shared. This shares the public parent; it does not generate a history
+cookie, supply a private widget or grant consent. WordPress owns actual history
+tracking, personal fragments and an ordinary-private fallback when ESI cannot
+isolate that content. Basic stays best effort without WordPress integrations.
+Explicit installed central/site Shared/Variant/Private choices retain precedence;
+there is no forced migration of a saved choice or expansion of the legacy carrier.
+The new default must be accepted from clean shipped rules, not a fixture override.
+
 For connected apply, native adapters call `materialized_snapshot(central,site)`:
 `central` contains versioned bundled defaults underneath explicit admin choices;
 `site` contains concrete site choices. Rule fields and schema 1 are unchanged.

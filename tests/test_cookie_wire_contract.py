@@ -55,9 +55,9 @@ class CookieWireContract(unittest.TestCase):
                 site=choices(('prefix','store_notice',action))
                 self.assertEqual(response_action(admin.response_rules(site=site),name),action)
                 self.assertEqual(selected_action(compiled_selectors(admin.compile_vcl(site=site)),name),action)
-        # This editorial correction does not change the four cart/history roles.
+        # Store Notice and the reviewed public-parent cart/history defaults agree.
         for name,action in (('woocommerce_items_in_cart','shared'),('woocommerce_cart_hash','shared'),
-                            ('wp_woocommerce_session_shop','shared'),('woocommerce_recently_viewed','private')):
+                            ('wp_woocommerce_session_shop','shared'),('woocommerce_recently_viewed','shared')):
             self.assertEqual(response_action(admin.response_rules(),name),action)
 
     def test_saved_choices_override_former_mandatory_roles_in_both_directions(self):

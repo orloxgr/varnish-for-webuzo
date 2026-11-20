@@ -1257,15 +1257,6 @@
             },
             "description": "",
             "action": "shared"
-          },
-          {
-            "id": "custom:wire1",
-            "match": {
-              "kind": "exact",
-              "value": "woocommerce_recently_viewed"
-            },
-            "description": "",
-            "action": "shared"
           }
         ]
       }

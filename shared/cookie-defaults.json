@@ -8396,7 +8396,7 @@
         "value": "woocommerce_recently_viewed"
       },
       "description": "",
-      "action": "private"
+      "action": "shared"
     },
     {
       "id": "bundled:a8a7e455-ceb9-4b31-954f-2e47d64f0a1c",
@@ -20504,6 +20504,6 @@
       "action": "private"
     }
   ],
-  "version": "2026.11.20.1",
+  "version": "2026.11.20.2",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

@@ -333,7 +333,7 @@ used those exact sources and completed every shared case. It is never imported
 or invoked by the installed plugin or installer.
 
 
-## ESI transport revision 2 and pending delivery continuation
+## ESI transport revision 2 and negotiated delivery continuation
 
 See `ESI-DELIVERY-DRAFT.md` for the implemented revision-2 cookie transport,
 its VCL-owned private-backend version header and required signed capability
@@ -342,27 +342,41 @@ not cookie classification. Public children remain cookie-free; private children
 still PASS. The opt-in composition marker requests an origin-approved parent
 independently of whether any particular WooCommerce cookie is present.
 
-The same document defines the candidate `wordpress-nonce-adaptive` /
+The same document defines the `wordpress-nonce-adaptive` /
 `esi_identity=wordpress` routing contract and backend-owned
 `X-UltraCache-ESI-Adaptive-Nonce-Version: 1`. The existing signed private probe
 can observe this capability separately from transport revision 2. Public
-actions use a private PASS child only with a WordPress login/Woo session
+actions on the legacy carrier use a private PASS child with a WordPress login/Woo session
 candidate; explicitly private actions always PASS. Ordinary public children
 remain cookie-free. The origin counts adaptive occurrences in the existing
 parent privateCount before header delivery, including anonymous source parents.
 No parallel counter or visitor identity enters shared parent metadata.
 
-Pre-header cookie delivery now has an UltraCache-only **source candidate**:
+Pre-header cookie delivery uses the released UltraCache-only owned continuation:
 `X-UltraCache-Delivery-Prepare` binds a signed private-renderer manifest; an
 owned prepare PASS uses the unchanged original URI/query and carries the
 decoded-once signed token in backend-only `X-UltraCache-Delivery-Manifest`,
 along with the existing per-site Authorization proof. The metadata pointer is
 never an application request target. It captures the actual provider body/Set-Cookie before a
 pre-header restart, then replays its private fragment results without executing
-the provider twice. The exact JSON/headers and explicit parent-eviction 503
-behavior are in `ESI-DELIVERY-DRAFT.md`. Basic does not enter this continuation.
-Positive-private-TTL admission remains **unimplemented** and unadvertised.
-All candidate routing
-requires current combined application/native acceptance before release.
+the provider twice. The complete original Cookie reaches this authenticated
+prepare; the older unprepared private carrier still forwards only its existing
+WP/Woo/history subset. New personal integrations must use prepared/cold-inline
+delivery or an honest application-private fallback when that capability is absent.
+Bound publication/request-owned snapshot recovery does not rerun providers or
+refresh parent TTL; invalid/unrecoverable continuations fail503. An exclusive
+negotiated privateDocument outcome preserves actual status/body/fresh headers.
+
+Positive private-fragment TTL is implemented with authenticated application
+claims and native scoped objects. The existing signed private probe and live
+owned prepare declare Private-Cache-Version1; UC-PRIVATE-GET reads a scoped native
+object before the application decides whether a renderer must run. Identity,
+mutable-state/context generation and permissible TTL remain application-owned;
+native storage partitions by site/host/exact signed URI/opaque key and retains
+no stale grace/keep. TTL0 stays request-local. Issuers, mutators, errors and
+unproven state cannot acquire an application claim merely from cookie presence.
+See `PRIVATE-TTL-DRAFT.md` for the wire and `ESI-VALIDATION.md` for the exact
+released native/application qualification and its boundaries. Basic enters
+neither ESI nor these continuation/private-document/private-TTL paths.
 No new panel controls, reverse policy bridge, provider-specific issuer or live
 configuration is introduced.

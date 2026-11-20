@@ -1,6 +1,10 @@
-# Scoped private TTL: isolated native candidate (#955)
+# Scoped private TTL: contract and qualification history (#955)
 
-Status: native lookup/fill/negotiation and selected actual WP/Woo claim flows
+Current status: released with Hestia0.22.0/Webuzo0.11.0 and the matching
+UltraCache contract; see [the exact final receipt](ESI-VALIDATION.md). The
+historical checkpoints below retain their original acceptance boundaries.
+
+Historical status: native lookup/fill/negotiation and selected actual WP/Woo claim flows
 have exact qualification evidence below. Broader first-cold visitor-copy and
 provider lifecycle completion remain separate goal requirements. This isolated
 source is not a release or a universal claim-provider compatibility claim. It
@@ -12,7 +16,7 @@ introduces no new controls, cookies, sessions or classification authority.
 Native source baseline is the installed fixture revision:
 https://github.com/varnish/varnish/commit/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f
 (Varnish 9.1, VRT 22.2), not the differently versioned Vinyl archive.
-The current request-owned prepare/replay pipeline can produce correct private
+At the original baseline, the request-owned prepare/replay pipeline produced correct private
 content, but synthetic child responses are not native cached objects. Merely
 changing their Cache-Control or retaining rendered bytes in PRIV_TOP does not
 implement positive TTL. Re-rendering everything in prepare before using a
@@ -27,7 +31,7 @@ Cookie presence or a request hash is never authenticated identity. A registered
 TTL 0 renderer remains request-local and executes once per distinct occurrence
 URL; no new automatic conversion is inferred from the cookie catalogue.
 
-A candidate per-fragment claim needs these independent dimensions:
+A negotiated per-fragment claim needs these independent dimensions:
 
 | Claim | Authority / purpose |
 | --- | --- |
