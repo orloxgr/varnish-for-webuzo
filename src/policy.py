@@ -51,11 +51,15 @@ import cookie_handoff;
         response_rules.append('if ('+condition+') {\nif (cookie_handoff.detach({"'+rules+'"}, bereq.is_bgfetch)) {}\n}')
     if cookie_groups:text.append(cookie_views.defaults_vcl())
     cms_rules=[]
+    delivery_authorization=[]
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if not site.get('enabled') or site.get('error'):continue
+        if profiles.selected(site)=='ultracache':
+            delivery_authorization.append('if (bereq.http.X-WV-Site == '+quoted(site['id'])+
+                ') { set bereq.http.X-UltraCache-Delivery-Authorization = '+quoted(site['token'])+'; }')
         rules=cms_routes.compile_recv(site.get('cms_installations'))
         if rules:cms_rules.append('if (req.http.X-WV-Site == '+quoted(site['id'])+') {\n'+rules+'\n}')
-    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules)),'''
+    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules),'\n'.join(delivery_authorization)),'''
 sub vcl_recv {
  call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';

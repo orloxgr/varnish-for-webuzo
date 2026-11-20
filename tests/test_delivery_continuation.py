@@ -56,6 +56,7 @@ class DeliveryContinuation(unittest.TestCase):
                 status,fields,body=get(PARENT,visitor,extra={
                     'X-UltraCache-Delivery-Phase':'complete',
                     'X-UltraCache-Delivery-Request':'spoof',
+                    'X-UltraCache-Delivery-Authorization':'spoof-credential',
                     'X-UltraCache-Delivery-Original-URL':'/wrong'})
                 self.assertEqual(status,200)
                 self.assertEqual(body,'<html>parent[private:'+visitor+'][private:'+visitor+'][nonce:'+visitor+']</html>')
@@ -66,12 +67,14 @@ class DeliveryContinuation(unittest.TestCase):
                 self.assertEqual(dict(fields)['Cache-Control'],'private, no-store')
                 self.assertEqual(dict(fields)['X-Cache'],'HIT')
                 self.assertNotIn('X-UltraCache-Delivery-Prepare',dict(fields))
+                self.assertNotIn('X-UltraCache-Delivery-Authorization',dict(fields))
             self.assertEqual([p for p,_ in calls],[PREPARE]*3)
             for _,headers in calls:
                 self.assertEqual(headers['X-UltraCache-Delivery-Phase'],'prepare')
                 self.assertEqual(headers['X-UltraCache-Delivery-Version'],'1')
                 self.assertEqual(headers['X-UltraCache-Delivery-Original-URL'],PARENT)
                 self.assertNotIn('X-SCP-Cookie-Handoff',headers)
+                self.assertIn(headers['X-UltraCache-Delivery-Authorization'],('A'*32,'b'*64))
 
     def test_binding_schema_count_and_duplicate_fail_before_successful_parent_delivery(self):
         def wrong_id(e):e['requestId']='another-request'
@@ -108,10 +111,15 @@ class DeliveryContinuation(unittest.TestCase):
 
     def test_basic_ignores_the_delivery_contract(self):
         calls=[]
-        def origin(path,headers):calls.append(path);return 'ordinary HTML',META
+        def origin(path,headers):
+            self.assertIsNone(headers.get('X-UltraCache-Delivery-Authorization'))
+            calls.append(path)
+            return 'ordinary HTML',META+[('X-UltraCache-Delivery-Authorization','origin-echo')]
         with proxy('basic',origin) as get:
-            self.assertEqual(get(PARENT)[2],'ordinary HTML')
-            self.assertEqual(get(PARENT)[2],'ordinary HTML')
+            for _ in range(2):
+                _,fields,body=get(PARENT,extra={'X-UltraCache-Delivery-Authorization':'spoof'})
+                self.assertEqual(body,'ordinary HTML')
+                self.assertNotIn('X-UltraCache-Delivery-Authorization',dict(fields))
             self.assertEqual(calls,[PARENT])
 
     def test_concurrent_visitors_have_request_owned_results(self):

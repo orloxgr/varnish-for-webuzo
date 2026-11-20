@@ -3,6 +3,7 @@
 sub scp_init {
     cookie_handoff.reset();
     unset req.http.X-SCP-Cookie-Handoff;
+    unset req.http.X-UltraCache-Delivery-Authorization;
     unset req.http.X-SCP-Cookie-Contract;
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
@@ -87,6 +88,7 @@ sub scp_hit {
 sub scp_backend_fetch {
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     unset bereq.http.X-SCP-Cookie-Handoff;
+    unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
     unset bereq.http.X-SCP-Admin-Applied;
@@ -110,6 +112,8 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
+    # An origin echo must never put the backend-only credential in an object.
+    unset beresp.http.X-UltraCache-Delivery-Authorization;
     unset beresp.http.X-SCP-Reason;
     unset beresp.http.X-SCP-Client-Vary;
     unset beresp.http.X-SCP-Result;
@@ -133,6 +137,7 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    unset resp.http.X-UltraCache-Delivery-Authorization;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     cookie_handoff.deliver();
     if (req.http.X-SCP-Aggressive == "1") { set resp.http.X-Cache-Mode = "aggressive"; }

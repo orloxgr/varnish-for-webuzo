@@ -107,6 +107,10 @@ unset bereq.http.X-UltraCache-Delivery-Phase;
 unset bereq.http.X-UltraCache-Delivery-Request;
 unset bereq.http.X-UltraCache-Delivery-Original-URL;
 if (cookie_handoff.delivery_backend()) {
+    call scp_delivery_authorization;
+    if (!bereq.http.X-UltraCache-Delivery-Authorization) {
+        return (error(503, "Delivery credential unavailable"));
+    }
     # Native state preserved the actual original Cookie and route. No generic
     # Cookie rewriting or provider retry may happen on this private operation.
     set bereq.retry_connect = false;
@@ -147,6 +151,11 @@ unset bereq.http.X-UltraCache-ESI-Cookie-Check;
 unset bereq.http.X-UltraCache-ESI-Opt-In;
 unset bereq.http.X-UltraCache-ESI-Shared-Parent;
 }
+}
+sub scp_delivery_authorization {
+    # Filled from native adapter-owned site credentials, never a request field.
+    # This sub is called only after the native task association proves prepare.
+    @@DELIVERY_AUTHORIZATION@@
 }
 sub scp_ultracache_backend_response {
     if (cookie_handoff.delivery_capture()) {

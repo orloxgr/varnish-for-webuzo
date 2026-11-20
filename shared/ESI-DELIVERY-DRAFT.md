@@ -83,6 +83,7 @@ X-UltraCache-Delivery-Version: 1
 X-UltraCache-Delivery-Phase: prepare
 X-UltraCache-Delivery-Request: <request-owned decimal handle>
 X-UltraCache-Delivery-Original-URL: /original/path?original=query
+X-UltraCache-Delivery-Authorization: <existing native per-site application/purge credential>
 Cookie: <unchanged complete original request Cookie>
 ```
 
@@ -91,6 +92,24 @@ native tasks; it is not a session, credential or authentication proof. The
 application must verify its signed manifest, original-route binding and trusted
 proxy entry point. Headers alone do not authenticate direct access to origin.
 Direct untrusted calls must be refused, not treated as approved continuations.
+The Hestia and Webuzo adapters populate Authorization from the active
+UltraCache site's existing token only after `delivery_backend()` proves the
+native-owned prepare association. Missing credentials stop before origin.
+Incoming Authorization is removed in receive/backend-fetch; origin echoes are
+removed before storage and again before client delivery. The token is never
+taken from parent metadata, client input or an ESI URL. UC must compare it with
+the actually configured matching per-site credential using constant-time
+comparison, in addition to validating the manifest and original route.
+
+Connection-mode acceptance is explicit: HTTP purge mode can use that existing
+site token. UC's native admin/CLI mode instead retains the native admin secret
+byte-for-byte; that is **not** the adapter's per-site token. This candidate does
+not forward a global admin secret to origin, generate a key, add UI or create
+a reverse configuration bridge. Local/admin/CLI integration must possess and
+verify an already configured matching per-site application credential before
+enabling delivery admission. Support for those connections remains open until
+that path is implemented and tested; the version header alone cannot close it.
+
 The existing signed private capability probe can observe
 `X-UltraCache-Delivery-Version: 1` separately from transport revision 2 and
 adaptive nonce revision 1. No new UI/probe/background worker is introduced.
@@ -311,6 +330,7 @@ the existing code or of an earlier transport/adaptive-nonce checkpoint:
 | Provider bootstrap and repeated private renderers on MISS and HIT | Actual provider bootstrap and each distinct stateful renderer execute the required lifecycle once; repeated occurrences reuse output, with no duplicate issuer side effect and no personal data in the public parent. | HIT preflight has candidate replay code only. Initial MISS may need request-local pre-render handoff within normal WP execution; that mechanism is not implemented or inferred from HIT capture. |
 | Parent expiry, purge or replacement after prepare | Native fault injection between prepare and resumed delivery; valid final page and visitor cookies, no repeated provider/issuer work, no cross-request leakage and correct cleanup. | The temporary pre-header 503 prevents duplicate execution but is **not completed recovery or full-goal acceptance**. Seamless recovery remains open. |
 | Positive private fragment TTL | Native identity/state partitioning, actual reuse before expiry, refresh on expiry/state changes and targeted invalidation; two visitors/two users with no cookie or content replay across owners. | #955 remains unimplemented. TTL 0 or a declared positive header is not evidence of positive private caching. |
+| Prepare entry proof across HTTP and native admin/CLI/local connections | Matching existing per-site application credential, signed manifest/original-route checks, forged public-origin rejection and no credential in URLs/shared objects/client responses; actual endpoint acceptance in each supported mode. | Per-site backend-only header is prepared in the adapters. HTTP configuration can match it; an admin secret is a different credential and is not forwarded as a substitute. Non-HTTP credential/admission and native endpoint verification remain open. |
 
 Do not hide the initial-MISS case behind a 503 or treat it as covered by the
 temporary post-prepare eviction guard. Any first-MISS handoff must use actual
