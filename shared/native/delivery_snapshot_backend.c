@@ -123,6 +123,7 @@ static int delivery_snapshot_gethdrs(VRT_CTX, VCL_BACKEND backend) {
     pthread_mutex_unlock(&lock);
     if (failed || WS_Overflowed(ctx->ws)) return -1;
     ctx->bo->htc = htc;
+    VSLb(ctx->bo->vsl,SLT_VCL_Log,"UltraCache request-owned public snapshot source");
     return 0;
 }
 static void delivery_snapshot_finish(VRT_CTX, VCL_BACKEND backend) {
