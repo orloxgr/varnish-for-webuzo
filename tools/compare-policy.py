@@ -28,6 +28,7 @@ def main():
                  'shared/CONTRACT.md','shared/PUBLIC-SELECTION.md','shared/ESI-DELIVERY-DRAFT.md','shared/ESI-VALIDATION.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
+                 'tests/cookie_upgrade_case.py','tests/fixtures/cookie-defaults-2026.11.20.9.json',
                  'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_public_selection.py','tests/test_public_selection_runtime.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',
                  'tests/test_request_no_store.py','tests/test_comment_cookie_defaults.py','tests/test_wcml_cookie_defaults.py','tests/test_aelia_cookie_defaults.py','tests/test_yith_cookie_defaults.py','tests/test_woocommerce_cart_defaults.py','tests/test_cookie_profiles.py','tests/cookie_profile_ui.mjs','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()

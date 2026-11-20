@@ -1,0 +1,11 @@
+{
+  "source_defaults_sha256": "f78381d3c606867fee6a49f10509d8a5552c6fbb18e0ff7d973861607a18f85b",
+  "saved": {
+    "cookie_defaults_version": "2026.11.20.9",
+    "cookie_defaults_digest": "e2f44de0c4cc269daa140b9038253c9452f32645b12f568437d4173d2358900c",
+    "cookie_defaults_profile_digests": {
+      "basic": "22ad174d27e0f4a7beaa0b55c18cbc56bf26e9ec2d831e3ec2db0d229b934ed6",
+      "ultracache": "3eb248933875ea1cf865818f4107015ba1f9bf09526d7f9185d2a71614cb1279"
+    }
+  }
+}

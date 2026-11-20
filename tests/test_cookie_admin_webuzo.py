@@ -321,6 +321,38 @@ class PolicyTransactions(unittest.TestCase):
                     cookie_defaults_version=cookie_views.default_version(),cookie_defaults_digest=cookie_views.default_digest(),
                     cookie_defaults_profile_digests=engine.cookie_defaults.profile_digests())
 
+    def test_bundle_9_to_10_apply_invalidates_only_basic_and_preserves_manual_choices(self):
+        from cookie_upgrade_case import previous_metadata,central_choices,site_choices,expected_action,VARIANTS
+        previous=self.configuration();previous.update(previous_metadata());previous['cookie_policies']=central_choices()
+        previous['sites']={};cases={}
+        for index,(profile,choice) in enumerate((p,c) for p in ('basic','ultracache') for c in VARIANTS):
+            entry=account(format(index,'x'),'upgrade'+str(index)+'.example.test','account_a')
+            entry['profile']=profile;entry['cookie_policies']=site_choices(profile,choice)
+            previous['sites'][entry['id']]=entry;cases[entry['id']]=(profile,choice)
+        before=copy.deepcopy(previous);following=copy.deepcopy(previous)
+        service.ACTIVE.write_text('previous .9 VCL\n')
+        load,admin,purge=self.apply_settings(previous,following)
+        load.assert_called_once();admin.assert_called_once_with('vcl.use','candidate')
+        self.assertEqual({call.args[0]['id'] for call in purge.call_args_list},
+            {sid for sid,(profile,_) in cases.items() if profile=='basic'})
+        self.assertEqual(purge.call_count,len(VARIANTS))
+        saved=engine.settings()
+        self.assertNotEqual(previous['cookie_defaults_profile_digests']['basic'],saved['cookie_defaults_profile_digests']['basic'])
+        self.assertEqual(previous['cookie_defaults_profile_digests']['ultracache'],saved['cookie_defaults_profile_digests']['ultracache'])
+        self.assertEqual(previous,before)
+        self.assertEqual(saved['cookie_policies'],before['cookie_policies'])
+        for sid,entry in saved['sites'].items():
+            profile,choice=cases[sid]
+            self.assertEqual(entry['cookie_policies'],before['sites'][sid]['cookie_policies'])
+            rules=cookie_admin.active(saved['cookie_policies'],entry['cookie_policies'],profile=profile)
+            selected=next(r for r in rules if cookie_admin._matches(r['match'],dict(kind='exact',value='woocommerce_cart_hash')))
+            self.assertEqual(selected['action'],expected_action(profile,choice))
+        self.assertEqual(saved['cookie_defaults_profile_digests'],engine.cookie_defaults.profile_digests())
+        self.assertEqual(service.ACTIVE.read_text(),engine.policy.render(saved['sites'],saved['gateway'],saved['origin'],saved))
+        # Repeating the normal apply is an idempotent upgrade, not another purge.
+        load,admin,purge=self.apply_settings(saved,copy.deepcopy(saved))
+        load.assert_not_called();admin.assert_not_called();purge.assert_not_called()
+
     def test_bundle_upgrade_invalidates_enabled_sites_and_records_current_version(self):
         previous=self.configuration();previous['cookie_defaults_digest']='previous-execution'
         previous['cookie_defaults_profile_digests']={profile:'previous-execution' for profile in ('basic','ultracache')}
