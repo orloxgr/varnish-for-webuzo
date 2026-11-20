@@ -33,7 +33,7 @@ class YithCookieDefaults(unittest.TestCase):
     def test_exact_assessment_and_prefix_have_independent_concrete_profile_choices(self):
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         policy,metadata=defaults.bundle();catalogue=load_catalogue()
-        self.assertEqual((artifact['version'],metadata['version'],catalogue['version']),('2026.11.20.9',)*3)
+        self.assertEqual((artifact['version'],metadata['version'],catalogue['version']),('2026.11.20.10',)*3)
         self.assertEqual(metadata['records']['7bbc4d04-8776-45f3-85dc-c474d5907b24']['actions'],ACTIONS)
         for rules in (artifact['rules'],policy['rules']):
             for kind in ('exact','prefix'):

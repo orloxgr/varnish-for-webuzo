@@ -78,9 +78,15 @@ Basic and Shared in UltraCache; all other paired decisions are identical. There 
 or conditional cookie veto. The application integration supplies personal comments
 for UltraCache; Basic does not acquire ESI.
 
-Current `.9` profile differences also include the YITH wishlist exact/prefix
+The `.9` profile differences also include the YITH wishlist exact/prefix
 (`.8`) and the Recently Viewed exact choice: Basic Private, UC Shared. Currency
 and country variants remain separate public representations in both profiles.
+
+Current `.10` also makes the three WooCommerce cart/session choices Basic
+Private: exact `woocommerce_items_in_cart`, exact `woocommerce_cart_hash`,
+prefix `wp_woocommerce_session_`. UC/WP stays Shared with its application-owned
+private mini-cart. This follows a real native Woo cart counterexample without UC,
+not a hidden cookie veto. Manual choices and independent reset remain unchanged.
 
 The panel edits both columns independently. Central and website choices use the
 same pair. A null manual field means that column has no local override; Reset

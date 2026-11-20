@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "version": "2026.11.20.9",
+  "version": "2026.11.20.10",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f",
   "sourceLicense": "Apache-2.0",
   "sourceLicenseFile": "cookie-recognition/Open-Cookie-Database-LICENSE.txt",
@@ -18786,7 +18786,7 @@
       "matchValue": "woocommerce_cart_hash",
       "dataController": "WooCommerce",
       "actions": {
-        "basic": "shared",
+        "basic": "private",
         "ultracache": "shared"
       }
     },
@@ -18806,7 +18806,7 @@
       "matchValue": "woocommerce_items_in_cart",
       "dataController": "WooCommerce",
       "actions": {
-        "basic": "shared",
+        "basic": "private",
         "ultracache": "shared"
       }
     },
@@ -18826,7 +18826,7 @@
       "matchValue": "wp_woocommerce_session_",
       "dataController": "WooCommerce",
       "actions": {
-        "basic": "shared",
+        "basic": "private",
         "ultracache": "shared"
       }
     },

@@ -11157,7 +11157,7 @@
       },
       "description": "",
       "actions": {
-        "basic": "shared",
+        "basic": "private",
         "ultracache": "shared"
       }
     },
@@ -11169,7 +11169,7 @@
       },
       "description": "",
       "actions": {
-        "basic": "shared",
+        "basic": "private",
         "ultracache": "shared"
       }
     },
@@ -11181,7 +11181,7 @@
       },
       "description": "",
       "actions": {
-        "basic": "shared",
+        "basic": "private",
         "ultracache": "shared"
       }
     },
@@ -27410,6 +27410,6 @@
       }
     }
   ],
-  "version": "2026.11.20.9",
+  "version": "2026.11.20.10",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

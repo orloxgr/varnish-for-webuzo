@@ -55,13 +55,12 @@ class CookieWireContract(unittest.TestCase):
                 site=choices(('prefix','store_notice',action))
                 self.assertEqual(response_action(admin.response_rules(site=site),name),action)
                 self.assertEqual(selected_action(compiled_selectors(admin.compile_vcl(site=site)),name),action)
-        # Store notice/cart defaults are shared. Personal history requires the
-        # application's private widget integration to share the public parent.
-        for name,action in (('woocommerce_items_in_cart','shared'),('woocommerce_cart_hash','shared'),
-                            ('wp_woocommerce_session_shop','shared')):
-            self.assertEqual(response_action(admin.response_rules(),name),action)
-        self.assertEqual(response_action(admin.response_rules(profile='basic'),'woocommerce_recently_viewed'),'private')
-        self.assertEqual(response_action(admin.response_rules(profile='ultracache'),'woocommerce_recently_viewed'),'shared')
+        # Personal cart/history requires the application's private widget
+        # integration to share the public parent. Store notice is still shared.
+        for name in ('woocommerce_items_in_cart','woocommerce_cart_hash',
+                     'wp_woocommerce_session_shop','woocommerce_recently_viewed'):
+            self.assertEqual(response_action(admin.response_rules(profile='basic'),name),'private')
+            self.assertEqual(response_action(admin.response_rules(profile='ultracache'),name),'shared')
 
     def test_saved_choices_override_former_mandatory_roles_in_both_directions(self):
         for name in ('wordpress_logged_in_demo', 'PHPSESSID', 'wp_woocommerce_session_shop',

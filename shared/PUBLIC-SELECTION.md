@@ -353,3 +353,34 @@ Normalized LF common artifacts:
 
 - defaults.json: `f78381d3c606867fee6a49f10509d8a5552c6fbb18e0ff7d973861607a18f85b`
 - catalogue.json: `206ce788a7939b7f790e2de5e9be04a277170b3932930ea05343060d0aa65dfa`
+
+## Basic WooCommerce cart boundary, 2026.11.20.10
+
+Only three Basic choices change from Shared to Private: exact
+`woocommerce_items_in_cart`, exact `woocommerce_cart_hash`, and prefix
+`wp_woocommerce_session_`. Every UltraCache/WP action remains Shared/unchanged.
+Actual WooCommerce AJAX/session issuance without UC integrations demonstrated
+that a regular queryless page can include a personal mini-cart: a second cart
+visitor reused the first visitor's full-page HTML under the earlier Basic
+Shared defaults. Basic now sends these cookie-bearing requests to the actual
+application; responses setting those Private cookies remain private too.
+
+The UC application retains its existing public parent/private mini-cart and
+owned issuer delivery. There is no new native VCL, transport, hidden cookie
+veto, provider test or overlay. Saved Shared/Variant/Private choices still win;
+reset restores Basic Private or UC Shared for each selector independently.
+
+All other common rows and metadata, every UC action, 2284 defaults/52 catalogue
+policies and 2299 editor rows stay unchanged. Three matching assessment records
+mirror only the Basic action change (items `f1e0e5b1-d7a1-4afc-80b6-1ba4430c237f`,
+hash `8a23f0ad-722d-4d91-9ef8-52528e903a4f`, session
+`8f50fe5d-20dc-4811-b118-e49d52a0fc35`), plus version `.10`. Native plain-origin
+tests qualify all three request defaults, each declared response cookie field,
+manual actions/reset and UC owner-only MISS handoff without replay on HIT.
+Actual Woo AJAX issuance and mini-cart privacy remain separately recorded
+WordPress/Lab acceptance.
+
+Normalized LF common artifacts:
+
+- defaults.json: `c09c05d668ceb096797c77aea1239e4c74570baaa3f515dd90182cb610be4448`
+- catalogue.json: `2ff0592056aaad278d6304cb48aa95d5f9babcf7b1d088173723bed0ae66ab1b`
