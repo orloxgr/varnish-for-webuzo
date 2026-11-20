@@ -274,3 +274,26 @@ Normalized LF common artifacts:
 
 Native default tests use the shipped choices without injected prototype rules.
 Their mock resolver coverage is separate from actual WP/WCML/FPM qualification.
+
+## Bundled Aelia choices, 2026.11.20.7
+
+The next common bundle adds four exact Variant choices in both profiles:
+`aelia_cs_selected_currency`, `aelia_customer_country`, `aelia_customer_state`
+and `aelia_tax_exempt`. The [vendor's dynamic caching documentation](https://aelia.freshdesk.com/support/solutions/articles/3000042591)
+lists these four currency/location/tax key dimensions. All 2280 previous defaults
+and 48 catalogue rows are unchanged; totals become 2284 and 52. Assessment source
+records/actions are unchanged, with only the version advanced. The editor has
+2299 rows. Shared/Variant/Private and each profile's reset retain normal central
+and site precedence. There is no broad Aelia prefix, new native protocol,
+fabricated provider cookie, geolocation logic or first-visit bypass.
+
+Basic uses the actual incoming cookie dimensions. UltraCache's existing scoped
+protocol can use values supplied by an installed application's real provider;
+these native changes do not implement that provider. Without the commercial
+package, source review and declared HTTP fixtures are best-effort evidence only,
+not actual Aelia geolocation, pricing, tax or cookie-issuer runtime acceptance.
+
+Normalized LF common artifacts:
+
+- defaults.json: `a750180711d7d299a4086c56eb2986c5f0368bf20902faa27359ab921baf3b9f`
+- catalogue.json: `95ec1d215fb13eb040fb7d2d1eabf7a9df35442a13d6ad135cbc464dc56f4a81`

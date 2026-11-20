@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.6",
+  "version": "2026.11.20.7",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -2045,6 +2045,182 @@
         "ultracache": "variant"
       },
       "description": "WCML currency language context"
+    },
+    {
+      "id": "aelia-selected-currency",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_cs_selected_currency"
+      },
+      "description": "Aelia selected currency",
+      "provider": "Aelia",
+      "integration": "aelia-public-variants",
+      "htmlEffect": "public-variant",
+      "cacheKey": "variant",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://aelia.freshdesk.com/support/solutions/articles/3000042591"
+      ],
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "aelia-customer-country",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_customer_country"
+      },
+      "description": "Aelia customer country",
+      "provider": "Aelia",
+      "integration": "aelia-public-variants",
+      "htmlEffect": "public-variant",
+      "cacheKey": "variant",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://aelia.freshdesk.com/support/solutions/articles/3000042591"
+      ],
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "aelia-customer-state",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_customer_state"
+      },
+      "description": "Aelia customer state",
+      "provider": "Aelia",
+      "integration": "aelia-public-variants",
+      "htmlEffect": "public-variant",
+      "cacheKey": "variant",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://aelia.freshdesk.com/support/solutions/articles/3000042591"
+      ],
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "aelia-tax-exempt",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_tax_exempt"
+      },
+      "description": "Aelia tax exemption state",
+      "provider": "Aelia",
+      "integration": "aelia-public-variants",
+      "htmlEffect": "public-variant",
+      "cacheKey": "variant",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "provider",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://aelia.freshdesk.com/support/solutions/articles/3000042591"
+      ],
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
     }
   ]
 }

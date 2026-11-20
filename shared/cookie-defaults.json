@@ -27360,8 +27360,56 @@
         "basic": "variant",
         "ultracache": "variant"
       }
+    },
+    {
+      "id": "bundled:policy:aelia-selected-currency",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_cs_selected_currency"
+      },
+      "description": "Aelia selected currency",
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "bundled:policy:aelia-customer-country",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_customer_country"
+      },
+      "description": "Aelia customer country",
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "bundled:policy:aelia-customer-state",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_customer_state"
+      },
+      "description": "Aelia customer state",
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
+    },
+    {
+      "id": "bundled:policy:aelia-tax-exempt",
+      "match": {
+        "kind": "exact",
+        "value": "aelia_tax_exempt"
+      },
+      "description": "Aelia tax exemption state",
+      "actions": {
+        "basic": "variant",
+        "ultracache": "variant"
+      }
     }
   ],
-  "version": "2026.11.20.6",
+  "version": "2026.11.20.7",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }
