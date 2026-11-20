@@ -389,7 +389,8 @@ Normalized LF common artifacts:
 
 Prepared package versions are Hestia `0.23.0` and Webuzo `0.12.0`. They remain
 unpublished candidates until final coordinated distribution acceptance. The
-qualified `.10` native C/VCL/module-builder payload is unchanged by packaging;
+qualified `.10` cookie defaults and native C/module-builder payload are unchanged
+by packaging. The diagnostic VCL routing follow-up is qualified separately below;
 no prebuilt engine/module binary is distributed.
 
 Two maintained Linux/root tests exercise the existing normal apply path:
@@ -439,3 +440,34 @@ cache storage and exact invalidation, independent root/child scopes, currency
 selection on ordinary pages, route lookalikes, private/404 responses, and native
 public/private ESI composition. Their origin is a declared transport fixture;
 actual WordPress/WCML detection remains a separate application qualification.
+
+### Diagnostic routing qualification — 21 November 2026
+
+Coordinating WordPress/Lab issue [#982](https://github.com/orloxgr/ultracache-dev/issues/982)
+tracks this integration gap. The Lab owner reported these actual results:
+
+| Adapter | Qualified source | Native diagnostic methods | Elapsed |
+| --- | --- | --- | --- |
+| Hestia | `71e563ca25cca8c57cb9dd44b44c6341e24fa31d` | 5 passed | 19.325 s |
+| Webuzo | `147b5fefdf4954319c2fc8776a052e76851860bd` | 5 passed | 19.575 s |
+
+Both suites used isolated actual Varnish/Linux daemons, with zero skips, errors
+or failures. Native C/VCC/header/builder bytes matched the previously qualified
+Range-capable DSO; only the test module path pointed at that owned installed DSO.
+The fixture-origin transport checks do not assert WordPress token validation.
+
+Separate actual-application acceptance used a clean installed UltraCache build
+1310 / source `f77863bb`, with actual WCML 5.6.3 active. Normal connection/native
+API detection, without manual capability flags, passed on both adapter sources:
+`exactInvalidationVerified`, `sharedCacheVerified`, Woo cookie transport and all
+private-composition proofs. Six real HTTP currency visits per adapter covered
+US/DE and changed-country selection, correct USD 10 / EUR 20 output, actual
+currency/history cookie issuance once, and repeated correct-variant native HITs.
+Webuzo's normal probe reported `success: true` and `status: working`; Hestia passed
+the same capability assertions.
+
+These are Lab-owner runtime receipts, distinct from local source inspection and
+the mocked upgrade/apply regression. They qualify this diagnostic follow-up;
+final coordinated WordPress artifact checks and distribution/publication remain
+pending. They do not upgrade the separate Aelia declared-model evidence to a
+commercial-provider runtime claim. No further cookie policy was changed.

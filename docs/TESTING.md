@@ -19,6 +19,13 @@ regression passed on owned Linux/root against source `3b9696fdaa50743259fe404a94
 (one method, no skip/error/failure). It is separate from actual native Varnish/WP
 and final clean-distribution acceptance, which remains pending for this package.
 
+The diagnostic routing follow-up passed five actual native Linux methods at
+`147b5fefdf4954319c2fc8776a052e76851860bd` (19.575 seconds, no skips/errors/failures).
+Clean UltraCache build 1310 with real WCML 5.6.3 also passed normal Varnish
+detection and six country/currency visits without manual capability flags.
+See [the common qualification](../shared/PUBLIC-SELECTION.md#diagnostic-routing-qualification--21-november-2026).
+These receipts qualify the follow-up; final coordinated distribution is pending.
+
 ## Bundled cookie database
 
 Recognition metadata and reviewed executable defaults ship with the addon.
