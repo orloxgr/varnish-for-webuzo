@@ -192,9 +192,13 @@ HEAD, private/full-origin PASS, pages without the signed contract and Basic do
 not initiate this HIT continuation. The existing MISS provider-delivery path is
 preserved; its application lifecycle still needs combined acceptance.
 
-Resource bounds in this draft: 8 MiB captured envelope, 1,024 distinct fragments
-and total private occurrences. The portable parser accepts only this fixed
-schema, with no recursive general JSON values. Failure is explicit before
+There is no additional fixed byte-size or fragment-count product limit in the
+native continuation. Existing UC output/parent-fragment settings remain the
+application authority, including their existing 0/unlimited semantics. Native
+capture uses overflow-checked size_t arithmetic and actual allocation failure;
+occurrence counts use representable native integers with checked exact sums.
+Neither path silently truncates output. The portable parser accepts only this
+fixed schema, with no recursive general JSON values. Failure is explicit before
 successful parent delivery where detectable; native/error/abort/retry/eviction
 fixtures and actual provider semantics remain mandatory acceptance.
 
@@ -221,6 +225,21 @@ policy source identity and adapter-parity receipts also include it.
 `tests/test_delivery_envelope.py` compiles and executes that actual portable C
 parser independently of Varnish. Such component tests do not qualify the rest of
 the VMOD; the corrected full native build and continuation tests remain pending.
+
+### Native compile/runtime checkpoint and source correction
+
+The coordinated installed-Varnish 9.1 build of `37db2b9` passed. Its five mock
+continuation tests ran without skips, but only Basic passed; HIT paths disconnected.
+A retained single-case diagnostic identified a child panic in `http_ForceField`:
+that API only accepts METHOD/PROTO, not HTTP_HDR_URL. Both prepare and restore
+URL changes now use the public `VRT_l_req_url(ctx, NULL, TOSTRAND(url))` setter,
+with workspace-owned URL text and the macro-initialized STRANDS argument.
+This source correction requires a new targeted native run; the earlier compile
+is not a runtime pass. The diagnostic identified actual engine revision
+`ffd36e9db9a1ec2bf6637deda180a87d40a13d0f`, VRT API 22.2. The Vinyl 9.1 archive
+review above is not a substitute for this installed engine's headers or exact
+object-lifetime implementation; parent-retention/restart qualification remains
+open alongside seamless parent recovery.
 
 ## Positive private TTL is a separate admission contract
 

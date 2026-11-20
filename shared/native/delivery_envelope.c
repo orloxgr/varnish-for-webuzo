@@ -46,6 +46,16 @@ static char *copy(struct text s) {
     if (p) { memcpy(p,s.data,s.length); p[s.length] = '\0'; }
     return p;
 }
+int delivery_buffer_growth(size_t used, size_t capacity, size_t chunk,
+    size_t *needed, size_t *target_capacity) {
+    size_t target;
+    if (used == SIZE_MAX || chunk > SIZE_MAX-used-1) return 0;
+    *needed = used+chunk+1;
+    target = capacity <= SIZE_MAX/2 ? capacity*2 : *needed;
+    if (target < *needed) target = *needed;
+    *target_capacity = capacity >= *needed ? capacity : target;
+    return 1;
+}
 static int hex4(struct reader *r, uint32_t *value) {
     unsigned i;
     uint32_t n = 0;
@@ -130,26 +140,27 @@ static int string(struct reader *r, struct text *out) {
     }
     return 0;
 }
-static int number(struct reader *r, unsigned *out) {
-    unsigned n = 0;
+static int number(struct reader *r, uint64_t *out) {
+    uint64_t n = 0;
     size_t start;
     whitespace(r); start = r->offset;
     while (r->offset < r->length) {
         unsigned char c = (unsigned char)r->buffer[r->offset];
         if (c < '0' || c > '9') break;
         if (r->offset > start && r->buffer[start] == '0') return 0;
-        if (n > (DELIVERY_MAX_FRAGMENTS-(c-'0'))/10U) return 0;
+        if (n > (UINT64_MAX-(c-'0'))/10U) return 0;
         n = n*10U+(c-'0'); ++r->offset;
     }
     if (r->offset == start) return 0;
     *out = n;
     return 1;
 }
-static int fragment(struct reader *r, unsigned remaining,
-    struct delivery_fragment **output, unsigned *occurrences) {
+static int fragment(struct reader *r, uint64_t remaining,
+    struct delivery_fragment **output, uint64_t *occurrences) {
     struct text key, url = {NULL,0}, html = {NULL,0};
     struct delivery_fragment *f;
-    unsigned seen = 0, n = 0;
+    unsigned seen = 0;
+    uint64_t n = 0;
     if (!take(r,'{')) return 0;
     for (;;) {
         unsigned bit;
@@ -175,11 +186,11 @@ static int fragment(struct reader *r, unsigned remaining,
     f->next = *output; *output = f; *occurrences = n;
     return 1;
 }
-static int fragments(struct reader *r, unsigned expected, struct delivery_fragment **out) {
-    unsigned total = 0, count = 0, n;
+static int fragments(struct reader *r, uint64_t expected, struct delivery_fragment **out) {
+    uint64_t total = 0, n;
     if (!take(r,'[') || take(r,']')) return 0;
     for (;;) {
-        if (++count > DELIVERY_MAX_FRAGMENTS || !fragment(r,expected-total,out,&n)) return 0;
+        if (!fragment(r,expected-total,out,&n)) return 0;
         total += n;
         if (take(r,']')) return total == expected;
         if (!take(r,',')) return 0;
@@ -187,16 +198,16 @@ static int fragments(struct reader *r, unsigned expected, struct delivery_fragme
 }
 
 int delivery_envelope_parse(const char *body, size_t length,
-    const char *request_id, const char *original_url, unsigned occurrences,
+    const char *request_id, const char *original_url, uint64_t occurrences,
     struct delivery_fragment **output) {
     struct reader r;
     struct text key, text;
-    unsigned seen = 0, schema;
+    unsigned seen = 0;
+    uint64_t schema;
     int ok = 0;
     if (!output) return 0;
     *output = NULL;
-    if (!body || !request_id || !original_url || !length || length > DELIVERY_MAX_BODY ||
-        !occurrences || occurrences > DELIVERY_MAX_FRAGMENTS) return 0;
+    if (!body || !request_id || !original_url || !length || length == SIZE_MAX || !occurrences) return 0;
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
     if (!r.buffer) return 0;
     memcpy(r.buffer,body,length); r.buffer[length] = '\0';

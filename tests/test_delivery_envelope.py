@@ -43,10 +43,12 @@ class DeliveryEnvelope(unittest.TestCase):
         if result.returncode:raise AssertionError(result.stdout+result.stderr)
         cls.lib=ctypes.CDLL(str(library))
         cls.lib.delivery_envelope_parse.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_char_p,
-            ctypes.c_char_p,ctypes.c_uint,ctypes.POINTER(Pointer)]
+            ctypes.c_char_p,ctypes.c_uint64,ctypes.POINTER(Pointer)]
         cls.lib.delivery_envelope_parse.restype=ctypes.c_int
         cls.lib.delivery_free_fragments.argtypes=[Pointer]
         cls.lib.delivery_free_fragments.restype=None
+        cls.lib.delivery_buffer_growth.argtypes=[ctypes.c_size_t]*3+[ctypes.POINTER(ctypes.c_size_t)]*2
+        cls.lib.delivery_buffer_growth.restype=ctypes.c_int
 
     @classmethod
     def tearDownClass(cls):
@@ -152,13 +154,38 @@ class DeliveryEnvelope(unittest.TestCase):
             value=sample();value['renderedFragments'][0]['html']=valid
             self.assertIsNotNone(self.parse(value))
 
-    def test_fragment_and_body_resource_bounds_and_nested_unknown_values(self):
+    def test_existing_large_output_and_fragment_counts_have_no_fixed_product_cap(self):
         value=sample();value['renderedFragments']=[dict(url='/fragment/'+str(i),html='x',occurrences=1)
-            for i in range(1024)]
-        self.assertEqual(len(self.parse(value,occurrences=1024)),1024)
+            for i in range(2050)]
+        self.assertEqual(len(self.parse(value,occurrences=2050)),2050)
         value['renderedFragments'].append(dict(url='/overflow',html='x',occurrences=1))
-        self.assertIsNone(self.parse(value,occurrences=1024))
-        self.assertIsNone(self.parse(b' '*(8*1024*1024+1)))
+        self.assertIsNone(self.parse(value,occurrences=2050))
+        value=sample();value['renderedFragments'][0]['html']='x'*(9*1024*1024)
+        result=self.parse(value)
+        self.assertEqual(len(result[value['renderedFragments'][0]['url']]),9*1024*1024)
+        value=sample();value['renderedFragments']=[dict(url='/large-count',html='x',occurrences=2**63-1)]
+        self.assertEqual(self.parse(value,occurrences=2**63-1),{'/large-count':b'x'})
+        value['renderedFragments'][0]['occurrences']=2**64-1
+        self.assertEqual(self.parse(value,occurrences=2**64-1),{'/large-count':b'x'})
+        value['renderedFragments'][0]['occurrences']=2**64
+        self.assertIsNone(self.parse(value,occurrences=2**64-1))
+
+    def test_native_size_arithmetic_fails_on_overflow_without_allocating_or_truncating(self):
+        maximum=ctypes.c_size_t(-1).value
+        for used,capacity,chunk in ((0,0,0),(0,0,64),(20,64,5),(63,64,1),
+                                    (maximum-2,maximum-1,1)):
+            needed=ctypes.c_size_t();target=ctypes.c_size_t()
+            self.assertEqual(self.lib.delivery_buffer_growth(used,capacity,chunk,
+                ctypes.byref(needed),ctypes.byref(target)),1)
+            self.assertEqual(needed.value,used+chunk+1)
+            self.assertGreaterEqual(target.value,needed.value)
+        for used,chunk in ((maximum,0),(maximum-1,1),(maximum-2,2),(1,maximum)):
+            needed=ctypes.c_size_t(17);target=ctypes.c_size_t(19)
+            self.assertEqual(self.lib.delivery_buffer_growth(used,0,chunk,
+                ctypes.byref(needed),ctypes.byref(target)),0)
+            self.assertEqual((needed.value,target.value),(17,19))
+
+    def test_nested_unknown_values_reject_without_general_json_recursion(self):
         raw=json.dumps(sample()).encode().replace(b'"schemaVersion": 1',
             b'"unknown":'+b'['*10000+b'0'+b']'*10000+b',"schemaVersion":1')
         self.assertIsNone(self.parse(raw))

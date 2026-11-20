@@ -10,10 +10,11 @@ enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY, D_DELIVERED, D_FAI
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
-    unsigned restart, sent, complete, failed, occurrences;
-    /* 9.1 cnt_deliver stashes this object across restart until req cleanup.
-     * We retain identity only; never swap engine object pointers or call
-     * HSH_Ref/Deref through uninstalled private headers. */
+    unsigned restart, sent, complete, failed;
+    uint64_t occurrences;
+    /* Identity check only; exact installed-engine lifetime still needs native
+     * qualification. Also revalidate signed manifest/count on final delivery.
+     * Never swap engine pointers or call uninstalled private HSH APIs. */
     const struct objcore *parent;
     char *url, *host, *target, *cookie, *encoding;
     char *conditional[6];
@@ -71,7 +72,7 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
     unsigned i;
     const char *url = WS_Copy(ctx->ws, d->url, -1);
     if (!url) return 0;
-    http_ForceField(ctx->http_req, HTTP_HDR_URL, url);
+    VRT_l_req_url(ctx, NULL, TOSTRAND(url));
     if (!delivery_restore_header(ctx, H_Host, d->host) ||
         !delivery_restore_header(ctx, H_Cookie, d->cookie) ||
         !delivery_restore_header(ctx, H_Accept_Encoding, d->encoding)) return 0;
@@ -101,15 +102,15 @@ static enum vfp_status delivery_filter_pull(struct vfp_ctx *vc, struct vfp_entry
     struct handoff *entry;
     struct continuation *d;
     int failed = 0;
+    size_t needed = 0, capacity = 0;
     pthread_mutex_lock(&lock);
     entry = delivery_entry(key);
     d = entry ? entry->delivery : NULL;
     if (!d) failed = 1;
-    else if (status == VFP_ERROR || *lp < 0 || (size_t)*lp > DELIVERY_MAX_BODY-d->length) d->failed = failed = 1;
+    else if (status == VFP_ERROR || *lp < 0 ||
+        !delivery_buffer_growth(d->length,d->capacity,(size_t)*lp,&needed,&capacity)) d->failed = failed = 1;
     else {
-        size_t needed = d->length+(size_t)*lp+1;
         if (needed > d->capacity) {
-            size_t capacity = needed > d->capacity*2 ? needed : d->capacity*2;
             char *body = realloc(d->body,capacity);
             if (!body) d->failed = failed = 1;
             else { d->body = body; d->capacity = capacity; }
@@ -143,7 +144,7 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
     if (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) {
         url = WS_Copy(ctx->ws,d->target,-1);
         if (!url) return -1;
-        http_ForceField(ctx->http_req,HTTP_HDR_URL,url);
+        VRT_l_req_url(ctx, NULL, TOSTRAND(url));
         http_ForceHeader(ctx->http_req,h_key,d->request_id);
         http_Unset(ctx->http_req,H_Accept_Encoding);
         for (i = 0; i < 6; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
@@ -235,7 +236,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     if (!d) {
         struct handoff *entry;
         if (!target || !*target) return 0;
-        if (!delivery_relative(target) || occurrences < 1 || occurrences > DELIVERY_MAX_FRAGMENTS ||
+        if (!delivery_relative(target) || occurrences < 1 ||
             ctx->req->restarts+2 > ctx->req->max_restarts) return -1;
         d = calloc(1,sizeof(*d));
         if (!d) return -1;
@@ -257,7 +258,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->association.key = entry->key; d->association.owner = entry;
         pthread_mutex_unlock(&lock);
         snprintf(d->request_id,sizeof(d->request_id),"%" PRIu64,entry->key);
-        d->restart = ctx->req->restarts; d->occurrences = (unsigned)occurrences;
+        d->restart = ctx->req->restarts; d->occurrences = (uint64_t)occurrences;
         d->parent = ctx->req->objcore;
         d->phase = D_QUEUED;
         return 1;
@@ -275,7 +276,9 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     }
     if (d->phase == D_READY) {
         struct fields *f;
-        if (ctx->req->objcore != d->parent || http_GetStatus(ctx->http_resp) != 200) {
+        if (ctx->req->objcore != d->parent || http_GetStatus(ctx->http_resp) != 200 ||
+            !target || strcmp(target,d->target) || occurrences < 1 ||
+            (uint64_t)occurrences != d->occurrences) {
             d->phase = D_FAILED; return -1;
         }
         /* Before the first ESI child runs, append authentic provider headers. */
