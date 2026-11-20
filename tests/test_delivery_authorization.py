@@ -3,10 +3,14 @@
 Native endpoint authentication and non-HTTP connection acceptance are separate.
 """
 import copy
+import contextlib
+import os
 from pathlib import Path
 import re
 import sys
 import unittest
+from unittest.mock import patch
+import types
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'src'),str(ROOT/'shared')]
@@ -25,14 +29,20 @@ def render_sites():
                 profile=profile,enabled=enabled);sites[name]=value
         return render(dict(owners=dict(owner=dict(enabled=True,suspended=False,package='default',sites=sites))),
             dict(origin_ip='127.0.0.1',origin_port=8080)), 'X-HVH-Site',32
-    import policy
     sites={}
     for name,identity,profile,enabled in (
         ('first.test','a','ultracache',True),('second.test','b','ultracache',True),
         ('basic.test','c','basic',True),('disabled.test','d','ultracache',False)):
         sites[identity*32]=dict(id=identity*32,domain=name,names=[name],enabled=enabled,error='',
             token=identity*64,bypass=[],recv_vcl='',backend_vcl='',profile=profile)
-    return policy.render(sites,'e'*64,'f'*64),'X-WV-Site',64
+    # Pure source rendering never calls POSIX account or locking APIs. Permit importing
+    # the unchanged production native.hostname validator on Windows only;
+    # this shim is not a Webuzo inventory/runtime qualification.
+    imports=patch.dict(sys.modules,{n:types.ModuleType(n) for n in ('pwd','grp','fcntl')}) if os.name=='nt' else contextlib.nullcontext()
+    with imports:
+        import policy
+        source=policy.render(sites,'e'*64,'f'*64)
+    return source,'X-WV-Site',64
 
 
 class DeliveryAuthorization(unittest.TestCase):
