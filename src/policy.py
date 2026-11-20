@@ -10,6 +10,7 @@ import cookie_views
 import cookie_bridge
 import cms_routes
 import aggressive
+import public_selection
 
 def quoted(value):return json.dumps(value,ensure_ascii=False)
 
@@ -59,7 +60,7 @@ import cookie_handoff;
                 ') { set bereq.http.X-UltraCache-Delivery-Authorization = '+quoted(site['token'])+'; }')
         rules=cms_routes.compile_recv(site.get('cms_installations'))
         if rules:cms_rules.append('if (req.http.X-WV-Site == '+quoted(site['id'])+') {\n'+rules+'\n}')
-    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules),'\n'.join(delivery_authorization)),'''
+    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules),'\n'.join(delivery_authorization),public_selection.compile_rules(response_groups,'X-WV-Site')),'''
 sub vcl_recv {
  call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';
@@ -147,6 +148,7 @@ sub vcl_recv {
  else { set req.http.X-Forwarded-Proto = "http"; set req.backend_hint = plain; }
  set req.http.X-Forwarded-For = req.http.X-Real-IP;
  set req.http.X-WV-Origin = '''+quoted(origin_secret)+''';
+ call scp_selection_context;
  std.collect(req.http.Cookie, "; ");
  if (req.http.X-WV-Disabled) { set req.http.X-WV-Reason = "site-disabled"; return (pass); }
 ''')

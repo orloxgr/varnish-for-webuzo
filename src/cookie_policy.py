@@ -47,6 +47,6 @@ def vcl_pattern(rules):
     return '{"' + pattern(rules) + '"}'
 
 
-def shared_policy(admin_rules='',response_rules='',cms_rules='',delivery_authorization=''):
+def shared_policy(admin_rules='',response_rules='',cms_rules='',delivery_authorization='',selection_rules=''):
     source = Path(__file__).resolve().parents[1] / "shared/cache-policy.vcl"
-    return render_policy(source.read_text(encoding="utf-8"), load_catalogue(), admin_rules=admin_rules,response_rules=response_rules,cms_rules=cms_rules,delivery_authorization=delivery_authorization)
+    return render_policy(source.read_text(encoding="utf-8"), load_catalogue(), admin_rules=admin_rules,response_rules=response_rules,cms_rules=cms_rules,delivery_authorization=delivery_authorization,selection_rules=selection_rules)

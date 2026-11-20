@@ -21,14 +21,14 @@ def main():
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
                  'shared/vcl/aggressive.vcl','shared/vcl/cms-routes.vcl',
                  'shared/aggressive.py','shared/cms_routes.py','shared/cms_discovery.py','shared/cms_metadata.py','shared/cms_cookies.py',
-                 'shared/vcl/representations.vcl','shared/vcl/ultracache-esi.vcl','shared/vcl/ultracache-private.vcl',
+                 'shared/vcl/representations.vcl','shared/public_selection.py','shared/vcl/public-selection.vcl','shared/vcl/ultracache-esi.vcl','shared/vcl/ultracache-private.vcl',
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
                  'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
                  'shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_recognition.py',
                  'shared/CONTRACT.md','shared/ESI-DELIVERY-DRAFT.md','shared/ESI-VALIDATION.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
-                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_public_selection.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',
+                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_public_selection.py','tests/test_public_selection_runtime.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',
                  'tests/test_request_no_store.py','tests/test_comment_cookie_defaults.py','tests/test_cookie_profiles.py','tests/cookie_profile_ui.mjs','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)

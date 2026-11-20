@@ -121,9 +121,10 @@ static int selection_headers(struct reader *r, struct delivery_public_selection 
         n = (size_t)(colon-text.data);
         if (!selection_token(text.data,n)) return 0;
         for (i = 0; i < text.length; ++i)
-            if ((unsigned char)text.data[i] < 32 || (unsigned char)text.data[i] == 127) return 0;
+            if (((unsigned char)text.data[i] < 32 && text.data[i] != '\t') || (unsigned char)text.data[i] == 127) return 0;
+        while (text.length && (text.data[text.length-1] == ' ' || text.data[text.length-1] == '\t')) --text.length;
         value = colon+1;
-        while (*value == ' ') ++value;
+        while (*value == ' ' || *value == '\t') ++value;
         if (selection_case(text.data,n,"set-cookie") || selection_case(text.data,n,"set-cookie2") ||
             selection_case(text.data,n,"authorization") || selection_case(text.data,n,"proxy-authorization") ||
             selection_case(text.data,n,"www-authenticate") || selection_case(text.data,n,"proxy-authenticate") ||
@@ -135,6 +136,8 @@ static int selection_headers(struct reader *r, struct delivery_public_selection 
             selection_case(text.data,n,"date") || selection_case(text.data,n,"cookie") ||
             selection_prefix(text.data,n,"x-scp-") || selection_prefix(text.data,n,"x-hvh-") ||
             selection_prefix(text.data,n,"x-wv-") || selection_prefix(text.data,n,"x-cache") ||
+            selection_prefix(text.data,n,"x-ultracache-vcl-") ||
+            selection_prefix(text.data,n,"x-ultracache-public-selection-") ||
             (selection_prefix(text.data,n,"x-ultracache-delivery-") &&
              !selection_case(text.data,n,"x-ultracache-delivery-prepare"))) return 0;
         if ((selection_case(text.data,n,"cache-control") || selection_case(text.data,n,"surrogate-control") ||
@@ -142,8 +145,8 @@ static int selection_headers(struct reader *r, struct delivery_public_selection 
         if (selection_case(text.data,n,"vary")) {
             const char *p = value;
             while (*p) {
-                while (*p == ' ' || *p == ',') ++p;
-                if (*p == '*' && (!p[1] || p[1] == ',' || p[1] == ' ')) return 0;
+                while (*p == ' ' || *p == '\t' || *p == ',') ++p;
+                if (*p == '*' && (!p[1] || p[1] == ',' || p[1] == ' ' || p[1] == '\t')) return 0;
                 p = strchr(p,','); if (!p) break;
             }
         }
@@ -162,10 +165,14 @@ static int selection_header_binding(struct delivery_public_selection *s) {
         const char *colon = strchr(h->line,':'), *value = colon+1;
         size_t n = (size_t)(colon-h->line);
         unsigned bit = 0;
-        while (*value == ' ') ++value;
+        while (*value == ' ' || *value == '\t') ++value;
         if (selection_case(h->line,n,"content-type")) {
+            const char *parameters;
             bit = 1;
-            if (strlen(value) < 9 || !selection_case(value,9,"text/html") || (value[9] && value[9] != ';')) return 0;
+            if (strlen(value) < 9 || !selection_case(value,9,"text/html")) return 0;
+            parameters = value+9;
+            while (*parameters == ' ' || *parameters == '\t') ++parameters;
+            if (*parameters && *parameters != ';') return 0;
         } else if (selection_case(h->line,n,"x-ultracache-delivery-prepare")) {
             char *manifest = delivery_manifest_token(value);
             bit = 2;

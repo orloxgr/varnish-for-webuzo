@@ -1,6 +1,14 @@
 # Shared representations policy. GPL-3.0-or-later.
 
 sub scp_cookie_hash {
+    if (req.http.X-SCP-Profile == "ultracache") {
+        hash_data("native-public-selection-epoch");
+        hash_data(cookie_handoff.selection_epoch());
+        if (cookie_handoff.selection_manifest()) {
+            hash_data("authenticated-public-publication");
+            hash_data(cookie_handoff.selection_manifest());
+        }
+    }
     if (req.http.X-SCP-Admin-Variant) {
         hash_data("explicit-cookie-variant");
         hash_data(req.http.X-SCP-Admin-Variant);
@@ -34,14 +42,16 @@ sub scp_response_variants {
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)") {
         if (bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
             beresp.http.X-UltraCache-Cookie-Settings ~ "^[0-9a-f]{64}$" &&
-            beresp.http.X-UltraCache-Cookie-Settings != bereq.http.X-SCP-Cookie-Contract) {
+            beresp.http.X-UltraCache-Cookie-Settings != bereq.http.X-SCP-Cookie-Contract &&
+            !cookie_handoff.selection_local()) {
             # The application has a different effective policy. Preserve its
             # complete Cookie Vary; the old Shared/tracking projection cannot
             # describe the HTML selected by the application's newer policy.
             # Standard native Vary still caches each actual representation.
-        } else if (bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
+        } else if (cookie_handoff.selection_local() ||
+            (bereq.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
             beresp.http.X-UltraCache-Cookie-Settings == bereq.http.X-SCP-Cookie-Contract &&
-            beresp.http.X-UltraCache-Cookie-Vary == "policy-only") {
+            beresp.http.X-UltraCache-Cookie-Vary == "policy-only")) {
             # Only our explicitly connected matching policy owns this Vary.
             # Public cookie variants are already in scp_cookie_hash. Do not
             # turn unrelated automatic/tracking cookies into new variants.

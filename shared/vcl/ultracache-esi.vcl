@@ -99,7 +99,7 @@ sub scp_ultracache_hit {
 if (
     req.http.X-UltraCache-ESI-Candidate == "1" &&
     obj.http.X-UltraCache-ESI-Shared-Parent != "1" &&
-    obj.http.X-UltraCache-Woo-Async-Parent != "1"
+    obj.http.X-UltraCache-Woo-Async-Parent != "1" && !cookie_handoff.selection_manifest()
 ) {
     set req.http.X-SCP-Reason = "unapproved-private-parent";
     return (pass);
@@ -269,7 +269,7 @@ sub scp_ultracache_backend_response {
         set beresp.do_esi = true;
         unset beresp.http.Surrogate-Control;
     }
-    if (bereq.http.X-UltraCache-ESI-Candidate == "1") {
+    if (bereq.http.X-UltraCache-ESI-Candidate == "1" && !cookie_handoff.selection_local()) {
         if (beresp.uncacheable || beresp.http.X-UltraCache-ESI-Shared-Parent != "1" || !beresp.do_esi) {
             unset beresp.http.X-UltraCache-ESI-Shared-Parent;
             if (!beresp.http.X-SCP-Reason) {
@@ -285,7 +285,8 @@ sub scp_ultracache_backend_response {
         set beresp.do_stream = false;
         set beresp.grace = 0s;
         set beresp.keep = 0s;
-        set beresp.filters = "uc_request_snapshot esi";
+        if (beresp.do_esi) { set beresp.filters = "uc_request_snapshot esi"; }
+        else { set beresp.filters = "uc_request_snapshot"; }
     }
 }
 

@@ -222,13 +222,13 @@ static int public_selection_parse(struct continuation *d) {
 }
 VCL_STRING vmod_selection_manifest(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
-    if (!d || !d->selection_entry || !d->manifest ||
+    if (ctx->req->esi_level || !d || !d->selection_entry || !d->manifest ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
     return WS_Copy(ctx->ws,d->manifest,-1);
 }
 VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
-    if (!d || !d->selection_entry || !d->variant ||
+    if (ctx->req->esi_level || !d || !d->selection_entry || !d->variant ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
     return WS_Copy(ctx->ws,d->variant,-1);
 }

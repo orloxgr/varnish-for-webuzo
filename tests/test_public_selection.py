@@ -85,6 +85,10 @@ class PublicSelection(unittest.TestCase):
         result=self.parse(sample())
         self.assertEqual((result['policy'],result['wordpress'],result['occurrences']),(NATIVE,WORDPRESS,0))
         self.assertEqual(result['body'],b'<html>EUR20</html>')
+    def test_legal_header_optional_whitespace_is_preserved_without_changing_binding(self):
+        value=sample()
+        value['selectedPublic']['headers']=[line.replace(': ',':\t')+' \t' for line in value['selectedPublic']['headers']]
+        self.assertIsNotNone(self.parse(value))
     def test_binding_does_not_accept_another_request_url_or_policy(self):
         for key,value in [('request','43'),('url','/other/'),('native','c'*64),('wordpress','d'*64)]:
             with self.subTest(field=key):self.assertIsNone(self.parse(sample(),**{key:value}))

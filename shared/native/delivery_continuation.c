@@ -184,7 +184,9 @@ static int delivery_document_headers(const struct http *hp, struct fields **outp
             !strncasecmp(line,"X-SCP-",6) || !strncasecmp(line,"X-HVH-",6) || !strncasecmp(line,"X-WV-",5) ||
             !strncasecmp(line,"X-Cache",7) || !strncasecmp(line,"X-Hestia-Varnish",16) ||
             !strncasecmp(line,"X-Webuzo-Varnish",16) || !strncasecmp(line,"X-UltraCache-Delivery-",22) ||
-            !strncasecmp(line,"X-UltraCache-ESI-",17)) continue;
+            !strncasecmp(line,"X-UltraCache-ESI-",17) ||
+            !strncasecmp(line,"X-UltraCache-VCL-",sizeof("X-UltraCache-VCL-")-1) ||
+            !strncasecmp(line,"X-UltraCache-Public-Selection-",sizeof("X-UltraCache-Public-Selection-")-1)) continue;
         field = calloc(1,sizeof(*field));
         if (!field) return 0;
         field->line = strdup(line);

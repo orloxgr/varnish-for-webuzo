@@ -86,7 +86,7 @@ def cookie_pattern(catalogue, consumer):
     return '(^|;[[:blank:]]*)(' + '|'.join(names) + ')='
 
 
-def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rules='', delivery_authorization=''):
+def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rules='', delivery_authorization='',selection_rules=''):
     """Expand only reviewed names; output remains a standalone native VCL."""
     validate(catalogue)
     source = expand(source)
@@ -98,6 +98,7 @@ def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rule
     rendered = rendered.replace('@@COOKIE_ADMIN_RULES@@', admin_rules)
     rendered = rendered.replace('@@COOKIE_RESPONSE_RULES@@', response_rules)
     rendered = rendered.replace('@@DELIVERY_AUTHORIZATION@@', delivery_authorization)
+    rendered = rendered.replace('@@PUBLIC_SELECTION_RULES@@', selection_rules)
     import cms_routes
     rendered = rendered.replace('@@CMS_ROUTE_RULES@@', cms_rules)
     rendered = rendered.replace('@@CMS_NORMALIZATION@@', cms_routes.normalization_vcl())
@@ -106,5 +107,6 @@ def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rule
     root=Path(__file__).parent
     identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in
         ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/delivery_continuation.c','native/delivery_snapshot_backend.c',
-         'native/delivery_envelope.c','native/delivery_envelope.h','native_build.py'))).hexdigest()
+         'native/delivery_envelope.c','native/delivery_envelope.h','native/delivery_selection.c',
+         'native/public_selection_registry.c','native/selection_digest.c','native_build.py'))).hexdigest()
     return '# Native cookie handoff sources: '+identity+'\n'+rendered

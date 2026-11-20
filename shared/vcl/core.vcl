@@ -20,6 +20,20 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-Private-Document-Version;
     unset req.http.X-UltraCache-Delivery-Recovery;
     unset req.http.X-SCP-Cookie-Contract;
+    unset req.http.X-SCP-Selection-Operation;
+    unset req.http.X-SCP-Selection-State;
+    unset req.http.X-SCP-Selection-Names;
+    unset req.http.X-SCP-Selection-Actions;
+    unset req.http.X-SCP-Selection-Native-Policy;
+    unset req.http.X-UltraCache-Delivery-Public-Selection-Version;
+    unset req.http.X-UltraCache-Delivery-Policy;
+    unset req.http.X-UltraCache-Delivery-WordPress-Policy;
+    unset req.http.X-UltraCache-Delivery-Public-Selection-Actions;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Version;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Epoch;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
+    unset req.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Actions;
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
     unset req.http.X-SCP-Admin-Remaining;
@@ -87,19 +101,15 @@ sub scp_recv {
         set req.http.X-SCP-Reason = "ultracache-private-session-source";
         return (pass);
     }
-    # An explicit raw/no-store fetch must reach the current origin before an
-    # ESI parent can start prepare against a retired application publication.
-    # Browser reload no-cache/max-age=0/Pragma alone still use normal lookup.
+    # Browser revalidation does not decide the server-side cache action.
+    # The signed/shaped raw session-source operation above remains separate.
     std.collect(req.http.Cache-Control);
-    if (req.esi_level == 0 && req.restarts == 0 &&
-        (req.method == "GET" || req.method == "HEAD") &&
-        req.http.Cache-Control ~ "(?i)(^|,)[[:blank:]]*no-store[[:blank:]]*(,|$)") {
-        set req.http.X-SCP-Reason = "request-no-store";
-        return (pass);
-    }
     if (req.url ~ "[?]") { set req.http.X-SCP-Query = regsub(req.url, "^[^?]*[?]", ""); }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
     call scp_common_recv;
+    if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0 && req.method == "GET") {
+        call scp_selection_recv;
+    }
 }
 sub scp_pass {
     if (req.esi_level == 0 && req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_guard()) {
@@ -121,6 +131,19 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Fragment-HTTP-Failure;
     unset bereq.http.X-UltraCache-Application-Private;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
+    unset bereq.http.X-UltraCache-Delivery-Public-Selection-Version;
+    unset bereq.http.X-UltraCache-Delivery-Policy;
+    unset bereq.http.X-UltraCache-Delivery-WordPress-Policy;
+    unset bereq.http.X-UltraCache-Delivery-Public-Selection-Actions;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Version;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Epoch;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Actions;
+    unset bereq.http.X-UltraCache-Public-Selection-Version;
+    unset bereq.http.X-UltraCache-Public-Selection-Enabled;
+    unset bereq.http.X-UltraCache-Public-Selection-WordPress-Policy;
+    unset bereq.http.X-UltraCache-Public-Selection-Cookies;
     unset bereq.http.X-UltraCache-Delivery-Manifest;
     unset bereq.http.X-UltraCache-Delivery-Recovery-Version;
     unset bereq.http.X-UltraCache-Delivery-Request-Snapshot-Version;
@@ -146,7 +169,15 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Fbp-New;
     unset bereq.http.X-SCP-Cookie-Name;
     unset bereq.http.X-SCP-Cookie-Role;
-    if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_fetch; }
+    if (bereq.http.X-SCP-Profile == "ultracache") {
+        call scp_selection_origin;
+        call scp_ultracache_backend_fetch;
+    }
+    unset bereq.http.X-SCP-Selection-Native-Policy;
+    unset bereq.http.X-SCP-Selection-Operation;
+    unset bereq.http.X-SCP-Selection-State;
+    unset bereq.http.X-SCP-Selection-Names;
+    unset bereq.http.X-SCP-Selection-Actions;
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
@@ -216,6 +247,15 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-Delivery-Request-Snapshot-Version;
     unset resp.http.X-UltraCache-Delivery-Private-Cache-Version;
     unset resp.http.X-UltraCache-Delivery-Private-Document-Version;
+    unset resp.http.X-UltraCache-Delivery-Public-Selection-Version;
+    unset resp.http.X-UltraCache-Delivery-Policy;
+    unset resp.http.X-UltraCache-Delivery-WordPress-Policy;
+    unset resp.http.X-UltraCache-Delivery-Public-Selection-Actions;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Version;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Epoch;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Actions;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     unset resp.http.X-UltraCache-Delivery-Parent-Source;
     unset resp.http.X-SCP-Delivery-Public-Snapshot;
