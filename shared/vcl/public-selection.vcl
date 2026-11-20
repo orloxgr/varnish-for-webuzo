@@ -5,6 +5,10 @@ sub scp_selection_context {
 
 # Called only inside the adapters' existing authenticated capabilities branch.
 sub scp_selection_negotiate {
+    std.collect(req.http.X-UltraCache-Public-Selection-Version);
+    std.collect(req.http.X-UltraCache-Public-Selection-Enabled);
+    std.collect(req.http.X-UltraCache-Public-Selection-WordPress-Policy);
+    std.collect(req.http.X-UltraCache-Public-Selection-Cookies);
     if (req.http.X-UltraCache-Public-Selection-Version ||
         req.http.X-UltraCache-Public-Selection-Enabled ||
         req.http.X-UltraCache-Public-Selection-WordPress-Policy ||
@@ -43,8 +47,9 @@ sub scp_selection_capabilities {
 # Cache-Control/Pragma revalidation headers do not disable this lookup.
 sub scp_selection_recv {
     if (req.restarts == 0 &&
-        (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$") &&
-        (!req.http.Accept || req.http.Accept ~ "(?i)(^|,)[[:blank:]]*(text/html|application/xhtml[+]xml|[*]/[*])([[:blank:];,]|$)")) {
+        (req.http.Accept ~ "(?i)(^|,)[[:blank:]]*(text/html|application/xhtml[+]xml)([[:blank:];,]|$)" ||
+         ((!req.http.Accept || req.http.Accept ~ "(^|,)[[:blank:]]*[*]/[*]([[:blank:];,]|$)") &&
+          (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$")))) {
         set req.http.X-SCP-Selection-Operation = "begin";
         call scp_selection_context;
         unset req.http.X-SCP-Selection-Operation;

@@ -202,7 +202,7 @@ static int delivery_original_owner(VRT_CTX, const struct continuation *d) {
         http_GetHdr(ctx->http_req,H_Host,&host) && !strcmp(d->host,host) &&
         !strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b) &&
         !strcmp("GET",ctx->http_req->hd[HTTP_HDR_METHOD].b) &&
-        ctx->req->restarts == d->restart+1;
+        ctx->req->restarts == d->restart+(d->selection_entry ? 0 : 1);
 }
 static int delivery_append_cookies(VRT_CTX, struct continuation *d) {
     struct fields *f;

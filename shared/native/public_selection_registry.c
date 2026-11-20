@@ -148,11 +148,12 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     struct continuation *d;
     struct handoff *entry;
     struct public_declaration *declaration;
-    const char *host = NULL;
+    const char *host = NULL, *method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     char *names = NULL, *wordpress_policy = NULL, *actions;
     int has_variant, found;
     unsigned i;
-    if (priv->priv || ctx->req->esi_level || ctx->req->restarts || !site || !*site || !public_policy(policy) ||
+    if (priv->priv || ctx->req->esi_level || ctx->req->restarts || !method || strcmp(method,"GET") ||
+        !site || !*site || !public_policy(policy) ||
         !http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
     pthread_mutex_lock(&lock); declaration = public_declaration(site,host);
     found = declaration != NULL;
