@@ -25,6 +25,37 @@ struct delivery_private_document {
     char *content_type;
     unsigned status;
 };
+struct delivery_cookie_update {
+    struct delivery_cookie_update *next;
+    char *name, *value; /* NULL value is absence, never a new cookie action. */
+};
+struct delivery_header {
+    struct delivery_header *next;
+    char *line;
+};
+struct delivery_public_selection {
+    char policy[65], wordpress_policy[65];
+    char *manifest, *target;
+    uint64_t occurrences;
+    struct delivery_cookie_update *updates;
+    struct delivery_header *headers;
+    struct delivery_public_parent *parent;
+    struct delivery_fragment *fragments;
+};
+/* Separate entry/outcome: never weakens delivery_envelope_parse's v1 binding. */
+int delivery_selection_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection,
+    struct delivery_private_document **document);
+void delivery_selection_free(struct delivery_public_selection *selection);
+/* Ordered action TAB kind TAB literal-name LF, from the effective resolver. */
+int delivery_selection_candidate(const struct delivery_public_selection *selection,
+    const char *original, const char *rules, char **candidate);
+int delivery_cookie_name(const char *name, size_t length);
+/* 0 Shared (including existing fallback), 1 Variant, 2 Private; -1 bad rules. */
+int delivery_cookie_action(const char *rules, const char *name, size_t length);
+char *delivery_selection_projection(const char *candidate, const char *rules);
+int delivery_selection_digest(const unsigned char *body, size_t length, char digest[65]);
 
 /* A fixed-schema parser for delivery v1 only. No engine JSON internals.
  * Strings are strict UTF-8/JSON with UTF-16 surrogate-pair decoding. Embedded

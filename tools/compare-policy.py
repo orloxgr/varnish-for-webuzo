@@ -16,6 +16,7 @@ def main():
     digests={}
     for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native/delivery_continuation.c','shared/native/delivery_snapshot_backend.c','shared/native_build.py',
                  'shared/native/delivery_envelope.c','shared/native/delivery_envelope.h',
+                 'shared/native/delivery_selection.c','shared/native/public_selection_registry.c','shared/native/selection_digest.c',
                  'shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
                  'shared/vcl/aggressive.vcl','shared/vcl/cms-routes.vcl',
@@ -27,7 +28,7 @@ def main():
                  'shared/CONTRACT.md','shared/ESI-DELIVERY-DRAFT.md','shared/ESI-VALIDATION.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',
-                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',
+                 'tests/test_delivery_continuation.py','tests/test_delivery_envelope.py','tests/test_public_selection.py','tests/test_delivery_authorization.py','tests/test_private_fragment_ttl.py','tests/test_cold_personal_delivery.py','tests/test_private_document.py','tests/test_public_fragment_ttl.py','tests/test_fragment_http_failures.py','tests/test_recently_viewed_defaults.py',
                  'tests/test_request_no_store.py','tests/test_comment_cookie_defaults.py','tests/test_cookie_profiles.py','tests/cookie_profile_ui.mjs','tools/build-cookie-assessments.py'):
         left=(root/name).read_bytes();right=(args.other/name).read_bytes()
         if left!=right:raise SystemExit('Different shared content: '+name)

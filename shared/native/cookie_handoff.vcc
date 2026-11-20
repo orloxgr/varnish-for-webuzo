@@ -119,3 +119,51 @@ $Function BOOL delivery_synth(PRIV_TOP)
 $Restrict vcl_synth
 
 Replay an owned complete private document or pre-rendered private child.
+
+$Function STRING selection_epoch()
+
+Native build identity; no visitor data. Namespaces only new UltraCache replicas.
+
+$Function BOOL selection_register(STRING site, STRING host, STRING wordpress_policy, STRING names, BOOL enabled)
+$Restrict vcl_recv
+
+Called only after existing per-site HTTP capabilities authentication. Stores
+exact resolver names and WP identity, never values. Ordinary probes do not call it.
+
+$Function STRING selection_names(STRING site, STRING host)
+$Restrict vcl_recv vcl_synth
+
+Return registered metadata only for this immutable adapter site and host.
+
+$Function STRING selection_wordpress_policy(STRING site, STRING host)
+$Restrict vcl_recv vcl_synth
+
+Return the independent accepted WP policy identity.
+
+$Function STRING selection_actions(STRING rules, STRING names)
+$Restrict vcl_recv vcl_synth
+
+Project exact names through the active generated ordered matcher. Existing
+unmatched-name behavior is Shared; no additional cookie decision list.
+
+$Function INT selection_begin(PRIV_TOP, STRING site, STRING policy, STRING rules)
+$Restrict vcl_recv
+
+After normal route/auth/cookie decisions: 1 owned original-route preparation,
+0 no negotiated active Variant resolver, -1 allocation/binding error.
+
+$Function STRING selection_manifest(PRIV_TOP)
+$Restrict vcl_recv vcl_hash
+
+Only an owned prepared selection exposes its exact signed target publication.
+
+$Function STRING selection_variant(PRIV_TOP)
+$Restrict vcl_recv
+
+Native Variant projection of the logical candidate; actual Cookie stays intact.
+
+$Function BOOL selection_local(PRIV_TASK)
+$Restrict vcl_backend_response
+
+True only for the new authenticated selected-publication source. Old recovery
+keeps its own cookie variation and source-manifest binding unchanged.

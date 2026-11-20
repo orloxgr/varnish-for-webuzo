@@ -361,7 +361,7 @@ invalid:
     return 0;
 }
 
-static int private_document(struct reader *r, struct delivery_private_document **output) {
+static int private_document_type(struct reader *r, struct delivery_private_document **output, int html_only) {
     struct delivery_private_document *document = calloc(1,sizeof(*document));
     unsigned seen = 0;
     uint64_t status;
@@ -386,15 +386,15 @@ static int private_document(struct reader *r, struct delivery_private_document *
                 if (!base64_body(text,&document->body,&document->length)) goto invalid;
             } else {
                 static const char html[] = "text/html";
-                if (text.length < sizeof(html)-1) goto invalid;
+                if (!text.length || (html_only && text.length < sizeof(html)-1)) goto invalid;
                 for (i = 0; i < text.length; ++i) {
                     unsigned char c = (unsigned char)text.data[i];
                     if (c < 32 || c > 126) goto invalid;
-                    if (i < sizeof(html)-1 && (c >= 'A' && c <= 'Z' ? c+32 : c) != (unsigned char)html[i]) goto invalid;
+                    if (html_only && i < sizeof(html)-1 && (c >= 'A' && c <= 'Z' ? c+32 : c) != (unsigned char)html[i]) goto invalid;
                 }
                 i = sizeof(html)-1;
                 while (i < text.length && text.data[i] == ' ') ++i;
-                if (i < text.length && text.data[i] != ';') goto invalid;
+                if (html_only && i < text.length && text.data[i] != ';') goto invalid;
                 document->content_type = copy(text);
                 if (!document->content_type) goto invalid;
             }
@@ -408,6 +408,10 @@ static int private_document(struct reader *r, struct delivery_private_document *
 invalid:
     delivery_private_document_free(document);
     return 0;
+}
+
+static int private_document(struct reader *r, struct delivery_private_document **output) {
+    return private_document_type(r,output,1);
 }
 
 int delivery_envelope_parse(const char *body, size_t length,
@@ -461,3 +465,5 @@ done:
     }
     return ok;
 }
+
+#include "delivery_selection.c"

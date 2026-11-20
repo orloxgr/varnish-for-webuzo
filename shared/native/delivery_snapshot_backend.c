@@ -142,7 +142,7 @@ static int delivery_snapshot_gethdrs(VRT_CTX, VCL_BACKEND backend) {
         remaining = d->public_deadline-ctx->now;
         if (!isfinite(remaining) || remaining < 0) remaining = 0;
         http_PrintfHeader(ctx->http_beresp,"Cache-Control: public, max-age=%.0f",floor(remaining));
-        http_ForceHeader(ctx->http_beresp,snapshot_surrogate_control,"ESI/1.0");
+        if (!d->selection_entry) http_ForceHeader(ctx->http_beresp,snapshot_surrogate_control,"ESI/1.0");
         http_ForceHeader(ctx->http_beresp,h_recovery,"request-snapshot-v1");
         http_ForceHeader(ctx->http_beresp,h_request,d->request_id);
         http_ForceHeader(ctx->http_beresp,h_original,d->url);
