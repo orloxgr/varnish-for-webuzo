@@ -1,6 +1,9 @@
 # UltraCache delivery continuation: design draft
 
-Status: **isolated candidates, not release/full-goal acceptance**. The Hestia
+Current qualification: see [the final release receipt](ESI-VALIDATION.md).
+The following records preserve intermediate design and acceptance history.
+
+Historical status: **isolated candidates, not release/full-goal acceptance**. The Hestia
 original-URI continuation checkpoint `35b1111` passed its native mock fixture;
 real application/provider acceptance and Webuzo native qualification remain
 separate. Scoped private TTL and its version handshake now have an isolated
