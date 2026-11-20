@@ -29,8 +29,12 @@ sub scp_selection_negotiate {
     }
     # Scope alone is a read-only query. Only plain probes may default to root;
     # a declaration above always requires its explicit application scope.
-    set req.http.X-SCP-Selection-Scope = req.http.X-UltraCache-Public-Selection-Scope;
-    if (!req.http.X-SCP-Selection-Scope) { set req.http.X-SCP-Selection-Scope = "/"; }
+    if (req.http.X-UltraCache-Public-Selection-Scope) {
+        set req.http.X-SCP-Selection-Scope = req.http.X-UltraCache-Public-Selection-Scope;
+    } else {
+        # Assigning an absent field first would create a present-empty header.
+        set req.http.X-SCP-Selection-Scope = "/";
+    }
     set req.http.X-SCP-Selection-Names = cookie_handoff.selection_names(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
     set req.http.X-SCP-Selection-Operation = "actions";
     call scp_selection_context;
