@@ -19,6 +19,12 @@ struct delivery_public_parent {
     size_t length;
     uint64_t fresh_remaining;
 };
+struct delivery_private_document {
+    unsigned char *body;
+    size_t length;
+    char *content_type;
+    unsigned status;
+};
 
 /* A fixed-schema parser for delivery v1 only. No engine JSON internals.
  * Strings are strict UTF-8/JSON with UTF-16 surrogate-pair decoding. Embedded
@@ -26,8 +32,10 @@ struct delivery_public_parent {
  * Output is all-or-nothing and owned by the caller on success. */
 int delivery_envelope_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, uint64_t occurrences,
-    struct delivery_fragment **output, struct delivery_public_parent **public_parent);
+    struct delivery_fragment **output, struct delivery_public_parent **public_parent,
+    struct delivery_private_document **document);
 void delivery_public_parent_free(struct delivery_public_parent *parent);
+void delivery_private_document_free(struct delivery_private_document *document);
 /* Overflow-checked native buffer growth, with no product byte-size cap. */
 int delivery_buffer_growth(size_t used, size_t capacity, size_t chunk,
     size_t *needed, size_t *target_capacity);

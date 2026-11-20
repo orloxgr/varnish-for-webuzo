@@ -2,12 +2,13 @@
  * Included by cookie_handoff.c. Candidate UltraCache-only continuation.
  * No worker, cookie issuer, public cookie jar or persistent visitor state. */
 #include <stdio.h>
+#include <strings.h>
 #include "cache/cache_filter.h"
 #include "vrt_obj.h"
 #include "delivery_envelope.h"
 
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
-    D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_FAILED };
+    D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT, D_FAILED };
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
@@ -27,7 +28,9 @@ struct continuation {
     size_t length, capacity;
     struct delivery_fragment *fragments;
     struct delivery_public_parent *public_parent; /* same-request public bytes */
+    struct delivery_private_document *document;
     struct fields *public_headers;
+    struct fields *document_headers;
 };
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static const char filter_task_token;
@@ -44,6 +47,9 @@ static const hdr_t h_request_snapshot_version = HDR("X-UltraCache-Delivery-Reque
 static const hdr_t h_private_key = HDR("X-SCP-Private-Key");
 static const hdr_t h_private_cache_version = HDR("X-UltraCache-Delivery-Private-Cache-Version");
 static const hdr_t h_adapter_site = HDR("X-SCP-Site");
+static const hdr_t h_private_document_version = HDR("X-UltraCache-Delivery-Private-Document-Version");
+static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
+static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -72,6 +78,8 @@ static void delivery_fini(VRT_CTX, void *value) {
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
     free(d->body); delivery_free_fragments(d->fragments);
     clear_fields(d->public_headers);
+    clear_fields(d->document_headers);
+    delivery_private_document_free(d->document);
     delivery_public_parent_free(d->public_parent); free(d);
 }
 static const struct vmod_priv_methods delivery_methods = {
@@ -107,9 +115,89 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
 
 static int delivery_parse(struct continuation *d) {
     int ok = delivery_envelope_parse(d->body,d->length,d->request_id,d->url,
-        d->occurrences,&d->fragments,&d->public_parent);
+        d->occurrences,&d->fragments,&d->public_parent,&d->document);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
     return ok;
+}
+
+static int delivery_header_name(const char *line, const char *name) {
+    size_t length = strlen(name);
+    return !strncasecmp(line,name,length) && line[length] == ':';
+}
+static int delivery_connection_field(const struct http *hp, const char *line) {
+    unsigned i;
+    const char *colon = strchr(line,':');
+    size_t length = colon ? (size_t)(colon-line) : 0;
+    if (!length) return 0;
+    for (i = HTTP_HDR_FIRST; i < hp->nhd; ++i) {
+        const char *p = hp->hd[i].b;
+        if (!p || !delivery_header_name(p,"Connection")) continue;
+        p = strchr(p,':')+1;
+        while (*p) {
+            const char *start, *end;
+            while (*p == ' ' || *p == '\t' || *p == ',') ++p;
+            start = p;
+            while (*p && *p != ',') ++p;
+            end = p;
+            while (end > start && (end[-1] == ' ' || end[-1] == '\t')) --end;
+            if ((size_t)(end-start) == length && !strncasecmp(start,line,length)) return 1;
+        }
+    }
+    return 0;
+}
+/* Fresh prepare headers belong to this complete visitor document. Never
+ * reuse validators/CSP/length from the selected public parent or JSON wire. */
+static int delivery_document_headers(const struct http *hp, struct fields **output) {
+    struct fields **tail = output;
+    unsigned i;
+    for (i = HTTP_HDR_FIRST; i < hp->nhd; ++i) {
+        const char *line = hp->hd[i].b;
+        struct fields *field;
+        if (!line) continue;
+        if (delivery_connection_field(hp,line) ||
+            delivery_header_name(line,"Set-Cookie") || delivery_header_name(line,"Set-Cookie2") ||
+            delivery_header_name(line,"Content-Type") || delivery_header_name(line,"Content-Length") ||
+            delivery_header_name(line,"Content-Encoding") || delivery_header_name(line,"Cache-Control") ||
+            delivery_header_name(line,"Surrogate-Control") || delivery_header_name(line,"Pragma") ||
+            delivery_header_name(line,"Expires") || delivery_header_name(line,"ETag") ||
+            delivery_header_name(line,"Last-Modified") || delivery_header_name(line,"Age") ||
+            delivery_header_name(line,"Date") || delivery_header_name(line,"Connection") ||
+            delivery_header_name(line,"Transfer-Encoding") || delivery_header_name(line,"Trailer") ||
+            delivery_header_name(line,"Keep-Alive") || delivery_header_name(line,"Proxy-Connection") ||
+            delivery_header_name(line,"TE") || delivery_header_name(line,"Upgrade") ||
+            delivery_header_name(line,"Via") || delivery_header_name(line,"Server") || delivery_header_name(line,"X-Varnish") ||
+            !strncasecmp(line,"X-SCP-",6) || !strncasecmp(line,"X-HVH-",6) || !strncasecmp(line,"X-WV-",5) ||
+            !strncasecmp(line,"X-Cache",7) || !strncasecmp(line,"X-Hestia-Varnish",16) ||
+            !strncasecmp(line,"X-Webuzo-Varnish",16) || !strncasecmp(line,"X-UltraCache-Delivery-",22) ||
+            !strncasecmp(line,"X-UltraCache-ESI-",17)) continue;
+        field = calloc(1,sizeof(*field));
+        if (!field) return 0;
+        field->line = strdup(line);
+        if (!field->line) { free(field); return 0; }
+        *tail = field; tail = &field->next;
+    }
+    return 1;
+}
+static int delivery_original_owner(VRT_CTX, const struct continuation *d) {
+    const char *site = NULL, *host = NULL;
+    return ctx->req->esi_level == 0 && d->site &&
+        http_GetHdr(ctx->http_req,h_adapter_site,&site) && !strcmp(d->site,site) &&
+        http_GetHdr(ctx->http_req,H_Host,&host) && !strcmp(d->host,host) &&
+        !strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b) &&
+        !strcmp("GET",ctx->http_req->hd[HTTP_HDR_METHOD].b) &&
+        ctx->req->restarts == d->restart+1;
+}
+static int delivery_append_cookies(VRT_CTX, struct continuation *d) {
+    struct fields *f;
+    pthread_mutex_lock(&lock);
+    for (f = d->association.owner->fields; f; f = f->next) {
+        const char *line = WS_Copy(ctx->ws,f->line,-1);
+        if (!line || ctx->http_resp->nhd >= ctx->http_resp->shd) { d->failed = 1; break; }
+        http_SetHeader(ctx->http_resp,line);
+    }
+    clear_fields(d->association.owner->fields); d->association.owner->fields = NULL;
+    pthread_mutex_unlock(&lock);
+    return !d->failed && !WS_Overflowed(ctx->ws);
 }
 
 static enum vfp_status delivery_filter_init(VRT_CTX, struct vfp_ctx *vc, struct vfp_entry *vfe) {
@@ -258,6 +346,8 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             if (d->phase == D_PREPARE)
                 http_ForceHeader(ctx->http_bereq,h_private_cache_version,"1");
             else http_Unset(ctx->http_bereq,h_private_cache_version);
+            if (d->phase == D_PREPARE) http_ForceHeader(ctx->http_bereq,h_private_document_version,"1");
+            else http_Unset(ctx->http_bereq,h_private_document_version);
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
             http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
@@ -318,7 +408,8 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
         (!http_GetHdr(ctx->http_beresp,H_Content_Encoding,&encoding) || !strcmp(encoding,"identity"));
     for (i = HTTP_HDR_FIRST; valid && i < ctx->http_beresp->nhd; ++i) {
         struct fields *f;
-        if (!ctx->http_beresp->hd[i].b || !http_IsHdr(&ctx->http_beresp->hd[i],H_Set_Cookie)) continue;
+        if (!ctx->http_beresp->hd[i].b || (!http_IsHdr(&ctx->http_beresp->hd[i],H_Set_Cookie) &&
+            !delivery_header_name(ctx->http_beresp->hd[i].b,"Set-Cookie2"))) continue;
         f = calloc(1,sizeof(*f));
         if (!f) { valid = 0; break; }
         f->line = strdup(ctx->http_beresp->hd[i].b);
@@ -343,6 +434,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     pthread_mutex_unlock(&lock);
     clear_fields(first);
     http_Unset(ctx->http_beresp,H_Set_Cookie);
+    http_Unset(ctx->http_beresp,h_set_cookie2);
     if (!valid) VRT_fail(ctx,"UltraCache prepare response rejected");
     return 1;
 }
@@ -393,6 +485,14 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         if (!valid || http_GetStatus(ctx->http_resp) != 200 || !delivery_parse(d) || !delivery_restore(ctx,d)) {
             d->phase = D_FAILED; return -1;
         }
+        if (d->document) {
+            if (d->recovery_ready || !delivery_original_owner(ctx,d) ||
+                !delivery_document_headers(ctx->http_resp,&d->document_headers)) {
+                d->phase = D_FAILED; return -1;
+            }
+            d->phase = D_DOCUMENT;
+            return 2; /* private synth now, never another parent lookup/store */
+        }
         if (d->snapshot_ready) {
             double application_deadline;
             if (!d->public_parent) { d->phase = D_FAILED; return -1; }
@@ -403,7 +503,6 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         return 1;
     }
     if (d->phase == D_READY || d->phase == D_RECOVERY) {
-        struct fields *f;
         if (http_GetStatus(ctx->http_resp) != 200 ||
             (d->phase == D_READY && ctx->req->objcore != d->parent && !d->recovery_ready) ||
             !target || strcmp(target,d->target) || occurrences < 1 ||
@@ -421,15 +520,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) ||
             !delivery_restore(ctx,d)) { d->phase = D_FAILED; return -1; }
         /* Before the first ESI child runs, append authentic provider headers. */
-        pthread_mutex_lock(&lock);
-        for (f = d->association.owner->fields; f; f = f->next) {
-            const char *line = WS_Copy(ctx->ws,f->line,-1);
-            if (!line || ctx->http_resp->nhd >= ctx->http_resp->shd) { d->failed = 1; break; }
-            http_SetHeader(ctx->http_resp,line);
-        }
-        clear_fields(d->association.owner->fields); d->association.owner->fields = NULL;
-        pthread_mutex_unlock(&lock);
-        if (d->failed) { d->phase = D_FAILED; return -1; }
+        if (!delivery_append_cookies(ctx,d)) { d->phase = D_FAILED; return -1; }
         d->phase = D_DELIVERED;
         return 0;
     }
@@ -441,6 +532,28 @@ VCL_BOOL vmod_delivery_synth(VRT_CTX, struct vmod_priv *priv) {
     const struct delivery_fragment *f;
     struct vrt_blob body;
     const char *url;
+    if (d && d->phase == D_DOCUMENT && d->document && delivery_original_owner(ctx,d)) {
+        struct fields *field;
+        http_PutResponse(ctx->http_resp,"HTTP/1.1",(uint16_t)d->document->status,
+            http_Status2Reason(d->document->status,NULL));
+        for (field = d->document_headers; field; field = field->next) {
+            const char *line = WS_Copy(ctx->ws,field->line,-1);
+            if (!line || ctx->http_resp->nhd >= ctx->http_resp->shd) {
+                VRT_fail(ctx,"Private document header workspace unavailable"); return 1;
+            }
+            http_SetHeader(ctx->http_resp,line);
+        }
+        http_ForceHeader(ctx->http_resp,H_Cache_Control,"private, no-store");
+        http_ForceHeader(ctx->http_resp,h_surrogate_control,"no-store");
+        http_ForceHeader(ctx->http_resp,H_Content_Type,d->document->content_type);
+        if (!delivery_append_cookies(ctx,d)) { VRT_fail(ctx,"Private document cookies unavailable"); return 1; }
+        INIT_OBJ(&body,VRT_BLOB_MAGIC);
+        body.blob = d->document->body; body.len = d->document->length;
+        if (d->document->status == 204 || d->document->status == 304) { body.blob = ""; body.len = 0; }
+        VRT_l_resp_body(ctx,LBODY_SET_BLOB,NULL,&body);
+        d->phase = D_DOCUMENT_SENT;
+        return 1;
+    }
     if (!d || ctx->req->esi_level == 0 || d->phase != D_DELIVERED) return 0;
     url = ctx->http_req->hd[HTTP_HDR_URL].b;
     for (f = d->fragments; f; f = f->next) if (!strcmp(url,f->url)) break;

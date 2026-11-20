@@ -642,3 +642,79 @@ change site, host, URI or the expected native restart and require 403 before
 any origin/provider execution.
 The shared C/API changed for this proof; a matching rebuilt DSO and native
 Hestia/Webuzo reruns are required. This new fix is not yet native-qualified.
+
+### Actual application-private complete document (candidate)
+
+An authenticated original-route prepare may discover actual private application
+state which belongs to the complete native template, rather than its selected
+fragments. The application must decide this before rendering those fragments.
+For example, a pending WooCommerce notice is application state, not evidence
+from the presence or name of a cookie. Native VCL contains no Woo-specific
+cookie override or second cookie classification list.
+
+The existing signed private probe and an owned prepare advertise
+`X-UltraCache-Delivery-Private-Document-Version: 1`. Caller copies, ordinary
+backend requests and origin/browser echoes are stripped. This is a capability
+of the matching native implementation, not a new configuration switch. The
+application requires both its effective stored probe and the live prepare
+version before consuming state or rendering a complete private template.
+
+In the same authenticated prepare bootstrap, the application captures finalized
+identity HTML from the original native route, including its ordinary template,
+widgets, nonces and provider/session shutdown output. Its own ESI tokenization
+is disabled for this one private document; the native server does not execute
+any ESI instructions inside it. No renderer/provider runs during JSON encoding.
+The response uses the existing envelope binding but an exclusive outcome:
+
+```json
+{"schemaVersion":1,"requestId":"<owned request>","originalUrl":"<exact original URL>","privateDocument":{"status":200,"contentType":"text/html; charset=UTF-8","bodyBase64":"<canonical base64 identity bytes>"}}
+```
+
+`privateDocument` cannot coexist with renderedFragments, publicParent, fragment
+cache claims or public-snapshot recovery readiness. Duplicate/unknown fields,
+misbound request/URL, noncanonical base64, non-HTML or control-bearing content
+types, noninteger status, and status outside 200..599 fail the complete outcome.
+The native parser decodes the exact bytes, including embedded NUL/UTF-8; it
+does not impose a new product-specific body limit. Status 204/304 yields no
+response body. Other final statuses, including redirects and errors, retain
+their actual application status and body.
+
+After the complete outcome validates, native state restores and revalidates
+the same top-level GET, adapter site, canonical Host, original URI and expected
+restart. It synthesizes that private document immediately. There is no further
+parent lookup/refetch, recovery, publication, native object store, private TTL
+claim or public TTL refresh. The selected public parent remains available to
+other visitors and later requests after the private state is consumed.
+
+Fresh end-to-end headers from this prepare, including CSP, Link, language and
+Location, accompany its exact body. Cached-parent CSP/validators are never
+reused. JSON transport headers, validators, cache/encoding/length metadata,
+hop-by-hop fields (including Connection-nominated fields), and native internal
+delivery/ESI diagnostics are excluded. Content-Type comes from the document
+outcome. Private/no-store is mandatory. Authentic repeated provider Set-Cookie
+fields are appended once before headers, without comma splitting, minting or
+storage. Generic and adapter diagnostics report PASS and the actual application
+reason when available.
+
+For an ordinary full-application MISS, a nonempty trusted-origin
+`X-UltraCache-Application-Private` reason also marks the actual complete body
+private before aggressive override or cookie detachment, even with zero private
+fragments and all cookies classified Shared. Caller copies cannot establish it.
+Native code removes Shared-Parent/Parent-Source approval from that personal
+response. This remains distinct from a cookie's Shared/Variant/Private action.
+The prepare fallback itself requires an approved parent with an existing bound
+prepare; it does not inspect application state on arbitrary public HITs.
+
+**Basic remains best effort without ESI.** Neither the complete-document
+continuation nor the application-private metadata guard is called for Basic.
+Receiving UltraCache metadata cannot enable those paths or change Basic's
+ordinary cache policy.
+
+`test_private_document.PrivateDocument` adds seven native transport methods:
+exact bytes/fresh headers/cookie ownership and unchanged public parent; actual
+status/no-body status handling; malformed/mixed/misbound refusal; zero-fragment
+application-private protection before aggressive; Basic without ESI; existing
+probe/owned-prepare-only declaration; and exclusion of recovery readiness.
+Portable parser tests execute locally. Native transport, exact engine ABI,
+real WP template/notice consumption and browser/storage acceptance require
+root-owned matching-DSO runs; this draft is not a claim that they passed.

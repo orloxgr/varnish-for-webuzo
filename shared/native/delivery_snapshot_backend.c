@@ -11,10 +11,6 @@ static const hdr_t snapshot_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t private_object = HDR("X-SCP-Private-Object");
 static const hdr_t private_tags = HDR("X-UltraCache-Tags");
 
-static int delivery_header_name(const char *line, const char *name) {
-    size_t length = strlen(name);
-    return !strncasecmp(line,name,length) && line[length] == ':';
-}
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *d) {
     struct fields **tail = &d->public_headers;
     unsigned i;

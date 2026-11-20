@@ -154,6 +154,7 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     # manual enablement. Ordinary private/public children stay silent.
     if (bereq.http.X-SCP-Query ~ "(^|&)ultracache_esi_probe_private_fragment=[^&]+(?:&|$)") {
         set bereq.http.X-UltraCache-Delivery-Private-Cache-Version = "1";
+        set bereq.http.X-UltraCache-Delivery-Private-Document-Version = "1";
     }
 }
 if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce == "1") {
@@ -191,10 +192,14 @@ sub scp_delivery_authorization {
 sub scp_ultracache_personal_response {
     # Existing metadata identifies the visitor copy, never the public collector
     # bytes. This is actual body provenance, not a cookie classification rule.
-    if (beresp.http.X-UltraCache-Cacheable == "0" &&
+    if ((beresp.http.X-UltraCache-Application-Private && beresp.http.X-UltraCache-Application-Private != "") ||
+        (beresp.http.X-UltraCache-Cacheable == "0" &&
         beresp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" &&
-        beresp.http.X-UltraCache-ESI-Shared-Parent != "1") {
+        beresp.http.X-UltraCache-ESI-Shared-Parent != "1")) {
         set beresp.http.X-SCP-Personal-Delivery = "1";
+        set beresp.http.X-UltraCache-Cacheable = "0";
+        unset beresp.http.X-UltraCache-ESI-Shared-Parent;
+        unset beresp.http.X-UltraCache-Delivery-Parent-Source;
         unset beresp.http.X-SCP-Delivery-Public-Snapshot;
         set beresp.http.Cache-Control = "private, no-store";
         # Preserve an existing ESI/1.0 token for remaining PUBLIC includes.
@@ -269,6 +274,7 @@ sub scp_ultracache_deliver {
             std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0), false);
     }
     if (req.http.X-SCP-Delivery-State == "1") { return (restart); }
+    if (req.http.X-SCP-Delivery-State == "2") { return (synth(200, "Private document")); }
     if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }
     unset req.http.X-SCP-Delivery-State;
     unset resp.http.X-UltraCache-Delivery-Prepare;
@@ -278,8 +284,15 @@ sub scp_ultracache_deliver {
     unset resp.http.X-UltraCache-Delivery-Original-URL;
 }
 
+sub scp_private_document_diagnostics {
+    # Adapter definitions append their ordinary vendor diagnostics here.
+}
 sub vcl_synth {
     if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_synth()) {
+        if (req.esi_level == 0) {
+            set resp.http.X-Cache = "PASS";
+            call scp_private_document_diagnostics;
+        }
         return (deliver);
     }
 }

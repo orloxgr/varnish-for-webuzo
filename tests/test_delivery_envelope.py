@@ -27,6 +27,10 @@ class PublicParent(ctypes.Structure):
     _fields_=[('generation',ctypes.c_char*65),('body',ctypes.c_void_p),
               ('length',ctypes.c_size_t),('fresh_remaining',ctypes.c_uint64)]
 ParentPointer=ctypes.POINTER(PublicParent)
+class PrivateDocument(ctypes.Structure):
+    _fields_=[('body',ctypes.c_void_p),('length',ctypes.c_size_t),
+        ('content_type',ctypes.c_void_p),('status',ctypes.c_uint)]
+DocumentPointer=ctypes.POINTER(PrivateDocument)
 
 
 def sample():
@@ -50,11 +54,13 @@ class DeliveryEnvelope(unittest.TestCase):
         if result.returncode:raise AssertionError(result.stdout+result.stderr)
         cls.lib=ctypes.CDLL(str(library))
         cls.lib.delivery_envelope_parse.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_char_p,
-            ctypes.c_char_p,ctypes.c_uint64,ctypes.POINTER(Pointer),ctypes.POINTER(ParentPointer)]
+            ctypes.c_char_p,ctypes.c_uint64,ctypes.POINTER(Pointer),ctypes.POINTER(ParentPointer),ctypes.POINTER(DocumentPointer)]
         cls.lib.delivery_envelope_parse.restype=ctypes.c_int
         cls.lib.delivery_free_fragments.argtypes=[Pointer]
         cls.lib.delivery_free_fragments.restype=None
         cls.lib.delivery_public_parent_free.argtypes=[ParentPointer]
+        cls.lib.delivery_private_document_free.argtypes=[DocumentPointer]
+        cls.lib.delivery_private_document_free.restype=None
         cls.lib.delivery_public_parent_free.restype=None
         cls.lib.delivery_buffer_growth.argtypes=[ctypes.c_size_t]*3+[ctypes.POINTER(ctypes.c_size_t)]*2
         cls.lib.delivery_buffer_growth.restype=ctypes.c_int
@@ -74,17 +80,19 @@ class DeliveryEnvelope(unittest.TestCase):
         assert folder.name.startswith('uc-delivery-envelope-')
         cls.folder.cleanup()
 
-    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False,with_cache=False):
+    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False,with_cache=False,with_document=False):
         data=json.dumps(value,ensure_ascii=True).encode() if isinstance(value,dict) else value
         out=Pointer()
         parent=ParentPointer()
+        document=DocumentPointer()
         ok=self.lib.delivery_envelope_parse(data,len(data),request.encode(),url.encode(),occurrences,
-            ctypes.byref(out),ctypes.byref(parent))
+            ctypes.byref(out),ctypes.byref(parent),ctypes.byref(document))
         result={};cache={}
         try:
             if not ok:
                 self.assertFalse(out,'Failure must discard the complete partial envelope')
                 self.assertFalse(parent,'Failure must discard the complete partial snapshot')
+                self.assertFalse(document,'Failure must discard the complete partial document')
                 return None
             f=out
             while f:
@@ -95,6 +103,11 @@ class DeliveryEnvelope(unittest.TestCase):
                         ttl=row.cache_ttl,tags=ctypes.string_at(row.cache_tags).decode())
                 f=row.next
             if with_cache:return result,cache
+            if with_document:
+                self.assertFalse(out);self.assertFalse(parent)
+                row=document.contents
+                return dict(body=ctypes.string_at(row.body,row.length),
+                    contentType=ctypes.string_at(row.content_type).decode(),status=row.status)
             if not with_snapshot:return result
             snapshot=None
             if parent:
@@ -105,6 +118,7 @@ class DeliveryEnvelope(unittest.TestCase):
         finally:
             self.lib.delivery_free_fragments(out)
             self.lib.delivery_public_parent_free(parent)
+            self.lib.delivery_private_document_free(document)
 
     def test_real_c_parser_preserves_utf8_escapes_binary_html_and_property_order(self):
         value=sample()
@@ -264,6 +278,30 @@ class DeliveryEnvelope(unittest.TestCase):
         value['renderedFragments'][0]['cache']=claim
         raw=json.dumps(value).encode()
         self.assertIsNone(self.parse(raw.replace(b'"ttl": 61',b'"ttl":61,"t\\u0074l":61')))
+
+    def test_complete_private_document_is_bound_exclusive_and_preserves_status_and_exact_bytes(self):
+        for status in (200,204,302,304,404,503,599):
+            body=b'<html>private \xff\x00 body</html>'
+            value=dict(schemaVersion=1,requestId='123',originalUrl='/article?q=original',
+                privateDocument=dict(bodyBase64=base64.b64encode(body).decode(),
+                    contentType='text/html; charset=ISO-8859-1',status=status))
+            self.assertEqual(self.parse(value,with_document=True),
+                dict(body=body,contentType='text/html; charset=ISO-8859-1',status=status))
+            self.assertIsNone(self.parse(value,request='wrong'))
+            self.assertIsNone(self.parse(value,url='/wrong'))
+        good=dict(bodyBase64='Zg==',contentType='text/html; charset=UTF-8',status=200)
+        for change in (dict(good,status=199),dict(good,status=600),dict(good,status=True),
+                dict(good,status=200.5),dict(good,bodyBase64='Zh=='),dict(good,extra=0),
+                dict(good,contentType='application/json'),dict(good,contentType='text/htmlx'),
+                dict(good,contentType='text/html\r\nSet-Cookie: bad'),dict(good,contentType='text/html\x00')):
+            self.assertIsNone(self.parse(dict(schemaVersion=1,requestId='123',originalUrl='/article?q=original',privateDocument=change)))
+        for missing in good:
+            bad=dict(good);del bad[missing]
+            self.assertIsNone(self.parse(dict(schemaVersion=1,requestId='123',originalUrl='/article?q=original',privateDocument=bad)))
+        self.assertIsNone(self.parse(dict(sample(),privateDocument=good)))
+        value=dict(schemaVersion=1,requestId='123',originalUrl='/article?q=original',privateDocument=good,
+            publicParent=dict(generation='a'*64,bodyBase64='Zg==',freshRemaining=1))
+        self.assertIsNone(self.parse(value))
 
     def test_optional_public_parent_rejects_invalid_base64_generation_and_unknown_keys(self):
         good=dict(generation='a'*64,bodyBase64='Zg==',freshRemaining=9)

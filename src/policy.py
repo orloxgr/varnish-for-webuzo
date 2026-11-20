@@ -218,6 +218,15 @@ sub vcl_deliver {
  set resp.http.X-Webuzo-Varnish-Profile = req.http.X-WV-Profile;
  set resp.http.X-Accel-Expires = "0";
 }
+sub scp_private_document_diagnostics {
+ set resp.http.X-Webuzo-Varnish = "PASS";
+ set resp.http.X-Webuzo-Varnish-Reason = "application-private-document";
+ if (resp.http.X-UltraCache-Application-Private && resp.http.X-UltraCache-Application-Private != "") {
+   set resp.http.X-Webuzo-Varnish-Reason = resp.http.X-UltraCache-Application-Private;
+ }
+ set resp.http.X-Webuzo-Varnish-Profile = req.http.X-WV-Profile;
+ set resp.http.X-Accel-Expires = "0";
+}
 sub vcl_synth { set resp.http.Cache-Control = "no-store"; set resp.http.X-Accel-Expires = "0"; }
 ''')
     return '\n'.join(text)+'\n'

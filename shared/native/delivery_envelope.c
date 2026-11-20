@@ -19,6 +19,9 @@ void delivery_free_fragments(struct delivery_fragment *f) {
 void delivery_public_parent_free(struct delivery_public_parent *parent) {
     if (parent) { free(parent->body); free(parent); }
 }
+void delivery_private_document_free(struct delivery_private_document *document) {
+    if (document) { free(document->body); free(document->content_type); free(document); }
+}
 
 int delivery_relative(const char *s) {
     const unsigned char *p = (const unsigned char *)s;
@@ -358,17 +361,68 @@ invalid:
     return 0;
 }
 
+static int private_document(struct reader *r, struct delivery_private_document **output) {
+    struct delivery_private_document *document = calloc(1,sizeof(*document));
+    unsigned seen = 0;
+    uint64_t status;
+    if (!document || !take(r,'{')) goto invalid;
+    for (;;) {
+        struct text key, text;
+        unsigned bit;
+        size_t i;
+        if (!string(r,&key) || !take(r,':')) goto invalid;
+        if (equal(key,"bodyBase64")) bit = 1;
+        else if (equal(key,"contentType")) bit = 2;
+        else if (equal(key,"status")) bit = 4;
+        else goto invalid;
+        if (seen&bit) goto invalid;
+        seen |= bit;
+        if (bit == 4) {
+            if (!number(r,&status) || status < 200 || status > 599) goto invalid;
+            document->status = (unsigned)status;
+        } else {
+            if (!string(r,&text)) goto invalid;
+            if (bit == 1) {
+                if (!base64_body(text,&document->body,&document->length)) goto invalid;
+            } else {
+                static const char html[] = "text/html";
+                if (text.length < sizeof(html)-1) goto invalid;
+                for (i = 0; i < text.length; ++i) {
+                    unsigned char c = (unsigned char)text.data[i];
+                    if (c < 32 || c > 126) goto invalid;
+                    if (i < sizeof(html)-1 && (c >= 'A' && c <= 'Z' ? c+32 : c) != (unsigned char)html[i]) goto invalid;
+                }
+                i = sizeof(html)-1;
+                while (i < text.length && text.data[i] == ' ') ++i;
+                if (i < text.length && text.data[i] != ';') goto invalid;
+                document->content_type = copy(text);
+                if (!document->content_type) goto invalid;
+            }
+        }
+        if (take(r,'}')) break;
+        if (!take(r,',')) goto invalid;
+    }
+    if (seen != 7) goto invalid;
+    *output = document;
+    return 1;
+invalid:
+    delivery_private_document_free(document);
+    return 0;
+}
+
 int delivery_envelope_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, uint64_t occurrences,
-    struct delivery_fragment **output, struct delivery_public_parent **snapshot) {
+    struct delivery_fragment **output, struct delivery_public_parent **snapshot,
+    struct delivery_private_document **document) {
     struct reader r;
     struct text key, text;
     unsigned seen = 0;
     uint64_t schema;
     int ok = 0;
-    if (!output || !snapshot) return 0;
+    if (!output || !snapshot || !document) return 0;
     *output = NULL;
     *snapshot = NULL;
+    *document = NULL;
     if (!body || !request_id || !original_url || !length || length == SIZE_MAX || !occurrences) return 0;
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
     if (!r.buffer) return 0;
@@ -382,6 +436,7 @@ int delivery_envelope_parse(const char *body, size_t length,
         else if (equal(key,"originalUrl")) bit = 4;
         else if (equal(key,"renderedFragments")) bit = 8;
         else if (equal(key,"publicParent")) bit = 16;
+        else if (equal(key,"privateDocument")) bit = 32;
         else goto done;
         if (seen&bit) goto done;
         seen |= bit;
@@ -390,17 +445,19 @@ int delivery_envelope_parse(const char *body, size_t length,
             if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) goto done;
         } else if (bit == 8) {
             if (!fragments(&r,occurrences,output)) goto done;
-        } else if (!public_parent(&r,snapshot)) goto done;
+        } else if (bit == 16) { if (!public_parent(&r,snapshot)) goto done; }
+        else if (!private_document(&r,document)) goto done;
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
     }
     whitespace(&r);
-    ok = (seen == 15 || seen == 31) && r.offset == length;
+    ok = (seen == 15 || seen == 31 || seen == 39) && r.offset == length;
 done:
     free(r.buffer);
     if (!ok) {
         delivery_free_fragments(*output); *output = NULL;
         delivery_public_parent_free(*snapshot); *snapshot = NULL;
+        delivery_private_document_free(*document); *document = NULL;
     }
     return ok;
 }

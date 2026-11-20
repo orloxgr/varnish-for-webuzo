@@ -110,11 +110,12 @@ $Restrict vcl_deliver
 
 UltraCache only: begin an eligible parent HIT prepare, or validate/restore its
 captured response. 1 means restart before headers, -1 means abort. A completed
-continuation appends authentic provider fields and returns 0 for final delivery.
+whole-document alternative returns 2 for immediate owned private synthesis.
+A fragment continuation appends authentic provider fields and returns 0 for final delivery.
 Only begin=true may start a new continuation; resumed deliveries still receive
 the actual parent metadata even when the parent was fetched after eviction.
 
 $Function BOOL delivery_synth(PRIV_TOP)
 $Restrict vcl_synth
 
-Replay the request-owned pre-rendered fragment as a private synthetic body.
+Replay an owned complete private document or pre-rendered private child.
