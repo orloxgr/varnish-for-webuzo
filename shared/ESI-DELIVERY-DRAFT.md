@@ -185,6 +185,32 @@ fragment transport test alone does not establish this behavior.
 
 ## Acceptance still required
 
+### Admission is distinct from privateCount
+
+In the current candidate, a top-level UltraCache opt-in requests composition
+independently of Woo cookie names. For that request:
+
+| Native phase | Existing admission condition |
+| --- | --- |
+| Cold backend response | Otherwise cacheable, `X-UltraCache-ESI-Shared-Parent: 1`, and `beresp.do_esi` enabled. |
+| Warm object | `X-UltraCache-ESI-Shared-Parent: 1` or the existing `X-UltraCache-Woo-Async-Parent: 1`. |
+
+`privateCount` controls final downstream privacy only. It does not substitute
+for those admission checks. The application must generalize shared-parent
+approval beyond its Woo-mini-cart-only producer for qualified registered
+private widgets/adaptive templates. A positive count by itself never proves
+that the rest of a fresh personalized render is public. Public-only approved
+ESI parents should explicitly send privateCount zero.
+
+An already-public stored snapshot and a new personalized origin render are
+different provenance cases. In particular, an opt-in cold response without ESI
+still fails the current cold admission check even if it is an already-public
+snapshot. Do not fabricate ESI or shared-parent approval merely to bypass that
+check. General non-ESI snapshot admission/provenance is a remaining #959 review;
+adaptive nonce revision 1 does not change that behavior or prove it correct.
+
+### Combined execution
+
 Both adapters, actual current UltraCache and native Varnish: MISS/HIT/HIT,
 two anonymous visitors and two logged-in users, empty/new/active/deleted
 sessions, Recently Viewed history updates, consent denial, multiple Set-Cookie
