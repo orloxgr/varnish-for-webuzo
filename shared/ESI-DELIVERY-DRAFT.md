@@ -853,3 +853,14 @@ Basic/generic ESI compatibility. The existing HTTP fixture now also permits
 real status responses and upstream EOF. Prior qualified9bab/40c724 worktrees
 remain unchanged; this source-only candidate requires a new root native pair
 and actual WP/browser acceptance before publication.
+
+The first new native pair2884751/0577dc9 failed VCL compilation, without being
+loaded into WordPress: the old `synthetic("")` primitive is not defined by the
+exact9.1 compiler. The marker transfer was already inside vcl_synth; it remains
+there and uses `set resp.body = ""` instead. Exact engine reference
+doc/sphinx/reference/vcl_var.rst:1920..1928 defines resp.body as BODY, writable
+only from vcl_synth; the same archive's bin/vinyld/builtin.vcl:211 uses this
+assignment for its own synthesis. A complete-adapter source check guards
+against the removed primitive and requires the body assignment in that scoped
+vcl_synth branch. Native rerun remains necessary; this is not a passed compiler
+or HTTP runtime claim. Neither C/API nor HTTP acceptance criteria changed.

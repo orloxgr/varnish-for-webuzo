@@ -347,7 +347,7 @@ sub vcl_synth {
         set resp.http.Surrogate-Control = "no-store";
         set resp.http.X-UltraCache-ESI-Error-Contained = "1";
         set resp.http.X-Cache = "PASS";
-        synthetic("");
+        set resp.body = "";
         return (deliver);
     }
     if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_synth()) {

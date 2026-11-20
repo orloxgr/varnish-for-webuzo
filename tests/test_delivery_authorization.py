@@ -81,5 +81,10 @@ class DeliveryAuthorization(unittest.TestCase):
         self.assertIn('set resp.http.X-'+vendor+'-Varnish = "PASS";',body)
         self.assertIn('set resp.http.X-'+vendor+'-Varnish-Reason = "application-private-document";',body)
 
+    def test_empty_signed_child_response_uses_native91_synth_body_assignment(self):
+        source,_,_=render_sites()
+        self.assertNotRegex(source,r'\bsynthetic\s*\(', 'The old primitive is absent from the exact native 9.1 compiler')
+        self.assertRegex(source,r'(?s)sub vcl_synth\s*\{\s*if \(req.http.X-SCP-Profile == "ultracache" && req.esi_level > 0 &&.*?set resp.body = "";')
+
 
 if __name__=='__main__':unittest.main()
