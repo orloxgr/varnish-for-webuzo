@@ -16,6 +16,9 @@ void delivery_free_fragments(struct delivery_fragment *f) {
         free(f->url); free(f->html); free(f); f = next;
     }
 }
+void delivery_public_parent_free(struct delivery_public_parent *parent) {
+    if (parent) { free(parent->body); free(parent); }
+}
 
 int delivery_relative(const char *s) {
     const unsigned char *p = (const unsigned char *)s;
@@ -243,16 +246,95 @@ static int fragments(struct reader *r, uint64_t expected, struct delivery_fragme
     }
 }
 
+static int base64_value(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return c-'A';
+    if (c >= 'a' && c <= 'z') return c-'a'+26;
+    if (c >= '0' && c <= '9') return c-'0'+52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+static int base64_body(struct text text, unsigned char **out, size_t *length) {
+    size_t i, n = 0, groups = text.length/4;
+    unsigned char *body;
+    if (text.length%4 || groups > (SIZE_MAX-1)/3) return 0;
+    body = malloc(groups*3+1);
+    if (!body) return 0;
+    for (i = 0; i < text.length; i += 4) {
+        int a = base64_value((unsigned char)text.data[i]);
+        int b = base64_value((unsigned char)text.data[i+1]);
+        int c = base64_value((unsigned char)text.data[i+2]);
+        int d = base64_value((unsigned char)text.data[i+3]);
+        if (a < 0 || b < 0) goto invalid;
+        body[n++] = (unsigned char)((a<<2)|(b>>4));
+        if (text.data[i+2] == '=') {
+            if (text.data[i+3] != '=' || i+4 != text.length || (b&15)) goto invalid;
+        } else {
+            if (c < 0) goto invalid;
+            body[n++] = (unsigned char)((b<<4)|(c>>2));
+            if (text.data[i+3] == '=') {
+                if (i+4 != text.length || (c&3)) goto invalid;
+            } else {
+                if (d < 0) goto invalid;
+                body[n++] = (unsigned char)((c<<6)|d);
+            }
+        }
+    }
+    body[n] = 0; *out = body; *length = n;
+    return 1;
+invalid:
+    free(body);
+    return 0;
+}
+static int public_parent(struct reader *r, struct delivery_public_parent **output) {
+    struct delivery_public_parent *parent = calloc(1,sizeof(*parent));
+    unsigned seen = 0;
+    if (!parent || !take(r,'{')) goto invalid;
+    for (;;) {
+        struct text key, text;
+        unsigned bit;
+        size_t i;
+        if (!string(r,&key) || !take(r,':')) goto invalid;
+        if (equal(key,"generation")) bit = 1;
+        else if (equal(key,"bodyBase64")) bit = 2;
+        else if (equal(key,"freshRemaining")) bit = 4;
+        else goto invalid;
+        if (seen&bit) goto invalid;
+        seen |= bit;
+        if (bit == 4) {
+            if (!number(r,&parent->fresh_remaining)) goto invalid;
+        } else {
+            if (!string(r,&text)) goto invalid;
+            if (bit == 1) {
+                if (text.length != 64) goto invalid;
+                for (i = 0; i < text.length; ++i)
+                    if ((text.data[i] < '0' || text.data[i] > '9') &&
+                        (text.data[i] < 'a' || text.data[i] > 'f')) goto invalid;
+                memcpy(parent->generation,text.data,64);
+            } else if (!base64_body(text,&parent->body,&parent->length)) goto invalid;
+        }
+        if (take(r,'}')) break;
+        if (!take(r,',')) goto invalid;
+    }
+    if (seen != 7) goto invalid;
+    *output = parent;
+    return 1;
+invalid:
+    delivery_public_parent_free(parent);
+    return 0;
+}
+
 int delivery_envelope_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, uint64_t occurrences,
-    struct delivery_fragment **output) {
+    struct delivery_fragment **output, struct delivery_public_parent **snapshot) {
     struct reader r;
     struct text key, text;
     unsigned seen = 0;
     uint64_t schema;
     int ok = 0;
-    if (!output) return 0;
+    if (!output || !snapshot) return 0;
     *output = NULL;
+    *snapshot = NULL;
     if (!body || !request_id || !original_url || !length || length == SIZE_MAX || !occurrences) return 0;
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
     if (!r.buffer) return 0;
@@ -265,20 +347,26 @@ int delivery_envelope_parse(const char *body, size_t length,
         else if (equal(key,"requestId")) bit = 2;
         else if (equal(key,"originalUrl")) bit = 4;
         else if (equal(key,"renderedFragments")) bit = 8;
+        else if (equal(key,"publicParent")) bit = 16;
         else goto done;
         if (seen&bit) goto done;
         seen |= bit;
         if (bit == 1) { if (!number(&r,&schema) || schema != 1) goto done; }
         else if (bit == 2 || bit == 4) {
             if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) goto done;
-        } else if (!fragments(&r,occurrences,output)) goto done;
+        } else if (bit == 8) {
+            if (!fragments(&r,occurrences,output)) goto done;
+        } else if (!public_parent(&r,snapshot)) goto done;
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
     }
     whitespace(&r);
-    ok = seen == 15 && r.offset == length;
+    ok = (seen == 15 || seen == 31) && r.offset == length;
 done:
     free(r.buffer);
-    if (!ok) { delivery_free_fragments(*output); *output = NULL; }
+    if (!ok) {
+        delivery_free_fragments(*output); *output = NULL;
+        delivery_public_parent_free(*snapshot); *snapshot = NULL;
+    }
     return ok;
 }

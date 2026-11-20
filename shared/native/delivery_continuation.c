@@ -24,6 +24,7 @@ struct continuation {
     char *body;
     size_t length, capacity;
     struct delivery_fragment *fragments;
+    struct delivery_public_parent *public_parent; /* staged, not yet replayed */
 };
 static const char filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -54,7 +55,8 @@ static void delivery_fini(VRT_CTX, void *value) {
     free(d->url); free(d->host); free(d->target); free(d->cookie); free(d->encoding);
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
-    free(d->body); delivery_free_fragments(d->fragments); free(d);
+    free(d->body); delivery_free_fragments(d->fragments);
+    delivery_public_parent_free(d->public_parent); free(d);
 }
 static const struct vmod_priv_methods delivery_methods = {
     .magic = VMOD_PRIV_METHODS_MAGIC, .type = "ultracache-delivery-top", .fini = delivery_fini,
@@ -89,7 +91,7 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
 
 static int delivery_parse(struct continuation *d) {
     int ok = delivery_envelope_parse(d->body,d->length,d->request_id,d->url,
-        d->occurrences,&d->fragments);
+        d->occurrences,&d->fragments,&d->public_parent);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
     return ok;
 }

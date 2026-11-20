@@ -3,6 +3,8 @@
 These checks do not qualify Varnish body capture, restart or browser behavior.
 """
 import ctypes
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -20,6 +22,10 @@ class Fragment(ctypes.Structure):pass
 Pointer=ctypes.POINTER(Fragment)
 Fragment._fields_=[('next',Pointer),('url',ctypes.c_void_p),('html',ctypes.c_void_p),
                   ('length',ctypes.c_size_t)]
+class PublicParent(ctypes.Structure):
+    _fields_=[('generation',ctypes.c_char*65),('body',ctypes.c_void_p),
+              ('length',ctypes.c_size_t),('fresh_remaining',ctypes.c_uint64)]
+ParentPointer=ctypes.POINTER(PublicParent)
 
 
 def sample():
@@ -43,10 +49,12 @@ class DeliveryEnvelope(unittest.TestCase):
         if result.returncode:raise AssertionError(result.stdout+result.stderr)
         cls.lib=ctypes.CDLL(str(library))
         cls.lib.delivery_envelope_parse.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_char_p,
-            ctypes.c_char_p,ctypes.c_uint64,ctypes.POINTER(Pointer)]
+            ctypes.c_char_p,ctypes.c_uint64,ctypes.POINTER(Pointer),ctypes.POINTER(ParentPointer)]
         cls.lib.delivery_envelope_parse.restype=ctypes.c_int
         cls.lib.delivery_free_fragments.argtypes=[Pointer]
         cls.lib.delivery_free_fragments.restype=None
+        cls.lib.delivery_public_parent_free.argtypes=[ParentPointer]
+        cls.lib.delivery_public_parent_free.restype=None
         cls.lib.delivery_buffer_growth.argtypes=[ctypes.c_size_t]*3+[ctypes.POINTER(ctypes.c_size_t)]*2
         cls.lib.delivery_buffer_growth.restype=ctypes.c_int
         cls.lib.delivery_manifest_token.argtypes=[ctypes.c_char_p]
@@ -65,23 +73,33 @@ class DeliveryEnvelope(unittest.TestCase):
         assert folder.name.startswith('uc-delivery-envelope-')
         cls.folder.cleanup()
 
-    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3):
+    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False):
         data=json.dumps(value,ensure_ascii=True).encode() if isinstance(value,dict) else value
         out=Pointer()
+        parent=ParentPointer()
         ok=self.lib.delivery_envelope_parse(data,len(data),request.encode(),url.encode(),occurrences,
-            ctypes.byref(out))
+            ctypes.byref(out),ctypes.byref(parent))
         result={}
         try:
             if not ok:
                 self.assertFalse(out,'Failure must discard the complete partial envelope')
+                self.assertFalse(parent,'Failure must discard the complete partial snapshot')
                 return None
             f=out
             while f:
                 row=f.contents
                 result[ctypes.string_at(row.url).decode('utf-8')]=ctypes.string_at(row.html,row.length)
                 f=row.next
-            return result
-        finally:self.lib.delivery_free_fragments(out)
+            if not with_snapshot:return result
+            snapshot=None
+            if parent:
+                row=parent.contents
+                snapshot=dict(generation=bytes(row.generation).decode(),
+                    body=ctypes.string_at(row.body,row.length),freshRemaining=row.fresh_remaining)
+            return result,snapshot
+        finally:
+            self.lib.delivery_free_fragments(out)
+            self.lib.delivery_public_parent_free(parent)
 
     def test_real_c_parser_preserves_utf8_escapes_binary_html_and_property_order(self):
         value=sample()
@@ -216,6 +234,34 @@ class DeliveryEnvelope(unittest.TestCase):
             '/index.php?ultracache_delivery=a#fragment','//foreign/index.php?ultracache_delivery=a',
             '/index.php?not_ultracache_delivery=a','/index.php?ultracache%5fdelivery=a'):
             with self.subTest(pointer=pointer):self.assertIsNone(token(pointer))
+
+    def test_optional_public_parent_preserves_exact_identity_bytes_and_lifetime(self):
+        for body in (b'',b'f',b'fo',b'foo',bytes(range(256)),b'<html> \r\n\xff\x00 public </html>'):
+            value=sample();generation=hashlib.sha256(body).hexdigest()
+            value['publicParent']=dict(generation=generation,bodyBase64=base64.b64encode(body).decode(),freshRemaining=0)
+            fragments,parent=self.parse(value,with_snapshot=True)
+            self.assertEqual(parent,dict(generation=generation,body=body,freshRemaining=0))
+            self.assertEqual(len(fragments),2)
+        self.assertIsNone(self.parse(sample(),with_snapshot=True)[1])
+
+    def test_optional_public_parent_rejects_invalid_base64_generation_and_unknown_keys(self):
+        good=dict(generation='a'*64,bodyBase64='Zg==',freshRemaining=9)
+        for data in ('Z','Zg=','Zg===','Zh==','Zm9=','Zg==AAAA','Zg=+','Z g==','====','_w=='):
+            value=sample();value['publicParent']=dict(good,bodyBase64=data)
+            with self.subTest(base64=data):self.assertIsNone(self.parse(value,with_snapshot=True))
+        for generation in ('a'*63,'A'*64,'g'*64,'a'*64+'\x00'):
+            value=sample();value['publicParent']=dict(good,generation=generation)
+            self.assertIsNone(self.parse(value,with_snapshot=True))
+        for key in ('generation','bodyBase64','freshRemaining'):
+            value=sample();value['publicParent']=dict(good);del value['publicParent'][key]
+            self.assertIsNone(self.parse(value,with_snapshot=True))
+        for fresh in (-1,1.2,True,'9'):
+            value=sample();value['publicParent']=dict(good,freshRemaining=fresh)
+            self.assertIsNone(self.parse(value,with_snapshot=True))
+        value=sample();value['publicParent']=dict(good,headers=['Set-Cookie: forbidden'])
+        self.assertIsNone(self.parse(value,with_snapshot=True))
+        raw=json.dumps(dict(sample(),publicParent=good)).encode()
+        self.assertIsNone(self.parse(raw.replace(b'"freshRemaining": 9',b'"freshRemaining":9,"freshRemaining":9')))
 
 
 if __name__=='__main__':unittest.main()

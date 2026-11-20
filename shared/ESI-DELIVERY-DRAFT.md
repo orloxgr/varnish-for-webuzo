@@ -340,8 +340,43 @@ level 0. Missing private/adaptive prepared children retain their dedicated refus
 ordinary public children remain cookie-free on their normal fetch path.
 A new native-only test performs a real purge of its disposable parent during
 prepare, expects one snapshot-only recovery fetch, the already prepared private
-output/cookies, and a fresh public child fetch. It is not run locally. Existing
+output/cookies, and a fresh public child fetch. The coordinated `daef370` native
+build and all six mock continuation tests passed, zero skips, in 29.924 s;
+DSO SHA256 `3c0e86c8ddaa9cef46eba0f7b669816b7e89799648d73c35311d4782d9cbff2c`.
+This is exact-checkpoint mock evidence, not a real application-publication loss
+test or qualification of newer staged source. It was not run by this source chat. Existing
 mock tests without recovery confirmation retain the baseline guarded behavior.
+
+### Request-owned public snapshot wire: staged parser, replay not implemented
+
+An optional prepare-envelope `publicParent` is now accepted by the portable
+source parser with exactly these fields:
+
+```json
+{"generation":"<64 lowercase SHA256 hex>","bodyBase64":"<canonical PHP base64_encode identity bytes>","freshRemaining":0}
+```
+
+It contains the exact public publication bytes, not a personalized fresh render.
+The authenticated UC early reader must verify the selected publication's signed
+locator, representation, fragment set and body generation before provider side
+effects. The native parser validates the generation's syntax and exact Base64
+bytes; it does not replace that application signature/body-generation check.
+There are no application-supplied responseHeaders; the design keeps the selected
+public parent headers and remaining native lifetime separately before prepare.
+The eventual replay TTL must not exceed either remaining freshness budget and
+must subtract elapsed prepare/capture time. Legal stale completion with zero
+freshness must not reset cache lifetime.
+
+Reserve `X-UltraCache-Delivery-Request-Snapshot-Version: 1` for explicit native
+support. **It is not emitted by this staged parser-only source.** The UC producer
+must not send this optional property to older strict parsers or advertise
+request-snapshot readiness until the memory-backend replay exists and passes
+qualification. Current C owns/frees the optional snapshot but does not serve it.
+The virtual fetch design requires the actual installed `cache_int.h` http_conn
+structure; that is an explicit internal, strict-ABI dependency, not a public-only
+API claim or permission to fabricate an engine header. No private HSH prototypes
+or cache-object pointer swaps are proposed. Full missing/replaced-publication
+recovery remains open until replay and actual application tests are implemented.
 
 ## Positive private TTL is a separate admission contract
 
