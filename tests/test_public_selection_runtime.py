@@ -170,7 +170,7 @@ class PublicSelectionRuntime(unittest.TestCase):
                         self.assertIn(currency,body)
                         self.assertEqual(resolver.calls[-1][1],'public-select')
 
-    def test_canary_lookalikes_and_forged_headers_keep_application_selection(self):
+    def test_diagnostic_canary_lookalikes_and_forged_headers_keep_application_selection(self):
         resolver=Resolver();identifier='ab'*16
         paths=('/ultracache-varnishtest/not-an-id/',
             '/ultracache-varnishtest/'+identifier+'/child/',
