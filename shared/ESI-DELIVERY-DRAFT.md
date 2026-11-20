@@ -738,3 +738,52 @@ native weakening), then requires byte-for-byte equality on the later public
 HIT. Its CSP and composed body are likewise checked before/after. It does not
 permit an arbitrary changed validator or claim that the failed assertion proved
 parent mutation. Root native rerun is still required for complete acceptance.
+
+### Public fragment TTL is exact freshness, without implicit stale retention
+
+Root's actual no-JS public-fragment actor on application `fcc48d8557a214d3be980d64319050a1ef433077`
+and native Hestia `d086cb7` observed a parent HIT delivering the old public ttl3
+child after about seven seconds. The native trace showed RFC lifetime `3 10 0`:
+the child borrowed default grace10 despite the application declaring only TTL.
+An expiry fetch ran, but stale child output was delivered during that fetch.
+This is a retained failed acceptance, not an agreed stale contract.
+
+The existing application source `send_varnish_esi_fragment_success_headers`
+declares public scope, fragment ID, canonical ESI TTL and Cacheable1 together
+with HTTP `public, max-age=0, s-maxage=<ttl>`. It declares Cacheable0 and
+private/no-store for contained errors, retaining the fragment identity and
+adding Error-Contained1. It does not declare any stale window. No new header,
+manual switch, authentication channel, cookie classification or UI is needed.
+
+Before aggressive override, UltraCache response rules now recognize that
+trusted-origin contract for the existing signed `ultracache_esi` endpoint.
+The application owns signature validation; a caller/query/scratch field alone
+is insufficient. Recognition requires a 200 HTML response, public scope,
+valid nonempty fragment ID, canonical nonnegative TTL and Cacheable0/1, and
+excludes the existing private-fragment request. Native scratch state is derived
+only after origin echo cleanup, and is removed from callers, backend requests
+and browser responses.
+
+For that public fragment, native grace and keep become zero. The already parsed
+HTTP freshness is retained, including Date/Age deductions; TTL is never reset
+from the metadata string. Aggressive does not override the fragment's explicit
+TTL or privacy headers. Normal HTTP privacy therefore retains TTL0 and contained
+error no-store, while successful positive-TTL children can cache and expire
+independently of their public parent and siblings. An explicit stale extension
+would require a future reviewed application contract; none is inferred now.
+
+Basic remains best effort without ESI and retains its existing aggressive
+behavior, even when it receives UltraCache metadata. Generic compatible ESI
+applications and incomplete fragment metadata keep their existing HTTP behavior.
+Private scoped TTL and private-document paths are unchanged. Older UltraCache
+responses lacking the existing complete fragment contract retain their prior
+behavior; they do not silently acquire a new inferred TTL.
+
+`test_public_fragment_ttl.PublicFragmentTTL` adds seven native methods for
+ttl3 expiry inside inherited grace10/keep17, TTL0 per-delivery rendering, and
+contained fallback then cacheable recovery, each with aggressive off/on. A
+seventh negative/control method covers Basic, a generic endpoint, incomplete
+metadata, and caller/origin scratch spoofing. Parent and a long-lived public
+sibling must remain HIT/reused. These transport fixtures do not replace actual
+WP registered-renderer/browser/storage acceptance; root owns all native and
+combined runtime qualification. No C/API change is required by this correction.

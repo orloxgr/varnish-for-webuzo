@@ -6,7 +6,8 @@ sub scp_aggressive_backend_response {
     unset beresp.http.X-SCP-Browser-Pragma;
     unset beresp.http.X-SCP-Browser-Expires;
     if (bereq.http.X-SCP-Aggressive == "1" && !bereq.uncacheable &&
-        !(bereq.http.X-SCP-Profile == "ultracache" && beresp.http.X-SCP-Personal-Delivery == "1") &&
+        !(bereq.http.X-SCP-Profile == "ultracache" &&
+          (beresp.http.X-SCP-Personal-Delivery == "1" || beresp.http.X-SCP-Public-Fragment == "1")) &&
         beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html(?:;|$)") {
         # Store the application browser policy separately. Only Varnish's
         # internal storage decision changes; delivery restores every field.

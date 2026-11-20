@@ -189,6 +189,23 @@ sub scp_delivery_authorization {
     # This sub is called only after the native task association proves prepare.
     @@DELIVERY_AUTHORIZATION@@
 }
+sub scp_ultracache_public_fragment_response {
+    # The application verifies its signed endpoint before emitting this existing
+    # public fragment contract. A query or client/scratch header alone is no proof.
+    # Keep native HTTP freshness (including Age/Date); never restart the TTL.
+    if (bereq.http.X-SCP-Query ~ "(^|&)ultracache_esi=[^&]+(?:&|$)" &&
+        bereq.http.X-ESI-Private-Request != "1" &&
+        beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html(?:;|$)" &&
+        beresp.http.X-UltraCache-ESI-Scope == "public" &&
+        beresp.http.X-UltraCache-ESI-Fragment ~ "^[a-z0-9_-]+$" &&
+        beresp.http.X-UltraCache-ESI-TTL ~ "^(0|[1-9][0-9]*)$" &&
+        beresp.http.X-UltraCache-Cacheable ~ "^[01]$") {
+        set beresp.http.X-SCP-Public-Fragment = "1";
+        # The fragment API declares TTL only, never a stale/retention window.
+        set beresp.grace = 0s;
+        set beresp.keep = 0s;
+    }
+}
 sub scp_ultracache_personal_response {
     # Existing metadata identifies the visitor copy, never the public collector
     # bytes. This is actual body provenance, not a cookie classification rule.
