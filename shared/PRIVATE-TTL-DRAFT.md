@@ -1,6 +1,8 @@
 # Scoped private TTL: isolated native candidate (#955)
 
-Status: no positive-private-TTL capability is advertised. The isolated native
+Status: the earlier native lookup/fill checkpoint passed its 12 actual native
+mock tests. The feature-version negotiation candidate below still requires
+combined producer qualification. The isolated native
 lookup/fill candidate below requires native qualification and an authenticated
 application claim producer. Existing published private delivery remains TTL 0. This document does not claim runtime equivalence or
 introduce new controls, cookies, sessions, credentials or classification rules.
@@ -124,12 +126,37 @@ stays owned by the current parent prepare and is never stored on these
 objects. Browser responses and authenticated read responses remain private.
 Keys/internal object markers/tags are stripped from delivered responses.
 
-This candidate deliberately **does not emit**
-`X-UltraCache-Delivery-Private-Cache-Version: 1`. Caller and origin echoes of
-that reserved declaration are stripped. A producer must gate optional claims
-on a qualified capability before sending them to older strict parsers.
-The new native mock fixture demonstrates the intended before-render lookup,
-independent owner objects, native expiry, no issuer-cookie replay and failed
-lookup without origin access; it is not real WP/provider acceptance and has
-not yet run on a native engine for this checkpoint. Existing TTL 0, standalone
-UltraCache, actual login/session validation and Basic behavior stay separate.
+The new native mock fixture demonstrates the before-render lookup, independent
+owner objects, native expiry, no issuer-cookie replay and failed lookup without
+origin access. Root qualified exact Hestia `550620a` against installed native
+Varnish 9.1/VRT 22.2: 12 tests executed, zero skips, including the original ten
+continuation tests and the two private lookup/fill fixtures. DSO SHA256
+`9ba1b59357fcf6f45ada31baefd3c2658bf8f50b65e4c2c33a1ab3e59b5433c5`.
+This is mock transport evidence, not real WP/provider identity acceptance.
+Existing TTL 0, standalone UltraCache, actual login/session validation and
+Basic behavior stay separate.
+
+## Feature-version negotiation, without a new control
+
+The implemented native wire declares
+`X-UltraCache-Delivery-Private-Cache-Version: 1` only on a native-owned
+`Phase: prepare` backend request and the existing internal signed
+`ultracache_esi_probe_private_fragment` backend branch. There is no manual
+VCL-init call, hidden enabling flag, new configuration field/UI or extra probe.
+Basic, ordinary parent/public/private children and parent-snapshot recovery
+stay silent. Browser copies cannot activate it; origin echoes are removed
+before storage/delivery. This is capability metadata, not identity/authority.
+
+Old UltraCache ignores the unfamiliar declaration and keeps its original
+strict envelope. The new application producer requires both the existing
+validated stored probe observation and the live prepare version before using
+optional cache claims. Root keeps deployment separate: this candidate is not
+loaded into the real WP fixture until the producer is ready for combined
+qualification. Mock lookup/fill success is not a reason to claim real
+identity/state/provider/expiry acceptance or publish/release it prematurely.
+
+`test_declaration_uses_existing_probe_and_owned_prepare_only` checks the actual
+wire and spoof/echo stripping against a mock origin. Basic's fixture checks
+ordinary requests stay silent and that its valid site token cannot enter
+private lookup. These new negotiation cases need native execution for this
+checkpoint, separate from the earlier 12-case lookup/fill evidence.

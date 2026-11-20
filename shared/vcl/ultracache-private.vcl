@@ -1,4 +1,4 @@
-# UltraCache scoped native private objects. Isolated, unadvertised candidate.
+# UltraCache scoped native private objects. Isolated candidate; actual application qualification remains required.
 # No cookie-based identity or content cache inside the VMOD.
 acl uc_private_local { "127.0.0.1"; "::1"; }
 

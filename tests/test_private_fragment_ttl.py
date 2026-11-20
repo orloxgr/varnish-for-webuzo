@@ -1,6 +1,6 @@
 """Native mock transport, not actual WP identity/provider acceptance.
 
-This unadvertised candidate uses authenticated lookup before rendering in the
+This isolated candidate uses authenticated lookup before rendering in the
 same mock prepare invocation. Cookie presence is only a fixture visitor label;
 production claims must come from actual application identity/state validation.
 """
@@ -13,7 +13,7 @@ import time
 import unittest
 
 from test_cookie_delivery import proxy,cookies
-from test_delivery_continuation import BODY,META,PARENT,PRIVATE,ADAPTIVE
+from test_delivery_continuation import BODY,META,PARENT,PRIVATE,ADAPTIVE,envelope
 
 
 def exchange(get,method,path,key,token,extra=None):
@@ -30,6 +30,30 @@ def exchange(get,method,path,key,token,extra=None):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class PrivateFragmentTTL(unittest.TestCase):
+    def test_declaration_uses_existing_probe_and_owned_prepare_only(self):
+        marker='X-UltraCache-Delivery-Private-Cache-Version'
+        probe='/index.php?ultracache_esi_probe_private_fragment=signed-probe&esi_scope=private'
+        observed=[]
+        def origin(path,headers):
+            phase=headers.get('X-UltraCache-Delivery-Phase')
+            expected='1' if phase=='prepare' or path==probe else None
+            self.assertEqual(headers.get(marker),expected)
+            observed.append((path,phase,headers.get(marker)))
+            if phase=='prepare':
+                return envelope(headers,'prepared'),[('Cache-Control','private, no-store'),(marker,'origin-echo')]
+            if path=='/probe':
+                return '<esi:include src="'+probe.replace('&','&amp;')+'"/>',[
+                    ('Cache-Control','public, max-age=0'),('Surrogate-Control','ESI/1.0'),(marker,'origin-echo')]
+            if path==probe:return 'probe',[('Cache-Control','private, no-store'),(marker,'origin-echo')]
+            return (BODY,META) if path==PARENT else ('cold-private',[('Cache-Control','private, no-store')])
+        with proxy('ultracache',origin) as get:
+            for path in ('/probe',PARENT,PARENT,PRIVATE):
+                status,fields,_=get(path,extra={marker:'browser-spoof'})
+                self.assertEqual(status,200)
+                self.assertNotIn(marker,dict(fields),'Declaration must never leak from origin/objects to browser')
+            self.assertIn((probe,None,'1'),observed)
+            self.assertIn((PARENT,'prepare','1'),observed)
+
     def test_lookup_reuses_native_objects_without_renderer_or_cookie_replay_then_expires(self):
         rendered={};prepared=0;origin_calls=[];observed=[];credentials=[]
         lifetime=3
@@ -37,6 +61,7 @@ class PrivateFragmentTTL(unittest.TestCase):
             nonlocal prepared
             phase=headers.get('X-UltraCache-Delivery-Phase');origin_calls.append((path,phase))
             if phase=='prepare':
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Private-Cache-Version'),'1')
                 prepared+=1
                 visitor=headers.get('Cookie','anonymous')
                 key=hashlib.sha256(('fixture-verified-state:'+visitor).encode()).hexdigest()
@@ -93,8 +118,12 @@ class PrivateFragmentTTL(unittest.TestCase):
 
     def test_basic_cannot_enter_private_lookup_namespace(self):
         calls=[]
-        def origin(path,headers):calls.append(path);return 'ordinary',[]
+        def origin(path,headers):
+            self.assertIsNone(headers.get('X-UltraCache-Delivery-Private-Cache-Version'))
+            calls.append(path);return 'ordinary',[]
         with proxy('basic',origin) as get:
+            self.assertEqual(get('/ordinary',extra={'X-UltraCache-Delivery-Private-Cache-Version':'spoof'})[0],200)
+            calls.clear()
             # Same valid site secret cannot enable the UltraCache-only protocol.
             token='b'*64 if (Path(__file__).resolve().parents[1]/'src/policy.py').is_file() else 'A'*32
             status,_,_=exchange(get,'UC-PRIVATE-GET',PRIVATE,'a'*64,token)

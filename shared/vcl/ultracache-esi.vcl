@@ -150,6 +150,11 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     set bereq.http.X-UltraCache-Delivery-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Recovery-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Request-Snapshot-Version = "1";
+    # Reuse the existing signed private capability probe; no new probe or
+    # manual enablement. Ordinary private/public children stay silent.
+    if (bereq.http.X-SCP-Query ~ "(^|&)ultracache_esi_probe_private_fragment=[^&]+(?:&|$)") {
+        set bereq.http.X-UltraCache-Delivery-Private-Cache-Version = "1";
+    }
 }
 if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce == "1") {
     # The existing signed private probe can observe this capability without

@@ -42,6 +42,7 @@ static const hdr_t h_recovery = HDR("X-UltraCache-Delivery-Recovery");
 static const hdr_t h_recovery_version = HDR("X-UltraCache-Delivery-Recovery-Version");
 static const hdr_t h_request_snapshot_version = HDR("X-UltraCache-Delivery-Request-Snapshot-Version");
 static const hdr_t h_private_key = HDR("X-SCP-Private-Key");
+static const hdr_t h_private_cache_version = HDR("X-UltraCache-Delivery-Private-Cache-Version");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -231,6 +232,9 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
                 d->phase == D_PREPARE ? "prepare" : "parent-snapshot");
             http_ForceHeader(ctx->http_bereq,h_recovery_version,"1");
             http_ForceHeader(ctx->http_bereq,h_request_snapshot_version,"1");
+            if (d->phase == D_PREPARE)
+                http_ForceHeader(ctx->http_bereq,h_private_cache_version,"1");
+            else http_Unset(ctx->http_bereq,h_private_cache_version);
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
             http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
