@@ -37,7 +37,7 @@ sub scp_cookie_variation {
         # An absent source assigned to a header becomes present-but-empty.
         # Native Vary distinguishes that from absence, splitting Shared-only
         # visitors away from the no-cookie object. Canonicalize both to absent.
-        if (req.http.X-SCP-Vary-Cookie) {
+        if (req.http.X-SCP-Vary-Cookie && req.http.X-SCP-Vary-Cookie != "") {
             set req.http.X-SCP-Vary-ESI-Cookie = req.http.X-SCP-Vary-Cookie;
         } else {
             unset req.http.X-SCP-Vary-ESI-Cookie;
