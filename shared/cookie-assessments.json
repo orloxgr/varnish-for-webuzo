@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.2",
+  "version": "2026.11.20.3",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f",
   "sourceLicense": "Apache-2.0",
   "sourceLicenseFile": "cookie-recognition/Open-Cookie-Database-LICENSE.txt",
@@ -21983,10 +21983,10 @@
       "domain": "",
       "description": "Used to tracked comment author name, if “Save my name, email, and website in this browser for the next time I comment.” is checked",
       "wildcard": true,
-      "proposal": "private",
-      "htmlEffect": "private",
+      "proposal": "shared",
+      "htmlEffect": "private-fragment",
       "confidence": "reviewed",
-      "reason": "Reviewed policy comment-author-prefix",
+      "reason": "Reviewed policy comment-author-prefix; shared public parent with application-owned private comments template, commenter form state and pending visibility.",
       "sources": [
         "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv"
       ],
@@ -22000,10 +22000,10 @@
       "domain": "",
       "description": "Used to track comment author url, if “Save my name, email, and website in this browser for the next time I comment.” checkbox is checked",
       "wildcard": true,
-      "proposal": "private",
-      "htmlEffect": "private",
+      "proposal": "shared",
+      "htmlEffect": "private-fragment",
       "confidence": "reviewed",
-      "reason": "Reviewed policy comment-author-prefix",
+      "reason": "Reviewed policy comment-author-prefix; shared public parent with application-owned private comments template, commenter form state and pending visibility.",
       "sources": [
         "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv"
       ],

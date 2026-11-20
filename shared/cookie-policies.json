@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.2",
+  "version": "2026.11.20.3",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -1673,9 +1673,9 @@
         "value": "comment_author_"
       },
       "provider": "application",
-      "integration": null,
-      "htmlEffect": "private",
-      "cacheKey": "private",
+      "integration": "wordpress-comments-esi",
+      "htmlEffect": "private-fragment",
+      "cacheKey": "ignore",
       "delivery": {
         "mode": "provider",
         "issuer": "application",
@@ -1698,10 +1698,10 @@
       },
       "consumers": {
         "wordpressSafeTracking": false,
-        "wordpressRequiredUnsafe": true,
-        "wordpressDefaultUnsafe": true,
+        "wordpressRequiredUnsafe": false,
+        "wordpressDefaultUnsafe": false,
         "wordpressResponsePrivate": false,
-        "varnishPrivate": true,
+        "varnishPrivate": false,
         "varnishCart": false,
         "varnishTrackingIgnore": false
       },

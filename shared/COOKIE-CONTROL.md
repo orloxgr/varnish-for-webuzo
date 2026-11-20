@@ -63,6 +63,14 @@ Explicit installed central/site Shared/Variant/Private choices retain precedence
 there is no forced migration of a saved choice or expansion of the legacy carrier.
 The new default must be accepted from clean shipped rules, not a fixture override.
 
+The next `2026.11.20.3` bundle changes only the `comment_author_` and
+more-specific `comment_author_url_` prefixes from Private to Shared. The
+WordPress comments integration owns private template/form/pending-comment
+delivery and the private fallback when ESI is disabled; native cookie matching
+does not create that integration. Prepared delivery preserves the actual
+commenter cookies; the legacy unprepared carrier is unchanged. Basic still has
+no ESI. Existing explicit choices retain priority, including saved Private rules.
+
 For connected apply, native adapters call `materialized_snapshot(central,site)`:
 `central` contains versioned bundled defaults underneath explicit admin choices;
 `site` contains concrete site choices. Rule fields and schema 1 are unchanged.
