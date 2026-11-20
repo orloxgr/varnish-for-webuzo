@@ -3,8 +3,9 @@
 Status: **isolated candidates, not release/full-goal acceptance**. The Hestia
 original-URI continuation checkpoint `35b1111` passed its native mock fixture;
 real application/provider acceptance and Webuzo native qualification remain
-separate. Positive private TTL remains
-**unimplemented and unadvertised**.
+separate. Scoped private TTL and its version handshake now have an isolated
+native implementation/qualification; see PRIVATE-TTL-DRAFT.md for exact
+checkpoints and the remaining actual application acceptance boundary.
 Related UltraCache issues: #955, #956, #957, #958, #959. Native acceptance must
 precede release or activation.
 
@@ -389,15 +390,21 @@ same lock, never a retained client pointer.
 purges the actual disposable parent during prepare, removes the mock
 publication, checks authentic headers/prepared fragments/public child, and
 checks that zero freshness cannot refill a fresh object. Another case rejects
-readiness without a valid body. These fixtures are **not yet executed on a
-native engine for this checkpoint**; actual WP/publication fault tests are also
-required before qualification.
+readiness without a valid body. Root qualified the original eight cases at
+`0c684e1` on native Varnish 9.1/VRT 22.2, zero skips. The private native module
+SHA256 was `0836c4272e33ba146e11b1d83342f56e412ec2f3480c32363e361baa67a8702e`.
+Root then qualified the initial-publication-MISS delta's ten-case suite at
+`1ff2026`, zero skips, and the positive VSL source delta at `03b5b18`.
+Actual root-owned WP/Woo runs also exercised proxy purge and simultaneous
+application-publication/proxy purge during prepare, retained current public
+generation/correct visitor cookies once, then new-generation cold/refill/HIT.
+These are exact narrow paths, not proof of every initial-MISS provider lifecycle.
 The virtual fetch design requires the actual installed `cache_int.h` http_conn
 structure; that is an explicit internal, strict-ABI dependency, not a public-only
 API claim or permission to fabricate an engine header. No private HSH prototypes
-or cache-object pointer swaps are proposed. Full missing/replaced-publication
-recovery remains open until this candidate passes native/compiler and actual
-application tests. Missing/changed publication before prepare must be rejected
+or cache-object pointer swaps are used. Narrow after-prepare publication loss
+has the evidence above; generic fresh-body/initial-MISS lifecycle requirements
+remain distinct. Missing/changed publication before prepare must be rejected
 before provider side effects; a request snapshot cannot invent those bytes.
 
 ## Positive private TTL is a separate admission contract
@@ -520,8 +527,8 @@ the existing code or of an earlier transport/adaptive-nonce checkpoint:
 | --- | --- | --- |
 | Initial parent MISS; provider first creates/renews/deletes a cookie inside a private child | Real WP/Woo/provider execution with issuer counters, original repeated fields in the **first parent response headers**, correct child content and browser session on revisit; two independent visitors and consent denial. | The existing MISS handoff captures only fields available from the top-level origin fetch. It does not prove delivery of a cookie first created after parent headers in an ESI child. The mock fixture's cold children issue no cookie and cannot cover this gap. |
 | Provider bootstrap and repeated private renderers on MISS and HIT | Actual provider bootstrap and each distinct stateful renderer execute the required lifecycle once; repeated occurrences reuse output, with no duplicate issuer side effect and no personal data in the public parent. | HIT preflight has candidate replay code only. Initial MISS may need request-local pre-render handoff within normal WP execution; that mechanism is not implemented or inferred from HIT capture. |
-| Parent expiry, purge or replacement after prepare | Native fault injection between prepare and resumed delivery; valid final page and visitor cookies, no repeated provider/issuer work, no cross-request leakage and correct cleanup. | The temporary pre-header 503 prevents duplicate execution but is **not completed recovery or full-goal acceptance**. Seamless recovery remains open. |
-| Positive private fragment TTL | Native identity/state partitioning, actual reuse before expiry, refresh on expiry/state changes and targeted invalidation; two visitors/two users with no cookie or content replay across owners. | #955 remains unimplemented. TTL 0 or a declared positive header is not evidence of positive private caching. |
+| Parent expiry, purge or replacement after prepare | Native fault injection between prepare and resumed delivery; valid final page and visitor cookies, no repeated provider/issuer work, no cross-request leakage and correct cleanup. | The request-owned snapshot source now has native mock and narrow actual WP/Woo after-prepare purge/recovery evidence above. Missing publication before prepare must reject before side effects; generic new-body/first-cold lifecycle remains separate, not inferred from this recovery. |
+| Positive private fragment TTL | Native identity/state partitioning, actual reuse before expiry, refresh on expiry/state changes and targeted invalidation; two visitors/two users with no cookie or content replay across owners. | An isolated native lookup/fill + application claim producer exists; see PRIVATE-TTL-DRAFT.md for exact native evidence. Actual independent renderer/state/storage audits remain required. TTL 0, a header or a counter embedded in cached HTML alone is not positive-private-cache acceptance. |
 | Prepare entry proof across HTTP and native admin/CLI/local connections | Matching existing per-site application credential, signed manifest/original-route checks, forged public-origin rejection and no credential in URLs/shared objects/client responses; actual endpoint acceptance in each supported mode. | Per-site backend-only header is prepared in the adapters. HTTP configuration can match it; an admin secret is a different credential and is not forwarded as a substitute. Non-HTTP credential/admission and native endpoint verification remain open. |
 
 Do not hide the initial-MISS case behind a 503 or treat it as covered by the

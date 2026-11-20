@@ -1,11 +1,12 @@
 # Scoped private TTL: isolated native candidate (#955)
 
-Status: the earlier native lookup/fill checkpoint passed its 12 actual native
-mock tests. The feature-version negotiation candidate below still requires
-combined producer qualification. The isolated native
-lookup/fill candidate below requires native qualification and an authenticated
-application claim producer. Existing published private delivery remains TTL 0. This document does not claim runtime equivalence or
-introduce new controls, cookies, sessions, credentials or classification rules.
+Status: isolated native lookup/fill and feature negotiation have actual native
+mock qualification at the exact checkpoints below. An authenticated application
+claim producer is implemented by the UltraCache owner; combined real WP/Woo
+identity/state/lifecycle and independent renderer/storage audits remain the
+acceptance boundary. Existing published private delivery remains TTL 0. This
+document does not claim full-goal runtime equivalence or introduce new controls,
+cookies, sessions, credentials or classification rules.
 
 ## Evidence and boundary
 
@@ -150,16 +151,20 @@ before storage/delivery. This is capability metadata, not identity/authority.
 Old UltraCache ignores the unfamiliar declaration and keeps its original
 strict envelope. The new application producer requires both the existing
 validated stored probe observation and the live prepare version before using
-optional cache claims. Root keeps deployment separate: this candidate is not
-loaded into the real WP fixture until the producer is ready for combined
-qualification. Mock lookup/fill success is not a reason to claim real
+optional cache claims. Deployment is kept separate: root installed the combined candidate only in
+its owned WP fixture after the producer existed. Actual user/session/state
+checks and independent renderer/storage audits are required there. Mock lookup/fill success is not a reason to claim real
 identity/state/provider/expiry acceptance or publish/release it prematurely.
 
 `test_declaration_uses_existing_probe_and_owned_prepare_only` checks the actual
 wire and spoof/echo stripping against a mock origin. Basic's fixture checks
 ordinary requests stay silent and that its valid site token cannot enter
-private lookup. These new negotiation cases need native execution for this
-checkpoint, separate from the earlier 12-case lookup/fill evidence.
+private lookup. Root compiled exact Hestia `f09eaad` against native
+Varnish 9.1/VRT 22.2 and executed all 13 then-current tests with zero skips
+(68.486 seconds). DSO SHA256
+`c6f126bb85bfebe2925fb579626bb612aff7f95a7f0ba496140a0098139dbdf6`.
+This separately qualifies the negotiation delta; it is not an actual WP
+claim-provider or release acceptance claim.
 
 ### Native object eviction after a successful private lookup
 
@@ -169,4 +174,9 @@ the request-owned retained HIT bytes to refill that same authorized namespace,
 without another renderer call or origin child fetch, with the current prepare's
 authentic cookie exactly once. A subsequent lookup must HIT the refill with
 its remaining budget. This fault case is not implied by ordinary HIT/expiry
-success; its new native execution remains pending for this checkpoint.
+success. Root verified the C/VCL/build inputs of `d59918f` are byte-identical
+to `f09eaad`, reused the same DSO above, and executed the four private fixtures
+plus one selected continuation case: five passed, zero skips, 18.717 seconds.
+The private fixture counts actual mock renderer function calls independently
+of cached HTML. Real WP claims require independent application-side execution
+audit too; a counter embedded in cached HTML cannot prove renderer skipping.
