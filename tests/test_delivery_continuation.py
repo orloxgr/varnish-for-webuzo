@@ -14,8 +14,9 @@ from test_cookie_delivery import proxy, cookies
 
 PRIVATE='/index.php?ultracache_esi=signed-private&esi_scope=private'
 ADAPTIVE='/index.php?ultracache_esi=signed-adaptive&esi_identity=wordpress'
-PREPARE='/index.php?ultracache_delivery=signed-manifest'
-PARENT='/article?public=1'
+MANIFEST='signed+manifest%2Ftoken'
+PREPARE='/index.php?ultracache_delivery=signed%2Bmanifest%252Ftoken'
+PARENT='/article?public=1&original=a%2Bb&original=c+d'
 META=[('Cache-Control','public, max-age=120'),('Surrogate-Control','ESI/1.0'),
       ('X-UltraCache-ESI-Shared-Parent','1'),('X-UltraCache-ESI-Private-Count','3'),
       ('X-UltraCache-Delivery-Prepare',PREPARE)]
@@ -39,7 +40,9 @@ class DeliveryContinuation(unittest.TestCase):
         calls=[]
         def origin(path,headers):
             calls.append((path,dict(headers)))
-            if path==PREPARE:
+            if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                self.assertEqual(path,PARENT)
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'),MANIFEST)
                 visitor=headers.get('Cookie','anonymous')
                 return envelope(headers,visitor),[
                     ('Content-Type','application/vnd.ultracache.delivery+json'),
@@ -57,6 +60,7 @@ class DeliveryContinuation(unittest.TestCase):
                     'X-UltraCache-Delivery-Phase':'complete',
                     'X-UltraCache-Delivery-Request':'spoof',
                     'X-UltraCache-Delivery-Authorization':'spoof-credential',
+                    'X-UltraCache-Delivery-Manifest':'spoof-manifest',
                     'X-UltraCache-Delivery-Original-URL':'/wrong'})
                 self.assertEqual(status,200)
                 self.assertEqual(body,'<html>parent[private:'+visitor+'][private:'+visitor+'][nonce:'+visitor+']</html>')
@@ -68,7 +72,8 @@ class DeliveryContinuation(unittest.TestCase):
                 self.assertEqual(dict(fields)['X-Cache'],'HIT')
                 self.assertNotIn('X-UltraCache-Delivery-Prepare',dict(fields))
                 self.assertNotIn('X-UltraCache-Delivery-Authorization',dict(fields))
-            self.assertEqual([p for p,_ in calls],[PREPARE]*3)
+                self.assertNotIn('X-UltraCache-Delivery-Manifest',dict(fields))
+            self.assertEqual([p for p,_ in calls],[PARENT]*3)
             for _,headers in calls:
                 self.assertEqual(headers['X-UltraCache-Delivery-Phase'],'prepare')
                 self.assertEqual(headers['X-UltraCache-Delivery-Version'],'1')
@@ -86,19 +91,25 @@ class DeliveryContinuation(unittest.TestCase):
             calls=[]
             def origin(path,headers):
                 calls.append(path)
-                if path==PREPARE:return envelope(headers,'test',change),[('Cache-Control','private, no-store')]
+                if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                    self.assertEqual(path,PARENT)
+                    self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'),MANIFEST)
+                    return envelope(headers,'test',change),[('Cache-Control','private, no-store')]
                 return (BODY,META) if path==PARENT else ('cold',[])
             with self.subTest(change=change.__name__),proxy('ultracache',origin) as get:
                 get(PARENT);calls.clear()
                 status,fields,_=get(PARENT)
                 self.assertEqual(status,503);self.assertEqual(cookies(fields),[])
-                self.assertEqual(calls,[PREPARE])
+                self.assertEqual(calls,[PARENT])
 
     def test_post_prepare_miss_does_not_run_provider_or_parent_twice(self):
         calls=[]
         def origin(path,headers):
             calls.append(path)
-            if path==PREPARE:return envelope(headers,'test'),[('Cache-Control','private, no-store')]
+            if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                self.assertEqual(path,PARENT)
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'),MANIFEST)
+                return envelope(headers,'test'),[('Cache-Control','private, no-store')]
             return (BODY,META) if path==PARENT else ('cold',[])
         def force_miss(source):
             self.assertIn('call scp_recv;',source)
@@ -107,24 +118,28 @@ class DeliveryContinuation(unittest.TestCase):
         with proxy('ultracache',origin,transform=force_miss) as get:
             get(PARENT);calls.clear()
             self.assertEqual(get(PARENT)[0],503)
-            self.assertEqual(calls,[PREPARE])
+            self.assertEqual(calls,[PARENT])
 
     def test_basic_ignores_the_delivery_contract(self):
         calls=[]
         def origin(path,headers):
             self.assertIsNone(headers.get('X-UltraCache-Delivery-Authorization'))
+            self.assertIsNone(headers.get('X-UltraCache-Delivery-Manifest'))
             calls.append(path)
-            return 'ordinary HTML',META+[('X-UltraCache-Delivery-Authorization','origin-echo')]
+            return 'ordinary HTML',META+[('X-UltraCache-Delivery-Authorization','origin-echo'),('X-UltraCache-Delivery-Manifest','origin-echo')]
         with proxy('basic',origin) as get:
             for _ in range(2):
-                _,fields,body=get(PARENT,extra={'X-UltraCache-Delivery-Authorization':'spoof'})
+                _,fields,body=get(PARENT,extra={'X-UltraCache-Delivery-Authorization':'spoof','X-UltraCache-Delivery-Manifest':'spoof'})
                 self.assertEqual(body,'ordinary HTML')
                 self.assertNotIn('X-UltraCache-Delivery-Authorization',dict(fields))
+                self.assertNotIn('X-UltraCache-Delivery-Manifest',dict(fields))
             self.assertEqual(calls,[PARENT])
 
     def test_concurrent_visitors_have_request_owned_results(self):
         def origin(path,headers):
-            if path==PREPARE:
+            if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                self.assertEqual(path,PARENT)
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'),MANIFEST)
                 visitor=headers.get('Cookie','anonymous')
                 return envelope(headers,visitor),[('Cache-Control','private, no-store'),
                     ('Set-Cookie','owner='+visitor+'; Path=/; HttpOnly')]

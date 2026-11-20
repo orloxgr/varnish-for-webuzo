@@ -66,7 +66,9 @@ An otherwise cacheable origin-approved ESI parent supplies:
 - `X-UltraCache-ESI-Private-Count: N` (all private-capable occurrences, including
   anonymous adaptive nonces and repeated includes)
 - `X-UltraCache-Delivery-Prepare: /index.php?ultracache_delivery=<signed-manifest>`
-  (use the actual installation subdirectory; same-host absolute path only).
+  (use the actual installation subdirectory; same-host relative metadata pointer).
+  This pointer transports the token and is **never requested** by the application
+  prepare transaction.
 
 The manifest must bind the original public route/representation and the full
 set of private-capable include URLs, signed contexts and occurrence counts.
@@ -75,17 +77,33 @@ snapshot approval remains distinct from a fresh personalized render.
 
 Before serving an eligible **GET HIT**, native request-owned state saves the
 original URL, Host, complete original Cookie, encoding and conditional/range
-headers. It restarts to the prepare target and always PASSes that request.
+headers. It restarts into prepare at **the exact original d.url**, retaining
+its original path, duplicate query parameters, percent escapes and plus signs,
+and always PASSes that request. No internal parameter is appended to its query.
+PHP/plugin bootstrap and `filter_input` therefore see the real original inputs
+from the start, without reconstructing `$_SERVER`/`$_GET` later.
 The native backend hook sets these headers afresh:
 
 ```http
 X-UltraCache-Delivery-Version: 1
 X-UltraCache-Delivery-Phase: prepare
+X-UltraCache-Delivery-Manifest: <decoded-once ASCII signed token>
 X-UltraCache-Delivery-Request: <request-owned decimal handle>
 X-UltraCache-Delivery-Original-URL: /original/path?original=query
 X-UltraCache-Delivery-Authorization: <existing native per-site application/purge credential>
 Cookie: <unchanged complete original request Cookie>
 ```
+
+Manifest extraction contract: native reads exactly one nonempty **literal**
+`ultracache_delivery` query value from the metadata pointer. Duplicate matching
+parameters and malformed percent escapes are rejected. It percent-decodes that
+value exactly once using raw URL semantics (`+` remains `+`), and requires a
+nonempty printable-ASCII token without spaces or controls. For example,
+`signed%2Bmanifest%252Ftoken` becomes the header value `signed+manifest%2Ftoken`.
+Other pointer query metadata is not forwarded or used as application input.
+The UC verifier consumes the header verbatim: **no second urldecode**. The whole
+original metadata pointer remains request-owned for final parent binding.
+The native pointer/token never replaces the actual application request URL.
 
 All browser copies are stripped. The request handle only associates the two
 native tasks; it is not a session, credential or authentication proof. The
@@ -95,7 +113,8 @@ Direct untrusted calls must be refused, not treated as approved continuations.
 The Hestia and Webuzo adapters populate Authorization from the active
 UltraCache site's existing token only after `delivery_backend()` proves the
 native-owned prepare association. Missing credentials stop before origin.
-Incoming Authorization is removed in receive/backend-fetch; origin echoes are
+Incoming Authorization and Manifest are removed in receive/backend-fetch;
+native sets Manifest only on its owned prepare. Origin echoes are
 removed before storage and again before client delivery. The token is never
 taken from parent metadata, client input or an ESI URL. UC must compare it with
 the actually configured matching per-site credential using constant-time
@@ -114,7 +133,12 @@ The existing signed private capability probe can observe
 `X-UltraCache-Delivery-Version: 1` separately from transport revision 2 and
 adaptive nonce revision 1. No new UI/probe/background worker is introduced.
 
-The endpoint executes the real provider lifecycle under the original route,
+The application recognizes the authenticated internal prepare in advanced-cache
+and skips the public-cache read while permitting real WordPress bootstrap under
+the unchanged route/query. At the normal WP hook it completes signed manifest,
+representation, registry and original-URL validation before issuing the envelope.
+`originalUrl`, the native Original-URL header and actual request URI must agree.
+The endpoint executes the real provider lifecycle under that original route,
 then renders **every private-capable include in the manifest**, even when an
 adaptive nonce currently uses anonymous identity. It renders each distinct URL
 once and reuses its output for repeated occurrences. Identity and consent are
@@ -236,8 +260,14 @@ A retained single-case diagnostic identified a child panic in `http_ForceField`:
 that API only accepts METHOD/PROTO, not HTTP_HDR_URL. Both prepare and restore
 URL changes now use the public `VRT_l_req_url(ctx, NULL, TOSTRAND(url))` setter,
 with workspace-owned URL text and the macro-initialized STRANDS argument.
-This source correction requires a new targeted native run; the earlier compile
-is not a runtime pass. The diagnostic identified actual engine revision
+The coordinated targeted rerun and all five mock continuation tests then passed
+for `68dbcce`, zero skips (suite 26.760 s). Covered repeated Set-Cookie/replay,
+invalid binding/schema/count/duplicate rejection, 24 concurrent owners, Basic
+nonparticipation and the explicit post-prepare-MISS 503 guard. That guard is not
+completed recovery. This is native mock transport/lifecycle evidence for that
+exact old pointer-route checkpoint, not actual WP/provider equivalence.
+The newer unchanged-original-URI/Manifest-header candidate still requires its
+own native rerun and real WP bootstrap/filter_input acceptance. The diagnostic identified actual engine revision
 `ffd36e9db9a1ec2bf6637deda180a87d40a13d0f`, VRT API 22.2. The Vinyl 9.1 archive
 review above is not a substitute for this installed engine's headers or exact
 object-lifetime implementation; parent-retention/restart qualification remains

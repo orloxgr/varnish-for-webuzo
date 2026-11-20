@@ -49,6 +49,10 @@ class DeliveryEnvelope(unittest.TestCase):
         cls.lib.delivery_free_fragments.restype=None
         cls.lib.delivery_buffer_growth.argtypes=[ctypes.c_size_t]*3+[ctypes.POINTER(ctypes.c_size_t)]*2
         cls.lib.delivery_buffer_growth.restype=ctypes.c_int
+        cls.lib.delivery_manifest_token.argtypes=[ctypes.c_char_p]
+        cls.lib.delivery_manifest_token.restype=ctypes.c_void_p
+        cls.lib.delivery_manifest_free.argtypes=[ctypes.c_void_p]
+        cls.lib.delivery_manifest_free.restype=None
 
     @classmethod
     def tearDownClass(cls):
@@ -189,6 +193,29 @@ class DeliveryEnvelope(unittest.TestCase):
         raw=json.dumps(sample()).encode().replace(b'"schemaVersion": 1',
             b'"unknown":'+b'['*10000+b'0'+b']'*10000+b',"schemaVersion":1')
         self.assertIsNone(self.parse(raw))
+
+    def test_manifest_metadata_extracts_one_literal_parameter_and_decodes_once(self):
+        def token(pointer):
+            out=self.lib.delivery_manifest_token(pointer.encode())
+            if not out:return None
+            try:return ctypes.string_at(out).decode('ascii')
+            finally:self.lib.delivery_manifest_free(out)
+        for pointer,expected in (
+            ('/index.php?ultracache_delivery=signed-token','signed-token'),
+            ('/shop/index.php?ultracache_delivery=v1%3Aabc%2Bdef%3D','v1:abc+def='),
+            ('/index.php?other=metadata&ultracache_delivery=signed+token%252F&x=1','signed+token%2F'),
+            ('/index.php?ultracache_delivery=%21%7e%2f','!~/')):
+            with self.subTest(pointer=pointer):self.assertEqual(token(pointer),expected)
+        for pointer in ('/index.php','/index.php?ultracache_delivery=',
+            '/index.php?ultracache_delivery=a&ultracache_delivery=b',
+            '/index.php?ultracache_delivery=ok&ultracache_delivery=',
+            '/index.php?ultracache_delivery=%','/index.php?ultracache_delivery=%2',
+            '/index.php?ultracache_delivery=%GG','/index.php?ultracache_delivery=%00',
+            '/index.php?ultracache_delivery=%20','/index.php?ultracache_delivery=%0d%0a',
+            '/index.php?ultracache_delivery=%7f','/index.php?ultracache_delivery=%cf',
+            '/index.php?ultracache_delivery=a#fragment','//foreign/index.php?ultracache_delivery=a',
+            '/index.php?not_ultracache_delivery=a','/index.php?ultracache%5fdelivery=a'):
+            with self.subTest(pointer=pointer):self.assertIsNone(token(pointer))
 
 
 if __name__=='__main__':unittest.main()

@@ -350,7 +350,10 @@ No parallel counter or visitor identity enters shared parent metadata.
 
 Pre-header cookie delivery now has an UltraCache-only **source candidate**:
 `X-UltraCache-Delivery-Prepare` binds a signed private-renderer manifest; an
-owned prepare PASS captures the actual provider body/Set-Cookie before a
+owned prepare PASS uses the unchanged original URI/query and carries the
+decoded-once signed token in backend-only `X-UltraCache-Delivery-Manifest`,
+along with the existing per-site Authorization proof. The metadata pointer is
+never an application request target. It captures the actual provider body/Set-Cookie before a
 pre-header restart, then replays its private fragment results without executing
 the provider twice. The exact JSON/headers and explicit parent-eviction 503
 behavior are in `ESI-DELIVERY-DRAFT.md`. Basic does not enter this continuation.

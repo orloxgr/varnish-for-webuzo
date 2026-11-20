@@ -16,7 +16,7 @@ struct continuation {
      * qualification. Also revalidate signed manifest/count on final delivery.
      * Never swap engine pointers or call uninstalled private HSH APIs. */
     const struct objcore *parent;
-    char *url, *host, *target, *cookie, *encoding;
+    char *url, *host, *target, *manifest, *cookie, *encoding;
     char *conditional[6];
     char request_id[32];
     char *body;
@@ -29,6 +29,7 @@ static const hdr_t h_version = HDR("X-UltraCache-Delivery-Version");
 static const hdr_t h_phase = HDR("X-UltraCache-Delivery-Phase");
 static const hdr_t h_request = HDR("X-UltraCache-Delivery-Request");
 static const hdr_t h_original = HDR("X-UltraCache-Delivery-Original-URL");
+static const hdr_t h_manifest = HDR("X-UltraCache-Delivery-Manifest");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -47,6 +48,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     close_owner(&d->association);
     (void)ctx;
     free(d->url); free(d->host); free(d->target); free(d->cookie); free(d->encoding);
+    delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
     free(d->body); delivery_free_fragments(d->fragments); free(d);
 }
@@ -142,7 +144,9 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         return 0; /* ordinary public child remains on its existing path */
     }
     if (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) {
-        url = WS_Copy(ctx->ws,d->target,-1);
+        /* The metadata pointer is never an application request. PHP bootstrap
+         * and filter_input must see the original route/query from the start. */
+        url = WS_Copy(ctx->ws,d->url,-1);
         if (!url) return -1;
         VRT_l_req_url(ctx, NULL, TOSTRAND(url));
         http_ForceHeader(ctx->http_req,h_key,d->request_id);
@@ -181,6 +185,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             http_ForceHeader(ctx->http_bereq,h_phase,"prepare");
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
+            http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
             if (d->cookie) http_ForceHeader(ctx->http_bereq,H_Cookie,d->cookie);
             else http_Unset(ctx->http_bereq,H_Cookie);
         }
@@ -244,7 +249,8 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->phase = D_FAILED;
         d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b);
         d->target = strdup(target);
-        if (!d->url || !d->target || !delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
+        d->manifest = delivery_manifest_token(target);
+        if (!d->url || !d->target || !d->manifest || !delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
             !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
             !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)) return -1;
         for (i = 0; i < 6; ++i)

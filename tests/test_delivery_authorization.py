@@ -67,7 +67,8 @@ class DeliveryAuthorization(unittest.TestCase):
         self.assertIn('Delivery credential unavailable',branch)
         self.assertEqual(source.count('call scp_delivery_authorization;'),1)
         for scope in ('req','bereq','beresp','resp'):
-            self.assertIn('unset '+scope+'.http.X-UltraCache-Delivery-Authorization;',source)
+            for name in ('Authorization','Manifest'):
+                self.assertIn('unset '+scope+'.http.X-UltraCache-Delivery-'+name+';',source)
 
 
 if __name__=='__main__':unittest.main()

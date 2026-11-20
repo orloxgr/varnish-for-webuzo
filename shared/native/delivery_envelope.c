@@ -24,6 +24,52 @@ int delivery_relative(const char *s) {
     return 1;
 }
 
+static int hex_digit(unsigned char c) {
+    if (c >= '0' && c <= '9') return c-'0';
+    if (c >= 'a' && c <= 'f') return c-'a'+10;
+    if (c >= 'A' && c <= 'F') return c-'A'+10;
+    return -1;
+}
+
+char *delivery_manifest_token(const char *pointer) {
+    static const char name[] = "ultracache_delivery=";
+    const char *p, *end;
+    char *token = NULL;
+    if (!delivery_relative(pointer) || !(p = strchr(pointer,'?'))) return NULL;
+    ++p;
+    while (*p) {
+        end = strchr(p,'&');
+        if (!end) end = p+strlen(p);
+        if ((size_t)(end-p) >= sizeof(name)-1 && !memcmp(p,name,sizeof(name)-1)) {
+            const char *value = p+sizeof(name)-1;
+            char *out;
+            if (token || value == end) goto invalid;
+            token = malloc((size_t)(end-value)+1);
+            if (!token) return NULL;
+            out = token;
+            while (value < end) {
+                unsigned char c = (unsigned char)*value++;
+                if (c == '%') {
+                    int high, low;
+                    if (end-value < 2 || (high = hex_digit((unsigned char)value[0])) < 0 ||
+                        (low = hex_digit((unsigned char)value[1])) < 0) goto invalid;
+                    c = (unsigned char)((high<<4)|low); value += 2;
+                }
+                /* Raw URL decoding: '+' is a token character, not a space. */
+                if (c <= 32 || c >= 127) goto invalid;
+                *out++ = (char)c;
+            }
+            *out = '\0';
+        }
+        p = *end ? end+1 : end;
+    }
+    return token;
+invalid:
+    free(token);
+    return NULL;
+}
+void delivery_manifest_free(char *token) { free(token); }
+
 static void whitespace(struct reader *r) {
     while (r->offset < r->length) {
         char c = r->buffer[r->offset];
