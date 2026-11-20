@@ -284,9 +284,8 @@ sub scp_ultracache_deliver {
     unset resp.http.X-UltraCache-Delivery-Original-URL;
 }
 
-sub scp_private_document_diagnostics {
-    # Adapter definitions append their ordinary vendor diagnostics here.
-}
+# The complete adapter defines scp_private_document_diagnostics exactly once.
+# Custom VCL subroutines cannot be extended through repeated definitions.
 sub vcl_synth {
     if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_synth()) {
         if (req.esi_level == 0) {

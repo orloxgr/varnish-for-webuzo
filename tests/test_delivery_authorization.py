@@ -70,5 +70,16 @@ class DeliveryAuthorization(unittest.TestCase):
             for name in ('Authorization','Manifest'):
                 self.assertIn('unset '+scope+'.http.X-UltraCache-Delivery-'+name+';',source)
 
+    def test_private_document_diagnostics_is_defined_once_in_complete_adapter_vcl(self):
+        source,header,_=render_sites()
+        name='scp_private_document_diagnostics'
+        definitions=re.findall(r'\bsub\s+'+name+r'\s*\{',source)
+        self.assertEqual(len(definitions),1,'Repeated custom sub definitions prevent native VCL compilation')
+        self.assertEqual(source.count('call '+name+';'),1)
+        body=re.search(r'\bsub\s+'+name+r'\s*\{(.*?)\n\}',source,re.S).group(1)
+        vendor='Hestia' if header=='X-HVH-Site' else 'Webuzo'
+        self.assertIn('set resp.http.X-'+vendor+'-Varnish = "PASS";',body)
+        self.assertIn('set resp.http.X-'+vendor+'-Varnish-Reason = "application-private-document";',body)
+
 
 if __name__=='__main__':unittest.main()

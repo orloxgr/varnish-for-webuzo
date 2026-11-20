@@ -718,3 +718,12 @@ probe/owned-prepare-only declaration; and exclusion of recovery readiness.
 Portable parser tests execute locally. Native transport, exact engine ABI,
 real WP template/notice consumption and browser/storage acceptance require
 root-owned matching-DSO runs; this draft is not a claim that they passed.
+
+The first root native run of Hestia `1a51b2b` built the DSO but rejected the
+generated VCL before traffic: a common empty custom diagnostics sub and its
+adapter implementation were both emitted. Custom VCL subs cannot be extended
+using duplicate definitions. The common empty definition is removed; the
+complete adapter owns the single definition. The shared authorization rendering
+suite now asserts exactly one definition and one call for both adapters. No
+WordPress proxy was loaded with the failed generation. These corrected sources
+still require the root native rerun; a source assertion is not runtime proof.
