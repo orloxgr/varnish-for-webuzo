@@ -13,6 +13,8 @@ struct continuation {
     enum delivery_phase phase;
     unsigned restart, sent, complete, failed;
     unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
+    unsigned snapshot_ready, snapshot_mode;
+    double public_deadline, prepare_response_time;
     uint64_t occurrences;
     /* Identity check only; exact installed-engine lifetime still needs native
      * qualification. Also revalidate signed manifest/count on final delivery.
@@ -24,8 +26,10 @@ struct continuation {
     char *body;
     size_t length, capacity;
     struct delivery_fragment *fragments;
-    struct delivery_public_parent *public_parent; /* staged, not yet replayed */
+    struct delivery_public_parent *public_parent; /* same-request public bytes */
+    struct fields *public_headers;
 };
+static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static const char filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
 static const hdr_t h_version = HDR("X-UltraCache-Delivery-Version");
@@ -35,6 +39,7 @@ static const hdr_t h_original = HDR("X-UltraCache-Delivery-Original-URL");
 static const hdr_t h_manifest = HDR("X-UltraCache-Delivery-Manifest");
 static const hdr_t h_recovery = HDR("X-UltraCache-Delivery-Recovery");
 static const hdr_t h_recovery_version = HDR("X-UltraCache-Delivery-Recovery-Version");
+static const hdr_t h_request_snapshot_version = HDR("X-UltraCache-Delivery-Request-Snapshot-Version");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -56,6 +61,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
     free(d->body); delivery_free_fragments(d->fragments);
+    clear_fields(d->public_headers);
     delivery_public_parent_free(d->public_parent); free(d);
 }
 static const struct vmod_priv_methods delivery_methods = {
@@ -209,6 +215,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             http_ForceHeader(ctx->http_bereq,h_phase,
                 d->phase == D_PREPARE ? "prepare" : "parent-snapshot");
             http_ForceHeader(ctx->http_bereq,h_recovery_version,"1");
+            http_ForceHeader(ctx->http_bereq,h_request_snapshot_version,"1");
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
             http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
@@ -217,6 +224,11 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
         }
     }
     pthread_mutex_unlock(&lock);
+    if (owned && !failed) {
+        struct vmod_priv *filter = VRT_priv_task(ctx,&filter_task_token);
+        if (!filter) failed = 1;
+        else filter->priv = &task->key;
+    }
     if (failed || WS_Overflowed(ctx->ws)) VRT_fail(ctx,"UltraCache prepare cannot be repeated");
     return owned;
 }
@@ -236,7 +248,8 @@ VCL_BOOL vmod_delivery_recovery_response(VRT_CTX, struct vmod_priv *priv) {
             !http_CountHdr(ctx->http_beresp,H_Set_Cookie) &&
             http_GetHdr(ctx->http_beresp,h_request,&request) && !strcmp(request,d->request_id) &&
             http_GetHdr(ctx->http_beresp,h_original,&original) && !strcmp(original,d->url) &&
-            http_GetHdr(ctx->http_beresp,h_recovery,&recovery) && !strcmp(recovery,"public-snapshot-v1");
+            http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
+            !strcmp(recovery,d->snapshot_mode ? "request-snapshot-v1" : "public-snapshot-v1");
         if (valid) d->recovery_received = 1;
         else d->failed = 1;
     }
@@ -280,7 +293,10 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     else {
         clear_fields(entry->fields); entry->fields = first; first = NULL;
         entry->delivery->recovery_ready = http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
-            !strcmp(recovery,"public-snapshot-v1");
+            (!strcmp(recovery,"public-snapshot-v1") || !strcmp(recovery,"request-snapshot-v1"));
+        entry->delivery->snapshot_ready = http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
+            !strcmp(recovery,"request-snapshot-v1");
+        entry->delivery->prepare_response_time = ctx->now;
     }
     pthread_mutex_unlock(&lock);
     clear_fields(first);
@@ -311,6 +327,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
             !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)) return -1;
         for (i = 0; i < 6; ++i)
             if (!delivery_copy_header(ctx->http_req,conditional_headers[i],&d->conditional[i])) return -1;
+        if (!delivery_snapshot_headers(ctx,d)) return -1;
         entry = calloc(1,sizeof(*entry));
         if (!entry) return -1;
         pthread_mutex_lock(&lock);
@@ -332,6 +349,12 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         pthread_mutex_unlock(&lock);
         if (!valid || http_GetStatus(ctx->http_resp) != 200 || !delivery_parse(d) || !delivery_restore(ctx,d)) {
             d->phase = D_FAILED; return -1;
+        }
+        if (d->snapshot_ready) {
+            double application_deadline;
+            if (!d->public_parent) { d->phase = D_FAILED; return -1; }
+            application_deadline = d->prepare_response_time+(double)d->public_parent->fresh_remaining;
+            if (application_deadline < d->public_deadline) d->public_deadline = application_deadline;
         }
         d->phase = D_RETURN;
         return 1;
@@ -386,12 +409,21 @@ VCL_BOOL vmod_delivery_synth(VRT_CTX, struct vmod_priv *priv) {
     return 1;
 }
 
+#include "delivery_snapshot_backend.c"
+
 int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event) {
     const char *error;
-    (void)priv;
     if (event == VCL_EVENT_LOAD) {
         error = VRT_AddFilter(ctx,&delivery_filter,NULL);
         if (error) { VRT_fail(ctx,"UltraCache capture filter registration failed"); return -1; }
-    } else if (event == VCL_EVENT_DISCARD) VRT_RemoveFilter(ctx,&delivery_filter,NULL);
+        if (!delivery_snapshot_load(ctx,priv)) {
+            VRT_RemoveFilter(ctx,&delivery_filter,NULL);
+            VRT_fail(ctx,"UltraCache request snapshot backend registration failed");
+            return -1;
+        }
+    } else if (event == VCL_EVENT_DISCARD) {
+        delivery_snapshot_unload(ctx,priv);
+        VRT_RemoveFilter(ctx,&delivery_filter,NULL);
+    }
     return 0;
 }

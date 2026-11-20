@@ -6,6 +6,8 @@ Cold private children in this fixture issue no cookie: it does not qualify
 initial-MISS delivery of cookies first created after the parent headers.
 """
 import concurrent.futures
+import base64
+import hashlib
 import json
 import http.client
 import shutil
@@ -37,6 +39,74 @@ def envelope(headers, visitor, change=None):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class DeliveryContinuation(unittest.TestCase):
+    def test_request_snapshot_survives_publication_loss_without_an_origin_recovery_fetch(self):
+        for fresh in (120,0):
+            calls=[]
+            public='/request-snapshot-public-child'
+            body=BODY.replace('</html>','<esi:include src="'+public+'"/></html>')
+            unavailable=False
+            def origin(path,headers):
+                nonlocal unavailable
+                phase=headers.get('X-UltraCache-Delivery-Phase')
+                calls.append((path,phase))
+                if phase=='prepare':
+                    self.assertEqual(headers.get('X-UltraCache-Delivery-Request-Snapshot-Version'),'1')
+                    connection=http.client.HTTPConnection(*get.endpoint,timeout=5)
+                    try:
+                        connection.request('PURGE',PARENT,headers={'Host':'example.test',
+                            'X-Forwarded-Proto':'https','X-UltraCache-Token':headers['X-UltraCache-Delivery-Authorization']})
+                        response=connection.getresponse();response.read()
+                        self.assertEqual(response.status,200)
+                    finally:connection.close()
+                    unavailable=True  # application publication disappears after prepare
+                    def snapshot(result):
+                        result['publicParent']=dict(generation=hashlib.sha256(body.encode()).hexdigest(),
+                            bodyBase64=base64.b64encode(body.encode()).decode(),freshRemaining=fresh)
+                    return envelope(headers,'prepared-once',snapshot),[
+                        ('Cache-Control','private, no-store'),
+                        ('X-UltraCache-Delivery-Recovery','request-snapshot-v1'),
+                        ('Set-Cookie','owner=prepared-once; Path=/; HttpOnly')]
+                if path==PARENT:
+                    self.assertFalse(unavailable,'Memory recovery must never refetch the lost application publication')
+                    return body,META
+                if path==public:
+                    self.assertIsNone(headers.get('Cookie'))
+                    return 'public-child',[('Cache-Control','public, max-age=0')]
+                return 'cold-private',[('Cache-Control','private, no-store')]
+            with self.subTest(fresh=fresh),proxy('ultracache',origin) as get:
+                get(PARENT);calls.clear()
+                status,fields,result=get(PARENT,'_fbp=visitor')
+                self.assertEqual(status,200)
+                self.assertEqual(result,'<html>parent[private:prepared-once][private:prepared-once][nonce:prepared-once]public-child</html>')
+                self.assertEqual(cookies(fields),['owner=prepared-once; Path=/; HttpOnly'])
+                self.assertEqual(calls,[(PARENT,'prepare'),(public,None)])
+                for name in ('Request','Original-URL','Manifest','Authorization','Recovery','Request-Snapshot-Version'):
+                    self.assertNotIn('X-UltraCache-Delivery-'+name,dict(fields))
+                if fresh==0:
+                    # A legal stale current delivery cannot mint a fresh lifetime.
+                    unavailable=False;calls.clear()
+                    self.assertEqual(get(PARENT)[0],200)
+                    self.assertIn((PARENT,None),calls)
+                    self.assertNotIn((PARENT,'prepare'),calls)
+
+    def test_request_snapshot_capability_requires_a_valid_owned_body(self):
+        for body64 in (None,'invalid-base64!'):
+            calls=[]
+            def origin(path,headers):
+                calls.append(path)
+                if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                    def snapshot(result):
+                        if body64 is not None:
+                            result['publicParent']=dict(generation='a'*64,bodyBase64=body64,freshRemaining=10)
+                    return envelope(headers,'test',snapshot),[('Cache-Control','private, no-store'),
+                        ('X-UltraCache-Delivery-Recovery','request-snapshot-v1'),('Set-Cookie','not-delivered=value')]
+                return (BODY,META) if path==PARENT else ('cold',[])
+            with self.subTest(body64=body64),proxy('ultracache',origin) as get:
+                get(PARENT);calls.clear()
+                status,fields,_=get(PARENT)
+                self.assertEqual(status,503);self.assertEqual(cookies(fields),[])
+                self.assertEqual(calls,[PARENT])
+
     def test_purged_parent_recovers_only_the_bound_public_snapshot_without_provider_rerun(self):
         calls=[]
         public='/public-child-after-prepare'
@@ -169,11 +239,11 @@ class DeliveryContinuation(unittest.TestCase):
             self.assertIsNone(headers.get('X-UltraCache-Delivery-Authorization'))
             self.assertIsNone(headers.get('X-UltraCache-Delivery-Manifest'))
             calls.append(path)
-            return 'ordinary HTML',META+[('X-UltraCache-Delivery-Authorization','origin-echo'),('X-UltraCache-Delivery-Manifest','origin-echo')]
+            return BODY,META+[('X-UltraCache-Delivery-Authorization','origin-echo'),('X-UltraCache-Delivery-Manifest','origin-echo')]
         with proxy('basic',origin) as get:
             for _ in range(2):
                 _,fields,body=get(PARENT,extra={'X-UltraCache-Delivery-Authorization':'spoof','X-UltraCache-Delivery-Manifest':'spoof'})
-                self.assertEqual(body,'ordinary HTML')
+                self.assertEqual(body,BODY)  # no ESI parsing, prepare or child fetch in Basic
                 self.assertNotIn('X-UltraCache-Delivery-Authorization',dict(fields))
                 self.assertNotIn('X-UltraCache-Delivery-Manifest',dict(fields))
             self.assertEqual(calls,[PARENT])

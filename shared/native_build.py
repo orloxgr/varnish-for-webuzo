@@ -25,8 +25,12 @@ def build():
         raise RuntimeError('Install the development package matching the native Varnish engine')
     inputs = {name:(source/name).read_bytes() for name in
               ('cookie_handoff.c','cookie_handoff.vcc','delivery_continuation.c',
-               'delivery_envelope.c','delivery_envelope.h')}
+               'delivery_envelope.c','delivery_envelope.h','delivery_snapshot_backend.c')}
     inputs['abi'] = (include/'vmod_abi.h').read_bytes()
+    # The virtual fetch uses the installed internal http_conn layout. Strict
+    # VRT ABI alone is insufficient as a build receipt for internal headers.
+    for header in ('cache/cache_int.h','cache/cache.h','cache/cache_filter.h','vrt.h','vrt_obj.h'):
+        inputs['installed:'+header] = (include/header).read_bytes()
     inputs['builder'] = Path(__file__).read_bytes()
     signature = hashlib.sha256(b'cookie-handoff-build-1\0'+b''.join(inputs.values())).hexdigest()
     library = target/'libvmod_cookie_handoff.so'
@@ -41,7 +45,7 @@ def build():
             folder=Path(temporary)
             (folder/'cookie_handoff.c').write_bytes(inputs['cookie_handoff.c'])
             (folder/'delivery_continuation.c').write_bytes(inputs['delivery_continuation.c'])
-            for name in ('delivery_envelope.c','delivery_envelope.h'):
+            for name in ('delivery_envelope.c','delivery_envelope.h','delivery_snapshot_backend.c'):
                 (folder/name).write_bytes(inputs[name])
             # vmodtool hashes directives, not their documentation. Put the
             # source/ABI identity in $Module so a C-only update gets a new DSO
@@ -55,7 +59,7 @@ def build():
             command('python3',tool,'cookie_handoff.vcc',cwd=folder)
             command('cc','-Wall','-Wextra','-Werror','-fPIC','-shared','-pthread',
                     '-I'+str(include),'-I.','cookie_handoff.c','delivery_envelope.c','vcc_if.c',
-                    '-o','libvmod_cookie_handoff.so',cwd=folder)
+                    '-o','libvmod_cookie_handoff.so','-lm',cwd=folder)
             output=folder/'libvmod_cookie_handoff.so'
             metadata={'signature':signature,'library':hashlib.sha256(output.read_bytes()).hexdigest()}
             output.chmod(0o644)

@@ -347,7 +347,7 @@ This is exact-checkpoint mock evidence, not a real application-publication loss
 test or qualification of newer staged source. It was not run by this source chat. Existing
 mock tests without recovery confirmation retain the baseline guarded behavior.
 
-### Request-owned public snapshot wire: staged parser, replay not implemented
+### Request-owned public snapshot: isolated memory-backend candidate
 
 An optional prepare-envelope `publicParent` is now accepted by the portable
 source parser with exactly these fields:
@@ -363,20 +363,42 @@ effects. The native parser validates the generation's syntax and exact Base64
 bytes; it does not replace that application signature/body-generation check.
 There are no application-supplied responseHeaders; the design keeps the selected
 public parent headers and remaining native lifetime separately before prepare.
-The eventual replay TTL must not exceed either remaining freshness budget and
-must subtract elapsed prepare/capture time. Legal stale completion with zero
-freshness must not reset cache lifetime.
+The replay TTL is bounded by the selected object's remaining TTL and the
+authenticated prepare response's `freshRemaining`, subtracting elapsed time.
+The refill grants no new grace/keep. Zero freshness permits only the current
+delivery; it must not reset cache lifetime.
 
-Reserve `X-UltraCache-Delivery-Request-Snapshot-Version: 1` for explicit native
-support. **It is not emitted by this staged parser-only source.** The UC producer
-must not send this optional property to older strict parsers or advertise
-request-snapshot readiness until the memory-backend replay exists and passes
-qualification. Current C owns/frees the optional snapshot but does not serve it.
+This isolated source now emits
+`X-UltraCache-Delivery-Request-Snapshot-Version: 1` on its owned prepare and
+existing signed private probe. An authenticated prepare may confirm
+`X-UltraCache-Delivery-Recovery: request-snapshot-v1` only with a valid
+`publicParent`. Old `public-snapshot-v1` origin recovery remains compatible.
+This declaration is a qualification candidate, not a release readiness claim.
+
+For request-snapshot recovery, a native VCL-owned director supplies the saved
+public headers plus the request-owned public bytes. The `uc_request_snapshot`
+source filter feeds the ordinary native `esi` filter, allowing prepared private
+children to synthesize their existing result and public children to retain
+normal routing. There is no HTTP origin recovery call, provider execution,
+object-reference replacement or persistent body/visitor cache. The handoff
+table contains only request-owned associations; cleanup/abort removes them
+before freeing the body. Native backend reads use an integer key under the
+same lock, never a retained client pointer.
+
+`test_request_snapshot_survives_publication_loss_without_an_origin_recovery_fetch`
+purges the actual disposable parent during prepare, removes the mock
+publication, checks authentic headers/prepared fragments/public child, and
+checks that zero freshness cannot refill a fresh object. Another case rejects
+readiness without a valid body. These fixtures are **not yet executed on a
+native engine for this checkpoint**; actual WP/publication fault tests are also
+required before qualification.
 The virtual fetch design requires the actual installed `cache_int.h` http_conn
 structure; that is an explicit internal, strict-ABI dependency, not a public-only
 API claim or permission to fabricate an engine header. No private HSH prototypes
 or cache-object pointer swaps are proposed. Full missing/replaced-publication
-recovery remains open until replay and actual application tests are implemented.
+recovery remains open until this candidate passes native/compiler and actual
+application tests. Missing/changed publication before prepare must be rejected
+before provider side effects; a request snapshot cannot invent those bytes.
 
 ## Positive private TTL is a separate admission contract
 

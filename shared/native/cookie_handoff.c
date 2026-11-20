@@ -5,7 +5,9 @@
 #include <string.h>
 #include <pthread.h>
 #include <errno.h>
-#include "cache/cache.h"
+/* The request-owned virtual fetch needs the exact installed http_conn layout.
+ * This is an explicit strict-ABI internal-header dependency, not bundled ABI. */
+#include "cache/cache_int.h"
 #include "vcc_if.h"
 
 /* No global cookie cache: each entry is owned and freed by one client task.

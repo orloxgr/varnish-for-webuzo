@@ -67,6 +67,17 @@ $Restrict vcl_backend_response
 Capture authentic repeated Set-Cookie and attach the body fetch filter.
 The caller must use uc_delivery_capture with do_stream=false and private PASS.
 
+$Function BACKEND delivery_local_backend(PRIV_TASK, PRIV_VCL)
+$Restrict vcl_backend_fetch
+
+Select the native source only for an owned, prepared request snapshot recovery.
+Returns no backend for ordinary requests, Basic or application snapshot fallback.
+
+$Function BOOL delivery_local_source(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Select the request snapshot source filter before the ordinary native ESI parser.
+
 $Function BOOL delivery_recovery_response(PRIV_TASK)
 $Restrict vcl_backend_response
 

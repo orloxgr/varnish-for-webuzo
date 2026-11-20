@@ -114,6 +114,9 @@ if (cookie_handoff.delivery_backend()) {
     # Native state preserved the actual original Cookie and route. No generic
     # Cookie rewriting or provider retry may happen on this private operation.
     set bereq.retry_connect = false;
+    if (cookie_handoff.delivery_local_backend()) {
+        set bereq.backend = cookie_handoff.delivery_local_backend();
+    }
 } else {
 # Advertise generic ESI capability to any compatible application.
 set bereq.http.Surrogate-Capability = "varnish=ESI/1.0";
@@ -125,6 +128,7 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
     set bereq.http.X-UltraCache-Delivery-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Recovery-Version = "1";
+    set bereq.http.X-UltraCache-Delivery-Request-Snapshot-Version = "1";
 }
 if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce == "1") {
     # The existing signed private probe can observe this capability without
@@ -194,6 +198,14 @@ sub scp_ultracache_backend_response {
             set beresp.http.Cache-Control = "private, no-store";
             call scp_mark_uncacheable;
         }
+    }
+    if (cookie_handoff.delivery_local_source()) {
+        # Set explicit filters after do_esi has been decided. The first is a
+        # request-owned byte source, not a connection reader or another cache.
+        set beresp.do_stream = false;
+        set beresp.grace = 0s;
+        set beresp.keep = 0s;
+        set beresp.filters = "uc_request_snapshot esi";
     }
 }
 

@@ -14,7 +14,7 @@ def main():
     if bool(args.left_report)!=bool(args.right_report):parser.error('Supply both parity reports together')
     root=Path(__file__).resolve().parents[1]
     digests={}
-    for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native/delivery_continuation.c','shared/native_build.py',
+    for name in ('shared/native/cookie_handoff.c','shared/native/cookie_handoff.vcc','shared/native/delivery_continuation.c','shared/native/delivery_snapshot_backend.c','shared/native_build.py',
                  'shared/native/delivery_envelope.c','shared/native/delivery_envelope.h',
                  'shared/cache-policy.vcl','shared/vcl/core.vcl','shared/vcl/cookies.vcl',
                  'shared/vcl/cookie-delivery.vcl','shared/vcl/http-cache.vcl',
