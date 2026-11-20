@@ -50,6 +50,12 @@ $Restrict vcl_recv vcl_pass vcl_miss
 
 Reject a post-prepare parent refetch instead of executing its provider twice.
 
+$Function BOOL delivery_recover(PRIV_TOP)
+$Restrict vcl_miss
+
+Use one authenticated public-publication-only recovery fetch after an owned
+prepare whose response explicitly confirmed that application capability.
+
 $Function BOOL delivery_backend(PRIV_TASK)
 $Restrict vcl_backend_fetch
 
@@ -61,12 +67,19 @@ $Restrict vcl_backend_response
 Capture authentic repeated Set-Cookie and attach the body fetch filter.
 The caller must use uc_delivery_capture with do_stream=false and private PASS.
 
-$Function INT delivery_deliver(PRIV_TOP, STRING target, INT occurrences)
+$Function BOOL delivery_recovery_response(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Validate the bound snapshot-only response before stripping its ephemeral proof.
+
+$Function INT delivery_deliver(PRIV_TOP, STRING target, INT occurrences, BOOL begin = 0)
 $Restrict vcl_deliver
 
 UltraCache only: begin an eligible parent HIT prepare, or validate/restore its
 captured response. 1 means restart before headers, -1 means abort. A completed
 continuation appends authentic provider fields and returns 0 for final delivery.
+Only begin=true may start a new continuation; resumed deliveries still receive
+the actual parent metadata even when the parent was fetched after eviction.
 
 $Function BOOL delivery_synth(PRIV_TOP)
 $Restrict vcl_synth

@@ -5,6 +5,8 @@ sub scp_init {
     unset req.http.X-SCP-Cookie-Handoff;
     unset req.http.X-UltraCache-Delivery-Authorization;
     unset req.http.X-UltraCache-Delivery-Manifest;
+    unset req.http.X-UltraCache-Delivery-Recovery-Version;
+    unset req.http.X-UltraCache-Delivery-Recovery;
     unset req.http.X-SCP-Cookie-Contract;
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
@@ -78,7 +80,7 @@ sub scp_recv {
     call scp_common_recv;
 }
 sub scp_pass {
-    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_guard()) {
+    if (req.esi_level == 0 && req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_guard()) {
         return (synth(503, "Prepared parent unavailable"));
     }
     set req.http.X-SCP-Pass = "1";
@@ -91,6 +93,8 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-UltraCache-Delivery-Manifest;
+    unset bereq.http.X-UltraCache-Delivery-Recovery-Version;
+    unset bereq.http.X-UltraCache-Delivery-Recovery;
     unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
     unset bereq.http.X-SCP-Admin-Applied;
@@ -114,9 +118,17 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
+    if (bereq.http.X-SCP-Profile == "ultracache") {
+        if (cookie_handoff.delivery_recovery_response()) {}
+    }
     # An origin echo must never put the backend-only credential in an object.
     unset beresp.http.X-UltraCache-Delivery-Authorization;
     unset beresp.http.X-UltraCache-Delivery-Manifest;
+    unset beresp.http.X-UltraCache-Delivery-Request;
+    unset beresp.http.X-UltraCache-Delivery-Original-URL;
+    unset beresp.http.X-UltraCache-Delivery-Phase;
+    unset beresp.http.X-UltraCache-Delivery-Version;
+    unset beresp.http.X-UltraCache-Delivery-Recovery-Version;
     unset beresp.http.X-SCP-Reason;
     unset beresp.http.X-SCP-Client-Vary;
     unset beresp.http.X-SCP-Result;
@@ -142,6 +154,8 @@ sub scp_backend_response {
 sub scp_deliver {
     unset resp.http.X-UltraCache-Delivery-Authorization;
     unset resp.http.X-UltraCache-Delivery-Manifest;
+    unset resp.http.X-UltraCache-Delivery-Recovery;
+    unset resp.http.X-UltraCache-Delivery-Recovery-Version;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     cookie_handoff.deliver();
     if (req.http.X-SCP-Aggressive == "1") { set resp.http.X-Cache-Mode = "aggressive"; }

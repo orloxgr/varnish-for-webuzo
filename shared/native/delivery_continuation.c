@@ -6,11 +6,13 @@
 #include "vrt_obj.h"
 #include "delivery_envelope.h"
 
-enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY, D_DELIVERED, D_FAILED };
+enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
+    D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_FAILED };
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
     unsigned restart, sent, complete, failed;
+    unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
     uint64_t occurrences;
     /* Identity check only; exact installed-engine lifetime still needs native
      * qualification. Also revalidate signed manifest/count on final delivery.
@@ -30,6 +32,8 @@ static const hdr_t h_phase = HDR("X-UltraCache-Delivery-Phase");
 static const hdr_t h_request = HDR("X-UltraCache-Delivery-Request");
 static const hdr_t h_original = HDR("X-UltraCache-Delivery-Original-URL");
 static const hdr_t h_manifest = HDR("X-UltraCache-Delivery-Manifest");
+static const hdr_t h_recovery = HDR("X-UltraCache-Delivery-Recovery");
+static const hdr_t h_recovery_version = HDR("X-UltraCache-Delivery-Recovery-Version");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
     HDR("If-Unmodified-Since"), HDR("If-Range")
@@ -143,7 +147,9 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) return 2;
         return 0; /* ordinary public child remains on its existing path */
     }
-    if (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) {
+    if ((d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
+        (d->phase == D_RECOVERY_QUEUED && ctx->req->restarts == d->recovery_restart)) {
+        int recovery = d->phase == D_RECOVERY_QUEUED;
         /* The metadata pointer is never an application request. PHP bootstrap
          * and filter_input must see the original route/query from the start. */
         url = WS_Copy(ctx->ws,d->url,-1);
@@ -152,7 +158,11 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         http_ForceHeader(ctx->http_req,h_key,d->request_id);
         http_Unset(ctx->http_req,H_Accept_Encoding);
         for (i = 0; i < 6; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
-        d->phase = D_PREPARE;
+        d->phase = recovery ? D_RECOVERY : D_PREPARE;
+        if (recovery) {
+            VRT_l_req_hash_always_miss(ctx,1);
+            return 0; /* normal key/variation rules, then one owned snapshot MISS */
+        }
         return 1;
     }
     if (d->phase == D_RETURN && ctx->req->restarts == d->restart+2) {
@@ -169,6 +179,17 @@ VCL_BOOL vmod_delivery_guard(VRT_CTX, struct vmod_priv *priv) {
         (ctx->req->esi_level > 0 && d->phase == D_DELIVERED));
 }
 
+VCL_BOOL vmod_delivery_recover(VRT_CTX, struct vmod_priv *priv) {
+    struct continuation *d = priv->priv;
+    if (!d || ctx->req->esi_level != 0 || !d->recovery_ready || d->recovery_sent ||
+        (d->phase != D_READY && d->phase != D_RECOVERY)) return 0;
+    /* Capability is confirmed by the authenticated prepare response, not a
+     * browser/version-only declaration. Old applications retain their guard. */
+    d->phase = D_RECOVERY;
+    http_ForceHeader(ctx->http_req,h_key,d->request_id);
+    return !WS_Overflowed(ctx->ws);
+}
+
 VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
     struct handoff *entry;
@@ -179,10 +200,13 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
     entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
     if (d) {
         owned = 1;
-        if (d->phase != D_PREPARE || d->sent++) d->failed = failed = 1;
+        if ((d->phase != D_PREPARE && d->phase != D_RECOVERY) ||
+            (d->phase == D_PREPARE ? d->sent++ : d->recovery_sent++)) d->failed = failed = 1;
         else {
             http_ForceHeader(ctx->http_bereq,h_version,"1");
-            http_ForceHeader(ctx->http_bereq,h_phase,"prepare");
+            http_ForceHeader(ctx->http_bereq,h_phase,
+                d->phase == D_PREPARE ? "prepare" : "parent-snapshot");
+            http_ForceHeader(ctx->http_bereq,h_recovery_version,"1");
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
             http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
@@ -195,17 +219,42 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
     return owned;
 }
 
+VCL_BOOL vmod_delivery_recovery_response(VRT_CTX, struct vmod_priv *priv) {
+    struct task *task = priv->priv;
+    struct handoff *entry;
+    struct continuation *d;
+    const char *request, *original, *recovery;
+    int owned = 0, valid = 0;
+    if (!task || !task->key) return 0;
+    pthread_mutex_lock(&lock);
+    entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
+    if (d && d->phase == D_RECOVERY) {
+        owned = 1;
+        valid = http_GetStatus(ctx->http_beresp) == 200 &&
+            !http_CountHdr(ctx->http_beresp,H_Set_Cookie) &&
+            http_GetHdr(ctx->http_beresp,h_request,&request) && !strcmp(request,d->request_id) &&
+            http_GetHdr(ctx->http_beresp,h_original,&original) && !strcmp(original,d->url) &&
+            http_GetHdr(ctx->http_beresp,h_recovery,&recovery) && !strcmp(recovery,"public-snapshot-v1");
+        if (valid) d->recovery_received = 1;
+        else d->failed = 1;
+    }
+    pthread_mutex_unlock(&lock);
+    if (owned && !valid) VRT_fail(ctx,"UltraCache public snapshot recovery rejected");
+    return owned;
+}
+
 VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
     struct fields *first = NULL, **tail = &first;
     struct handoff *entry;
     struct vmod_priv *filter;
-    const char *encoding;
+    const char *encoding, *recovery;
     unsigned i;
     int owned, valid;
     if (!task || !task->key) return 0;
     pthread_mutex_lock(&lock);
-    entry = delivery_entry(task->key); owned = entry && entry->delivery;
+    entry = delivery_entry(task->key);
+    owned = entry && entry->delivery && entry->delivery->phase == D_PREPARE;
     pthread_mutex_unlock(&lock);
     if (!owned) return 0;
     valid = http_GetStatus(ctx->http_beresp) == 200 &&
@@ -226,7 +275,11 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     entry = delivery_entry(task->key);
     if (!entry || !entry->delivery) valid = 0;
     else if (!valid) entry->delivery->failed = 1;
-    else { clear_fields(entry->fields); entry->fields = first; first = NULL; }
+    else {
+        clear_fields(entry->fields); entry->fields = first; first = NULL;
+        entry->delivery->recovery_ready = http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
+            !strcmp(recovery,"public-snapshot-v1");
+    }
     pthread_mutex_unlock(&lock);
     clear_fields(first);
     http_Unset(ctx->http_beresp,H_Set_Cookie);
@@ -234,13 +287,14 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     return 1;
 }
 
-VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target, VCL_INT occurrences) {
+VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target,
+    VCL_INT occurrences, VCL_BOOL begin) {
     struct continuation *d = priv->priv;
     unsigned i;
     if (ctx->req->esi_level > 0) return 0;
     if (!d) {
         struct handoff *entry;
-        if (!target || !*target) return 0;
+        if (!begin || !target || !*target) return 0;
         if (!delivery_relative(target) || occurrences < 1 ||
             ctx->req->restarts+2 > ctx->req->max_restarts) return -1;
         d = calloc(1,sizeof(*d));
@@ -280,13 +334,24 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->phase = D_RETURN;
         return 1;
     }
-    if (d->phase == D_READY) {
+    if (d->phase == D_READY || d->phase == D_RECOVERY) {
         struct fields *f;
-        if (ctx->req->objcore != d->parent || http_GetStatus(ctx->http_resp) != 200 ||
+        if (http_GetStatus(ctx->http_resp) != 200 ||
+            (d->phase == D_READY && ctx->req->objcore != d->parent && !d->recovery_ready) ||
             !target || strcmp(target,d->target) || occurrences < 1 ||
             (uint64_t)occurrences != d->occurrences) {
+            if (d->phase == D_READY && d->recovery_ready && !d->recovery_sent &&
+                ctx->req->restarts < ctx->req->max_restarts) {
+                d->phase = D_RECOVERY_QUEUED;
+                d->recovery_restart = ctx->req->restarts+1;
+                return 1;
+            }
             d->phase = D_FAILED; return -1;
         }
+        /* A same-manifest replacement has the same signed publication/context.
+         * A recovered fetch additionally requires the bound snapshot response. */
+        if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) ||
+            !delivery_restore(ctx,d)) { d->phase = D_FAILED; return -1; }
         /* Before the first ESI child runs, append authentic provider headers. */
         pthread_mutex_lock(&lock);
         for (f = d->association.owner->fields; f; f = f->next) {

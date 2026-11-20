@@ -124,6 +124,7 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     # Revision 2 does not advertise private TTL or preflight cookie issuance.
     set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
     set bereq.http.X-UltraCache-Delivery-Version = "1";
+    set bereq.http.X-UltraCache-Delivery-Recovery-Version = "1";
 }
 if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce == "1") {
     # The existing signed private probe can observe this capability without
@@ -204,9 +205,11 @@ sub scp_ultracache_deliver {
         resp.http.X-UltraCache-Delivery-Prepare) {
         set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver(
             resp.http.X-UltraCache-Delivery-Prepare,
-            std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0));
+            std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0), true);
     } else {
-        set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver("", 0);
+        set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver(
+            resp.http.X-UltraCache-Delivery-Prepare,
+            std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0), false);
     }
     if (req.http.X-SCP-Delivery-State == "1") { return (restart); }
     if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }

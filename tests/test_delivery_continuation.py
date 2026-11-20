@@ -7,6 +7,7 @@ initial-MISS delivery of cookies first created after the parent headers.
 """
 import concurrent.futures
 import json
+import http.client
 import shutil
 import unittest
 
@@ -36,6 +37,48 @@ def envelope(headers, visitor, change=None):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class DeliveryContinuation(unittest.TestCase):
+    def test_purged_parent_recovers_only_the_bound_public_snapshot_without_provider_rerun(self):
+        calls=[]
+        public='/public-child-after-prepare'
+        body=BODY.replace('</html>','<esi:include src="'+public+'"/></html>')
+        def origin(path,headers):
+            phase=headers.get('X-UltraCache-Delivery-Phase')
+            calls.append((path,phase))
+            if phase=='prepare':
+                # Real purge of only this disposable proxy's selected parent.
+                connection=http.client.HTTPConnection(*get.endpoint,timeout=5)
+                try:
+                    connection.request('PURGE',PARENT,headers={'Host':'example.test',
+                        'X-Forwarded-Proto':'https','X-UltraCache-Token':headers['X-UltraCache-Delivery-Authorization']})
+                    response=connection.getresponse();response.read()
+                    self.assertEqual(response.status,200)
+                finally:connection.close()
+                return envelope(headers,'prepared-once'),[('Cache-Control','private, no-store'),
+                    ('X-UltraCache-Delivery-Recovery','public-snapshot-v1'),
+                    ('Set-Cookie','owner=prepared-once; Path=/; HttpOnly')]
+            if phase=='parent-snapshot':
+                self.assertEqual(path,PARENT)
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'),MANIFEST)
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Recovery-Version'),'1')
+                return body,META+[('X-UltraCache-Delivery-Recovery','public-snapshot-v1'),
+                    ('X-UltraCache-Delivery-Request',headers['X-UltraCache-Delivery-Request']),
+                    ('X-UltraCache-Delivery-Original-URL',PARENT)]
+            if path==PARENT:return body,META
+            if path==public:
+                self.assertIsNone(headers.get('Cookie'))
+                # Force a public child MISS even after the initial warm visit.
+                return 'public-child',[('Cache-Control','public, max-age=0')]
+            return 'cold-private',[('Cache-Control','private, no-store')]
+        with proxy('ultracache',origin) as get:
+            get(PARENT);calls.clear()
+            status,fields,result=get(PARENT,'_fbp=visitor')
+            self.assertEqual(status,200)
+            self.assertEqual(result,'<html>parent[private:prepared-once][private:prepared-once][nonce:prepared-once]public-child</html>')
+            self.assertEqual(cookies(fields),['owner=prepared-once; Path=/; HttpOnly'])
+            self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'parent-snapshot'),(public,None)])
+            for name in ('Request','Original-URL','Manifest','Authorization','Recovery'):
+                self.assertNotIn('X-UltraCache-Delivery-'+name,dict(fields))
+
     def test_hit_cookie_headers_precede_replayed_private_fragments(self):
         calls=[]
         def origin(path,headers):

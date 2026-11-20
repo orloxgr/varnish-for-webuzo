@@ -204,10 +204,10 @@ be delivered. The examined Vinyl 9.1 `cnt_deliver` source stashes objects across
 restart, but the actual installed Varnish 9.1 reports a different revision/VRT
 API; that source review does not establish the installed lifetime. Native
 retention/eviction qualification remains open. The candidate does not swap
-engine object pointers or call uninstalled private HSH APIs. If the object expires, is
-purged or replaced, a parent MISS/PASS or different selected object returns 503
-**before parent headers**, rather than running the full provider lifecycle a
-second time. Seamless recovery of an evicted parent is not implemented.
+engine object pointers or call uninstalled private HSH APIs. The original baseline returned pre-header 503 on post-prepare MISS/replacement.
+The gated source extension below can recover the same UC public publication;
+missing/replaced application publication and request-owned replay remain open.
+A private/full-origin PASS still cannot silently rerun provider work.
 
 Before final parent headers are sent, the authentic provider fields are appended
 only to this visitor's response. The browser response is private/no-store while
@@ -280,8 +280,73 @@ review above is not a substitute for this installed engine's headers or exact
 object-lifetime implementation; parent-retention/restart qualification remains
 open alongside seamless parent recovery.
 
+## Gated public-publication recovery: source candidate only
+
+The exact installed revision above confirms Req_StashObjcore on deliver restart,
+but exposing an object to a new hash lookup after purge is a different operation.
+The candidate does not import private HSH prototypes or swap cached object refs.
+Instead, an application that actually implements an early snapshot-only path may
+explicitly confirm this on its authenticated prepare response:
+
+```http
+X-UltraCache-Delivery-Recovery: public-snapshot-v1
+```
+
+The native prepare/private capability request declares
+`X-UltraCache-Delivery-Recovery-Version: 1`; this version alone is not application
+readiness. Older bridges without the response confirmation cannot enter the new
+phase. This prevents an unsupported phase from accidentally running the ordinary
+WP/provider lifecycle a second time.
+
+On a post-prepare parent MISS, native uses the existing owner association for one
+backend GET at the exact original URI, carrying the same Manifest, Authorization,
+Request and Original-URL fields, but `Phase: parent-snapshot`. The UC early reader
+must return the existing atomic public publication only, after normal public-cache
+selection/guards and exact signed locator/representation/body-generation/fragment
+set binding. It must not bootstrap WordPress, invoke a provider, rebuild a template
+or issue cookies. It must refuse missing/mismatched publications without falling
+through to ordinary application execution.
+
+A successful snapshot response returns status 200, the original approved public
+ESI body/metadata, exact Prepare pointer and Private-Count, its **remaining** allowed
+fresh/stale lifetime, no Set-Cookie, and these bound proof fields:
+
+```http
+X-UltraCache-Delivery-Recovery: public-snapshot-v1
+X-UltraCache-Delivery-Request: <same owned request handle>
+X-UltraCache-Delivery-Original-URL: <same original path/query>
+```
+
+Native validates the response before removing ephemeral fields from storage and
+client delivery. Its normal fetch/ESI parser then processes the public parent;
+prepared private fragments and authentic provider cookie fields are reused from
+PRIV_TOP. A replacement object with the exact generation-bound signed locator
+and count can be used when the application has confirmed this contract. A changed
+locator queues at most one authenticated snapshot attempt, within native restart
+bounds. Wrong binding, any Set-Cookie, missing publication or failed snapshot is
+an explicit error, never a second provider invocation.
+
+This is **not full seamless recovery**: if the selected UC publication itself is
+gone/changed after prepare, the early reader cannot reconstruct it. Request-owned
+capture of the exact public body before side effects and replay through the native
+fetch pipeline is still being designed. A compact signed locator with URL/public
+representation, body generation and fragment-set digest avoids putting a large
+fragment URL list in HTTP headers; the full list remains in the existing public
+publication metadata. No new store/worker or artificial size/count limit is added.
+
+The source also fixes an existing prepared-parent guard that could block an
+ordinary **public** child MISS/PASS: parent-refetch guards now apply only at ESI
+level 0. Missing private/adaptive prepared children retain their dedicated refusal;
+ordinary public children remain cookie-free on their normal fetch path.
+A new native-only test performs a real purge of its disposable parent during
+prepare, expects one snapshot-only recovery fetch, the already prepared private
+output/cookies, and a fresh public child fetch. It is not run locally. Existing
+mock tests without recovery confirmation retain the baseline guarded behavior.
+
 ## Positive private TTL is a separate admission contract
 
+See `PRIVATE-TTL-DRAFT.md` for the scoped native-object design and explicit
+renderer-admission gap; it is not an implementation or positive-TTL capability.
 Retain TTL 0. A positive value needs an authenticated native private partition
 binding site, fragment, signed context/representation, verified user/session
 identity and mutable-state generation. A missing identity must not collapse all
