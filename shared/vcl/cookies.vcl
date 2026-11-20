@@ -34,7 +34,14 @@ sub scp_cookie_variation {
         if (req.http.Cookie != "" && req.http.X-SCP-Vary-Cookie == "") { unset req.http.X-SCP-Vary-Cookie; }
         # Composition does not reclassify cart/session names or omit a saved
         # Variant. The origin-approved parent uses the same resolved remainder.
-        set req.http.X-SCP-Vary-ESI-Cookie = req.http.X-SCP-Vary-Cookie;
+        # An absent source assigned to a header becomes present-but-empty.
+        # Native Vary distinguishes that from absence, splitting Shared-only
+        # visitors away from the no-cookie object. Canonicalize both to absent.
+        if (req.http.X-SCP-Vary-Cookie) {
+            set req.http.X-SCP-Vary-ESI-Cookie = req.http.X-SCP-Vary-Cookie;
+        } else {
+            unset req.http.X-SCP-Vary-ESI-Cookie;
+        }
     }
 }
 sub scp_cookie_diagnostics {

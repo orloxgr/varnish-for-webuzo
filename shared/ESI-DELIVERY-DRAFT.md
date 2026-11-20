@@ -379,6 +379,18 @@ adaptive nonce revision 1 does not change that behavior or prove it correct.
 
 ### Combined execution
 
+Additional native regression prepared after actual WP Sourcebuster evidence:
+an approved ESI parent with real `Vary: Cookie` warms without Cookie, then must
+remain the same object for seven default-Shared Sourcebuster cookies, different
+Shared values and no Cookie again. The internal ESI vary carrier must be absent
+for all empty resolved remainders, rather than present-but-empty only when the
+browser sent Shared cookies. Shared fixture case
+`Approved ESI Cookie Vary shares the no-cookie object across all Shared Sourcebuster values`
+uses one parent generation, a real public ESI child and increasing parent HIT
+counts. This narrow canonicalization does not reclassify Private/Variant cookies
+or change their nonempty key dimensions. Native regression execution is pending;
+the earlier continuation mock parent omitted Cookie Vary and did not cover it.
+
 The following are explicit open acceptance items, not consequences of preserving
 the existing code or of an earlier transport/adaptive-nonce checkpoint:
 

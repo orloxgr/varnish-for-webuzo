@@ -288,6 +288,10 @@ public/cacheable/variant/no-Set-Cookie checks. This includes stored ESI parents;
 new dynamic `STORE` responses retain raw Accept variation. Static and dynamic
 HTML both retain the Cookie Database projection; no second analytics list
 can undo an explicit Variant or Private choice.
+For an approved ESI parent's Cookie Vary, both no Cookie and a fully Shared
+resolved remainder use an **absent** internal ESI vary carrier. Never assign an
+absent source into a present empty header: native Vary distinguishes those
+states. Nonempty Variant/unclassified remainders retain their existing values.
 
 Both presets normalize simple `Accept` and `Accept-Language` lists in internal
 Vary keys without requiring application metadata or a plugin. Case-insensitive

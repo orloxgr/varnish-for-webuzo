@@ -1377,5 +1377,22 @@
       "txreq -url \"/adaptive-private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>first</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\"",
       "txreq -url \"/adaptive-private\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"X-UltraCache-ESI-Adaptive-Nonce-Version: 99\" -hdr \"X-SCP-Adaptive-Nonce: 1\" -hdr \"X-ESI-Request-Level: 9\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>second</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Surrogate-Control == \"no-store\""
     ]
+  },
+  {
+    "name": "Approved ESI Cookie Vary shares the no-cookie object across all Shared Sourcebuster values",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/shared-cookie-vary-parent\"\nexpect req.http.Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -hdr \"Vary: Cookie\" -hdr \"Surrogate-Control: ESI/1.0\" -hdr \"X-UltraCache-ESI-Shared-Parent: 1\" -hdr \"X-UltraCache-ESI-Private-Count: 0\" -hdr \"X-Origin-Generation: one-parent-generation\" -body {<html><esi:include src=\"/shared-cookie-vary-fragment\"/></html>}",
+      "accept\nrxreq\nexpect req.url == \"/shared-cookie-vary-fragment\"\nexpect req.http.Cookie == <undef>\ntxresp -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: public, max-age=120\" -body {one-public-fragment}"
+    ],
+    "requests": [
+      "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"",
+      "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-Cache-Hits == \"1\"",
+      "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: sbjs_current=visitorA; sbjs_current_add=visitorA; sbjs_first=visitorA; sbjs_first_add=visitorA; sbjs_migrations=visitorA; sbjs_session=visitorA; sbjs_udata=visitorA\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-Cache-Hits == \"2\"",
+      "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie: sbjs_current=visitorB; sbjs_current_add=visitorB; sbjs_first=visitorB; sbjs_first_add=visitorB; sbjs_migrations=visitorB; sbjs_session=visitorB; sbjs_udata=visitorB; _ga=another-shared\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-Cache-Hits == \"3\"",
+      "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-Cache-Hits == \"4\""
+    ]
   }
 ]
