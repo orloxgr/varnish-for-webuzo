@@ -518,6 +518,45 @@ and mocked external management/routing/purge endpoints, checking unchanged saved
 central/site choices and reset values, both profile invalidations, and no repeat
 purge/activation. `test_user_switching_defaults.py` separately checks the visible
 row, compiled request/response choices, exact profile fingerprint delta, manual
-choices/reset and native declared-origin request/issuer ownership. These new .11
-Linux apply/native tests and the fixed actual Basic counter await separate Lab
-qualification; earlier .10 results do not establish their acceptance.
+choices/reset and native declared-origin request/issuer ownership. The new .11
+Lab qualification is recorded below; earlier .10 results alone do not establish
+its acceptance.
+
+### Bundle .11 qualification — 21 November 2026
+
+The coordinating Linux/Lab owner reported eight methods passed per adapter:
+all seven User Switching default/wire/manual/reset methods plus the normal
+`.10 → .11` apply method. Both runs had zero skips, errors or failures:
+
+| Adapter | Qualified source | Methods passed | Elapsed |
+| --- | --- | --- | --- |
+| Hestia | `f1fa49f1c8d22b27cf196da8c3909465a1a2012d` | 8 | 72.417 s |
+| Webuzo | `9faba84b09af5149feb095a3de3813670ca4ac08` | 8 | 73.378 s |
+
+The actual native Varnish suites verified plain/secure/old-user prefix matches,
+declared creation/renewal/deletion response attributes, independent manual three
+actions and partial reset. The normal apply regression verified both changed
+profile fingerprints, ten invalidation requests, unchanged stored choices and
+zero repeat invalidations. Its external control/routing/purge endpoints remain
+mocked; it does not claim actual HTTP object purging from those mocks.
+
+The separate actual WordPress/provider counter was fixed on both adapters,
+including a sequential rerun asserting the adapter-specific Basic profile
+header. UltraCache and its advanced-cache drop-in were absent. The real native
+switch-off issuer's actor cookies produced queryless PASS with a private/no-store
+response and the actor's return region. The independent empty-cookie guest got
+MISS followed by HIT without the return region; the direct origin guest also
+had no region. No fabricated cookie or policy override was used. Actual HTTPS
+secure-cookie issuance remains outside this counter's claims.
+
+WordPress imported the identical canonical .11 files and regenerated its UC PHP
+projection with the existing builder at source `d04b0298dbb87d165821e52fd9abe3df8c133fdf`. Normal ZIP installation
+and all 467-file readback checks passed on clean and upgrade sites. The Lab owner
+also reported 140 actual editor/storage/request/response/Variant/reset checks
+passed per run, preserving saved actions and defaults across the installations.
+These are separate application receipts, not results inferred from native mocks.
+
+All native C/VCC/header/VCL/module-builder sources remain unchanged from the
+qualified diagnostic routing follow-up. Final coordinated WordPress browser and
+nonce-lifetime checks are still in progress. Work-branch publication and local
+candidate packaging do not constitute final main/tag/release acceptance.

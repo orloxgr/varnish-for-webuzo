@@ -29,8 +29,10 @@ These receipts qualify the follow-up; final coordinated distribution is pending.
 Bundle `2026.11.20.11` adds the visible User Switching Basic Private / UC Shared
 prefix. Both fingerprints change; the new normal `.10 → .11` apply test checks
 both invalidations and preserves saved actions/reset. See the common .11 section
-for exact provenance, counter scope, hashes and pending qualification. Prior .10
-qualification does not establish .11 acceptance.
+for exact provenance, counter scope and fingerprints. The .11 suites passed eight
+methods each on Linux (Webuzo 73.378 seconds), with no skip/error/failure. Both real
+no-UltraCache Basic switch-off counters passed actor PASS and clean guest MISS/HIT.
+Final coordinated browser/nonce and distribution acceptance remain pending.
 
 ## Bundled cookie database
 
