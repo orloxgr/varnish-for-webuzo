@@ -161,3 +161,22 @@ Tar-only development deployments must invalidate the affected PHP-FPM OPcache
 entries: an overlay can change file contents while preserving an archive mtime.
 The fixture invalidated its plugin and drop-in files through PHP-FPM before
 testing the normal endpoint; it did not modify endpoint or capability behavior.
+
+### Native panel response memory
+
+The root worker serializes the policy table once. The PHP bridge validates its
+small receipt and the private response file's identity, permissions and owner,
+then sends that JSON document without expanding it into PHP arrays and encoding
+it again. Session identity, CSRF, demo restrictions and owner scope are checked
+before the worker request. This avoids exhausting the native panel's memory
+budget while delivering a complete table; no PHP memory setting is changed.
+
+A constrained native PHP regression retains 64 MiB of framework context and
+delivers a 14,166,199-byte response under `memory_limit=128M`. The previous bridge
+exhausted that limit at the final `json_encode`; the updated bridge delivered an
+identical complete document at a peak of 111,714,304 bytes and removed its IPC
+files. The fully loaded administrator panel on the disposable Webuzo lab also
+returned valid HTTP 200 JSON containing all 2,300 unique rows, both independent
+profile columns and the complete site selector (22,108,233 bytes), with the
+native 128 MiB PHP configuration unchanged. These checks cover response delivery
+and editor behavior, not application cacheability or Varnish warm-up results.

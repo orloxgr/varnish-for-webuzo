@@ -41,7 +41,7 @@ function wvw_page() {
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') { wvw_theme(); exit; }
     theme_for_act('wvw_theme', 'varnish-for-webuzo');
 }
-function wvw_bridge(array $request): array {
+function wvw_bridge(array $request): string {
     global $W;
     $identity = bin2hex(random_bytes(32));
     $path = '/run/varnish-for-webuzo/' . $identity . '.json';
@@ -58,16 +58,20 @@ function wvw_bridge(array $request): array {
         }
         fclose($handle); $handle = null;
         $result = $W->wexec('/usr/bin/python3 -I -B ' . escapeshellarg(__DIR__ . '/src/addon.py') . ' --request ' . $identity);
-        $data = json_decode(implode("\n", $result['output'] ?? []), true);
+        $json = implode("\n", $result['output'] ?? []);
+        $data = json_decode($json, true);
         if (!is_array($data)) throw new RuntimeException('Invalid worker response.');
         if (($data['response'] ?? '') === $identity) {
             $response = '/run/varnish-for-webuzo/' . $identity . '.response';
             $info = lstat($response);
             if ($info === false || ($info['mode'] & 0170000) !== 0100000 || ($info['mode'] & 0777) !== 0600 || $info['nlink'] !== 1 || $info['uid'] !== posix_geteuid()) throw new RuntimeException('Invalid private response file.');
-            $data = json_decode(file_get_contents($response), true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($data)) throw new RuntimeException('Invalid worker response.');
+            // The root worker has already serialized this authenticated response.
+            // Expanding the complete cookie table into PHP arrays and encoding it
+            // again exhausts the native panel's memory before it can send JSON.
+            $json = file_get_contents($response);
+            if ($json === false) throw new RuntimeException('Could not read the private worker response.');
         }
-        return $data;
+        return $json;
     } finally {
         if (is_resource($handle)) fclose($handle);
         if (is_file($path)) unlink($path);
@@ -75,7 +79,7 @@ function wvw_bridge(array $request): array {
         if (is_file($response)) unlink($response);
     }
 }
-function wvw_api(string $csrf, bool $demo): array {
+function wvw_api(string $csrf, bool $demo): string {
     return wvw_bridge(wvw_api_request($csrf, $demo));
 }
 function wvw_api_request(string $csrf, bool $demo): array {
@@ -115,8 +119,8 @@ function wvw_theme() {
             }
         }
         try { $result = wvw_api($csrf, !empty($user['demo']) || !empty($globals['demo'])); }
-        catch (Throwable $exception) { $result = ['ok'=>false,'error'=>$exception->getMessage()]; }
-        echo json_encode($result, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+        catch (Throwable $exception) { $result = json_encode(['ok'=>false,'error'=>$exception->getMessage()], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE); }
+        echo $result;
         return;
     }
     $escape = static fn($value) => htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');

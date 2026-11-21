@@ -312,6 +312,19 @@ python3 -m unittest discover -s tests -v
 /usr/local/emps/bin/php tests/test_panel.php
 ```
 
+The large-response regression runs only on the disposable native Webuzo lab,
+where the addon IPC directory already exists:
+
+```sh
+/usr/local/emps/bin/php -d memory_limit=128M tests/test_panel_json_memory.php
+```
+
+It retains simulated framework memory, exercises the real PHP panel entry point
+with a complete large worker response, verifies its byte count and SHA-256, and
+checks IPC cleanup. Its worker fixture does not execute native commands, save
+settings or apply a VCL. Native HTTP requests must additionally verify the full
+panel/framework route; the regression alone is not a browser or framework test.
+
 The browser-policy integration runner uses two enabled disposable sites. It
 creates assets as their hosting users, applies central settings and site overrides,
 checks actual native responses, and restores the original browser settings:
