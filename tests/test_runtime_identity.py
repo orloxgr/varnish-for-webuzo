@@ -15,11 +15,14 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import native
 import routing
 import service
+import vcl_cli
+import native_test_accounts
 
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Linux/root managed files')
 class RuntimeIdentity(unittest.TestCase):
     def setUp(self):
+        native_test_accounts.install(self)
         self.temp=tempfile.TemporaryDirectory(dir='/var/lib',prefix='wvw-runtime-')
         self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
@@ -63,6 +66,7 @@ class RuntimeIdentity(unittest.TestCase):
         self.addCleanup(lambda:process.wait(timeout=10))
         self.addCleanup(process.terminate)
         def admin(*args):
+            if args[0]=='vcl.load':return vcl_cli.load('127.0.0.1:'+str(port),secret,*args[1:])
             return native.run('/usr/bin/varnishadm','-T','127.0.0.1:'+str(port),'-S',secret,*args)
         deadline=time.monotonic()+10
         while True:
@@ -73,6 +77,11 @@ class RuntimeIdentity(unittest.TestCase):
             time.sleep(.05)
         # varnishadm accepts native 201 but returns a truncated source body.
         self.assertNotEqual(admin('vcl.show','boot').rstrip(),source.rstrip())
+        # Reproduce the old timeout's late-registered, source-deleted candidate.
+        orphan='wvw_'+'c'*64+'_'+'d'*32
+        orphan_path=self.root/'generations'/(orphan+'.vcl')
+        orphan_path.write_text(source+'# old timed-out generation\n')
+        admin('vcl.load',orphan,str(orphan_path));orphan_path.unlink()
         site=test_profiles.site();site['enabled']=False
         config=dict(installed=True,sites={site['id']:site},gateway='e'*64,origin='f'*64)
         active=self.root/'active.vcl';active.write_text(source)
@@ -94,6 +103,7 @@ class RuntimeIdentity(unittest.TestCase):
             self.assertFalse(any(call.args[0]=='vcl.show' for call in calls.call_args_list))
             self.assertIsNone(process.poll())
             self.assertFalse(engine.JOURNAL.exists())
+            self.assertNotIn(orphan,admin('vcl.list'))
 
 
 if __name__=='__main__':unittest.main()

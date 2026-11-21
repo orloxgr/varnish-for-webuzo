@@ -1,6 +1,14 @@
 # Varnish for Webuzo
 
-Version **0.12.0**. The UltraCache profile adds request-owned pre-header cookie
+Version **0.12.1** fixes false VCL-load failures when native compilation takes
+longer than ten seconds. The addon waits for the native load result, checks the
+complete VCLI status frame and verifies the registered generation before the
+normal apply can activate it. Real errors retain the working policy and expose
+only a safe category/status; original diagnostics remain root-private at
+`/var/lib/varnish-for-webuzo/last-vcl-error.json`.
+See [load validation and scope](docs/VCL-LOAD-VALIDATION.md).
+
+The UltraCache profile adds request-owned pre-header cookie
 delivery, scoped private-fragment TTL, actual application-private documents and
 public-fragment TTL/error containment. **Basic stays best effort without ESI.**
 Cookie Database remains the sole cookie classification authority. This candidate

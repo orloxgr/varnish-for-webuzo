@@ -15,11 +15,13 @@ import repository
 import service
 import state
 import cache_size
+import native_test_accounts
 
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Native Linux/root lifecycle')
 class NativeActivation(unittest.TestCase):
     def setUp(self):
+        native_test_accounts.install(self)
         self.temp=tempfile.TemporaryDirectory(dir='/var/lib',prefix='wvw-lifecycle-')
         self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)

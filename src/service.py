@@ -14,6 +14,7 @@ import repository
 import native
 import routing
 import state
+import vcl_cli
 
 UNIT=Path('/etc/systemd/system/varnish-for-webuzo.service')
 ADMIN_SECRET=routing.CONFIG/'admin.secret'
@@ -27,7 +28,10 @@ def installed():return Path('/usr/sbin/varnishd').is_file()
 def running():
     return native.run('systemctl','show','varnish-for-webuzo','--property=ActiveState','--value').strip()=='active'
 
-def admin(*args):return native.run('/usr/bin/varnishadm','-T','127.0.0.1:6086','-S',ADMIN_SECRET,'-t','10',*args)
+def admin(*args):
+    if args and args[0]=='vcl.load':
+        return vcl_cli.load('127.0.0.1:6086',ADMIN_SECRET,*args[1:])
+    return native.run('/usr/bin/varnishadm','-T','127.0.0.1:6086','-S',ADMIN_SECRET,'-t','10',*args)
 
 def current_source():
     """Read an owned content-addressed generation without a CLI source dump.
@@ -169,13 +173,54 @@ def prepare():
 def write_vcl(path,content):
     state.write(path,content.encode());os.chown(path,0,grp.getgrnam(DAEMON).gr_gid);path.chmod(0o640)
 
+def load_diagnostic(name,error,verification=None):
+    # Compiler output may echo VCL, site credentials or inline C. Only a fixed
+    # category/status reaches the panel; the original belongs to root alone.
+    status_code=error.status if isinstance(error,vcl_cli.LoadFailure) else None
+    kind=error.kind if isinstance(error,vcl_cli.LoadFailure) else 'load-verification'
+    reason=('Native CLI status '+str(status_code)) if status_code is not None else {
+        'cli-communication':'CLI communication failure',
+        'invalid-cli-reply':'Invalid or incomplete CLI reply',
+        'load-verification':'VCL registration could not be verified'}[kind]
+    try:
+        state.save(state.ROOT/'last-vcl-error.json',dict(time_utc=time.time(),candidate=name,
+            category=kind,status=status_code,diagnostic=str(error),verification_diagnostic=verification))
+    except Exception:
+        return '. '+reason+'. Root-private diagnostics could not be saved'
+    return '. '+reason+'. Root-private diagnostics: /var/lib/varnish-for-webuzo/last-vcl-error.json'
+
 def load(content):
     name='wvw_'+hashlib.sha256(content.encode()).hexdigest()+'_'+secrets.token_hex(16)
     path=routing.CONFIG/'generations'/(name+'.vcl');write_vcl(path,content)
-    try:admin('vcl.load',name,str(path))
-    except Exception:
-        path.unlink();raise RuntimeError('Varnish rejected the candidate policy; existing policy retained') from None
-    active=next(line.split()[-1] for line in admin('vcl.list').splitlines() if line.strip().startswith('active'))
+    try:
+        admin('vcl.load',name,str(path))
+    except Exception as error:
+        # A lost CLI reply does not prove rejection: the manager may already
+        # have loaded this exact generation. Never activate an unverified VCL.
+        verification=None
+        try:
+            listing=admin('vcl.list')
+            entries=[line.split() for line in listing.splitlines() if line.split()]
+            active=next(parts[-1] for parts in entries if parts[0]=='active')
+            if any(parts[-1]==name for parts in entries):return active,name
+            absent=True
+        except Exception as check_error:
+            absent=False;verification=str(check_error)
+        diagnostic=load_diagnostic(name,error,verification)
+        rejected=isinstance(error,vcl_cli.LoadFailure) and error.rejected
+        if absent:
+            path.unlink()
+            detail='Varnish rejected the candidate policy' if rejected else 'Varnish could not load the candidate policy'
+        else:
+            detail='The candidate VCL load result could not be confirmed'
+        raise RuntimeError(detail+'; existing policy retained'+diagnostic) from None
+    try:
+        entries=[line.split() for line in admin('vcl.list').splitlines() if line.split()]
+        active=next(parts[-1] for parts in entries if parts[0]=='active')
+        if not any(parts[-1]==name for parts in entries):raise ValueError('Candidate is not registered')
+    except Exception as error:
+        diagnostic=load_diagnostic(name,error)
+        raise RuntimeError('The candidate VCL load result could not be confirmed; existing policy retained'+diagnostic) from None
     return active,name
 
 def prune():
@@ -186,6 +231,10 @@ def prune():
         try:admin('vcl.discard',parts[-1])
         except RuntimeError:continue
         path=routing.CONFIG/'generations'/(parts[-1]+'.vcl')
+        # Old command timeouts could leave a registered VCL after the old
+        # loader had already deleted its source. Discarding it is sufficient.
+        state.trusted(path.parent,True)
+        if not path.exists() and not path.is_symlink():continue
         state.trusted(path);path.unlink()
 
 def purge(site):
