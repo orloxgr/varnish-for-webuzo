@@ -11,6 +11,8 @@ sub scp_init {
     unset req.http.X-UltraCache-ESI-Error-Contained;
     unset req.http.X-UltraCache-Delivery-Outcome;
     unset req.http.X-UltraCache-VCL-Delivery-Outcome-Version;
+    unset req.http.X-UltraCache-VCL-Cookie-Delivery-Version;
+    unset req.http.X-UltraCache-Cookie-Delivery;
     unset req.http.X-UltraCache-Application-Private;
     unset req.http.X-SCP-Private-Key;
     unset req.http.X-SCP-Private-Lookup;
@@ -139,6 +141,8 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-ESI-Error-Contained;
     unset bereq.http.X-UltraCache-Delivery-Outcome;
     unset bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version;
+    unset bereq.http.X-UltraCache-VCL-Cookie-Delivery-Version;
+    unset bereq.http.X-UltraCache-Cookie-Delivery;
     unset bereq.http.X-UltraCache-Application-Private;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-UltraCache-Delivery-Public-Selection-Version;
@@ -249,6 +253,7 @@ sub scp_backend_response {
     # ordinary origin response cannot store a delivery verdict in the parent.
     unset beresp.http.X-UltraCache-Delivery-Outcome;
     unset beresp.http.X-UltraCache-VCL-Delivery-Outcome-Version;
+    unset beresp.http.X-UltraCache-VCL-Cookie-Delivery-Version;
     # Static and dynamic responses both retain functional Cookie variation.
     # Only resolved Shared pairs are omitted from the internal Cookie key.
     call scp_representation_response;
@@ -257,6 +262,7 @@ sub scp_backend_response {
 sub scp_deliver {
     unset resp.http.X-UltraCache-Delivery-Outcome;
     unset resp.http.X-UltraCache-VCL-Delivery-Outcome-Version;
+    unset resp.http.X-UltraCache-VCL-Cookie-Delivery-Version;
     call scp_private_deliver;
     unset resp.http.X-SCP-Personal-Delivery;
     unset resp.http.X-SCP-Public-Fragment;
@@ -280,6 +286,7 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Actions;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
+    else { unset resp.http.X-UltraCache-Cookie-Delivery; }
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0) {
         set resp.http.X-UltraCache-Delivery-Outcome = cookie_handoff.delivery_outcome();
     }

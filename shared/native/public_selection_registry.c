@@ -244,6 +244,7 @@ static int public_selection_parse(struct continuation *d) {
     d->public_parent = s->parent; s->parent = NULL;
     d->fragments = s->fragments; s->fragments = NULL; d->occurrences = s->occurrences;
     d->public_deadline = d->prepare_response_time+(double)d->public_parent->fresh_remaining;
+    d->cookie_delivery = s->cookie_delivery;
     d->snapshot_ready = d->recovery_ready = 1;
     return 1;
 }

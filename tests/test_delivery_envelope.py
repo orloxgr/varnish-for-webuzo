@@ -56,6 +56,8 @@ class DeliveryEnvelope(unittest.TestCase):
         cls.lib.delivery_envelope_parse.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_char_p,
             ctypes.c_char_p,ctypes.c_uint64,ctypes.POINTER(Pointer),ctypes.POINTER(ParentPointer),ctypes.POINTER(DocumentPointer)]
         cls.lib.delivery_envelope_parse.restype=ctypes.c_int
+        cls.lib.delivery_cookie_envelope_parse.argtypes=cls.lib.delivery_envelope_parse.argtypes[:5]+[ctypes.c_int]+cls.lib.delivery_envelope_parse.argtypes[5:]
+        cls.lib.delivery_cookie_envelope_parse.restype=ctypes.c_int
         cls.lib.delivery_free_fragments.argtypes=[Pointer]
         cls.lib.delivery_free_fragments.restype=None
         cls.lib.delivery_public_parent_free.argtypes=[ParentPointer]
@@ -80,13 +82,16 @@ class DeliveryEnvelope(unittest.TestCase):
         assert folder.name.startswith('uc-delivery-envelope-')
         cls.folder.cleanup()
 
-    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False,with_cache=False,with_document=False):
+    def parse(self,value,*,request='123',url='/article?q=original',occurrences=3,with_snapshot=False,with_cache=False,with_document=False,cookie_delivery=None):
         data=json.dumps(value,ensure_ascii=True).encode() if isinstance(value,dict) else value
         out=Pointer()
         parent=ParentPointer()
         document=DocumentPointer()
-        ok=self.lib.delivery_envelope_parse(data,len(data),request.encode(),url.encode(),occurrences,
-            ctypes.byref(out),ctypes.byref(parent),ctypes.byref(document))
+        args=[data,len(data),request.encode(),url.encode(),occurrences]
+        if cookie_delivery is not None:args.append(int(cookie_delivery))
+        args += [ctypes.byref(out),ctypes.byref(parent),ctypes.byref(document)]
+        parser=self.lib.delivery_envelope_parse if cookie_delivery is None else self.lib.delivery_cookie_envelope_parse
+        ok=parser(*args)
         result={};cache={}
         try:
             if not ok:
@@ -120,6 +125,20 @@ class DeliveryEnvelope(unittest.TestCase):
             self.lib.delivery_public_parent_free(parent)
             self.lib.delivery_private_document_free(document)
 
+    def test_cookie_only_empty_coverage_is_explicit_and_request_bound(self):
+        value=dict(schemaVersion=1,requestId='123',originalUrl='/article?q=original',
+            cookieDelivery=True,renderedFragments=[])
+        self.assertEqual(self.parse(value,occurrences=0,cookie_delivery=True),{})
+        self.assertIsNone(self.parse(value,occurrences=0))
+        self.assertIsNone(self.parse(value,occurrences=0,cookie_delivery=False))
+        self.assertIsNone(self.parse(value,occurrences=0,cookie_delivery=True,request='another'))
+        for flag in (False, 'true', 1, None):
+            changed=dict(value,cookieDelivery=flag)
+            self.assertIsNone(self.parse(changed,occurrences=0,cookie_delivery=True))
+        missing=dict(value);missing.pop('cookieDelivery')
+        self.assertIsNone(self.parse(missing,occurrences=0,cookie_delivery=True))
+        raw=json.dumps(value).replace('"cookieDelivery": true','"cookieDelivery": true, "cookieDelivery": true')
+        self.assertIsNone(self.parse(raw.encode(),occurrences=0,cookie_delivery=True))
     def test_real_c_parser_preserves_utf8_escapes_binary_html_and_property_order(self):
         value=sample()
         html='Ελληνικά 😀 / " \\ \t\r\n\b\f \x00 τέλος'

@@ -47,6 +47,7 @@ sub scp_selection_capabilities {
         set resp.http.X-UltraCache-VCL-Capabilities = resp.http.X-UltraCache-VCL-Capabilities + ",public-selection";
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
         set resp.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
+        set resp.http.X-UltraCache-VCL-Cookie-Delivery-Version = "1";
         set resp.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();
         set resp.http.X-UltraCache-VCL-Public-Selection-Native-Policy = req.http.X-SCP-Selection-Native-Policy;
         set resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy = cookie_handoff.selection_wordpress_policy(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
@@ -101,6 +102,7 @@ sub scp_selection_origin {
     # authenticated capabilities request, not these request fields.
     set bereq.http.X-UltraCache-VCL-Public-Selection-Version = "1";
     set bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
+    set bereq.http.X-UltraCache-VCL-Cookie-Delivery-Version = "1";
     set bereq.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();
     set bereq.http.X-UltraCache-VCL-Public-Selection-Native-Policy = bereq.http.X-SCP-Selection-Native-Policy;
 }

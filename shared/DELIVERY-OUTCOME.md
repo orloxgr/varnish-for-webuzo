@@ -45,3 +45,9 @@ skips. These cover Debug OFF/ON, strict fields, failed/bad-bound/incomplete
 prepares, private documents, public selection, actual capability headers and
 forged client/origin/cached verdicts. Actual WordPress/provider acceptance and
 full panel installation are additional scopes.
+
+The separately negotiated observed-issuer contract also reports the completed
+cookie-only operation with zero private fragments. Its final work-required flag
+lets warm-up require the same verified outcome; see `COOKIE-ONLY-DELIVERY.md`.
+An ordinary unmarked plain HIT remains unverified by this prepare-specific
+mechanism and does not gain an application call.

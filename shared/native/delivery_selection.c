@@ -211,11 +211,14 @@ static int selection_header_binding(struct delivery_public_selection *s) {
             for (end = (char *)value; *end; ++end) if (*end < '0' || *end > '9') return 0;
             errno = 0; count = strtoull(value,&end,10);
             if (errno || *end || count != s->occurrences) return 0;
+        } else if (selection_case(h->line,n,"x-ultracache-cookie-delivery")) {
+            bit = 8;
+            if (strcmp(value,"1") || !s->cookie_delivery) return 0;
         } else if (selection_case(h->line,n,"x-ultracache-cookie-settings") && strcmp(value,s->wordpress_policy)) return 0;
         if (bit && (seen&bit)) return 0;
         seen |= bit;
     }
-    return seen == 7;
+    return seen == (s->cookie_delivery ? 15u : 7u);
 }
 static int selection_fragments(struct reader *r, struct delivery_fragment **out, uint64_t *total) {
     if (!take(r,'[')) return 0;
@@ -247,6 +250,7 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         else if (equal(key,"headers")) bit = 32;
         else if (equal(key,"renderedFragments")) bit = 64;
         else if (equal(key,"wordpressPolicyDigest")) bit = 128;
+        else if (equal(key,"cookieDelivery")) bit = 256;
         else goto invalid;
         if (seen&bit) goto invalid;
         seen |= bit;
@@ -256,6 +260,9 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         } else if (bit == 128) {
             if (!string(r,&text) || !selection_hex(text) || !equal(text,wordpress_policy)) goto invalid;
             memcpy(s->wordpress_policy,text.data,64);
+        } else if (bit == 256) {
+            if (!literal_true(r)) goto invalid;
+            s->cookie_delivery = 1;
         } else if (bit == 2) { if (!selection_updates(r,&s->updates)) goto invalid; }
         else if (bit == 4) {
             size_t i;
@@ -269,7 +276,7 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if (seen != 255 || total != s->occurrences || !selection_header_binding(s) ||
+    if (seen != (s->cookie_delivery ? 511u : 255u) || total != s->occurrences || !selection_header_binding(s) ||
         !delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) goto invalid;
     *output = s; return 1;
 invalid:
@@ -365,7 +372,7 @@ int delivery_selection_candidate(const struct delivery_public_selection *s,
         int replaced = 0;
         if (!end) end = p+strlen(p);
         while (name < end && (*name == ' ' || *name == '\t')) ++name;
-        equals = memchr(name,'=',(size_t)(end-name));
+        equals = end > name ? memchr(name,'=',(size_t)(end-name)) : NULL;
         if (equals) for (u = s->updates; u; u = u->next)
             if (strlen(u->name) == (size_t)(equals-name) && !memcmp(u->name,name,(size_t)(equals-name))) { replaced = 1; break; }
         if (!replaced && end > name) {

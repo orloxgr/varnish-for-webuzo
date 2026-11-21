@@ -16,7 +16,7 @@ Header._fields_=[('next',ctypes.POINTER(Header)),('line',ctypes.c_void_p)]
 class Selection(ctypes.Structure):
     _fields_=[('policy',ctypes.c_char*65),('wordpress_policy',ctypes.c_char*65),
         ('manifest',ctypes.c_void_p),('target',ctypes.c_void_p),('occurrences',ctypes.c_uint64),
-        ('updates',ctypes.POINTER(Update)),('headers',ctypes.POINTER(Header)),
+        ('cookie_delivery',ctypes.c_uint),('updates',ctypes.POINTER(Update)),('headers',ctypes.POINTER(Header)),
         ('parent',ctypes.POINTER(PublicParent)),('fragments',ctypes.POINTER(Fragment))]
 SelectionPointer=ctypes.POINTER(Selection)
 NATIVE='a'*64
@@ -89,6 +89,22 @@ class PublicSelection(unittest.TestCase):
         result=self.parse(sample())
         self.assertEqual((result['policy'],result['wordpress'],result['occurrences']),(NATIVE,WORDPRESS,0))
         self.assertEqual(result['body'],b'<html>EUR20</html>')
+    def test_observed_cookie_delivery_requires_strict_matching_flag_and_header(self):
+        value=sample();selected=value['selectedPublic']
+        selected['cookieDelivery']=True
+        selected['headers'].append('X-UltraCache-Cookie-Delivery: 1')
+        self.assertIsNotNone(self.parse(value))
+        for flag in (False, 1, 'true', None):
+            changed=copy.deepcopy(value);changed['selectedPublic']['cookieDelivery']=flag
+            self.assertIsNone(self.parse(changed))
+        changed=copy.deepcopy(value);changed['selectedPublic']['headers'].pop()
+        self.assertIsNone(self.parse(changed))
+        changed=copy.deepcopy(value);changed['selectedPublic'].pop('cookieDelivery')
+        self.assertIsNone(self.parse(changed))
+        changed=copy.deepcopy(value);changed['selectedPublic']['headers'].append('X-UltraCache-Cookie-Delivery: 1')
+        self.assertIsNone(self.parse(changed))
+        raw=json.dumps(value).replace('"cookieDelivery": true','"cookieDelivery": true, "cookieDelivery": true')
+        self.assertIsNone(self.parse(raw.encode()))
     def test_legal_header_optional_whitespace_is_preserved_without_changing_binding(self):
         value=sample()
         value['selectedPublic']['headers']=[line.replace(': ',':\t')+' \t' for line in value['selectedPublic']['headers']]

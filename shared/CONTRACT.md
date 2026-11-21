@@ -440,3 +440,10 @@ Registered non-resolver applications prepare only an eligible actual MISS. Plain
 warm HITs retain zero backend work; parents with private slots retain one bound
 prepare per visit. See `COLD-PUBLIC-SELECTION.md` for lookup keys, scope and
 qualification boundaries. This does not add ESI to Basic or a generic issuer.
+
+### Observed issuer delivery without private fragments
+
+The separate Cookie-Delivery version1 contract permits a signed observed-issuer
+publication to prepare actual owner cookies with zero private fragments. See
+`COOKIE-ONLY-DELIVERY.md` for strict boolean/header binding, cost, privacy and
+capability requirements. Unmarked plain HITs retain zero backend work.

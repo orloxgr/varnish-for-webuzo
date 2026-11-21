@@ -37,6 +37,7 @@ struct delivery_public_selection {
     char policy[65], wordpress_policy[65];
     char *manifest, *target;
     uint64_t occurrences;
+    unsigned cookie_delivery;
     struct delivery_cookie_update *updates;
     struct delivery_header *headers;
     struct delivery_public_parent *parent;
@@ -65,6 +66,10 @@ int delivery_selection_digest(const unsigned char *body, size_t length, char dig
  * Output is all-or-nothing and owned by the caller on success. */
 int delivery_envelope_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, uint64_t occurrences,
+    struct delivery_fragment **output, struct delivery_public_parent **public_parent,
+    struct delivery_private_document **document);
+int delivery_cookie_envelope_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, uint64_t occurrences, int cookie_delivery,
     struct delivery_fragment **output, struct delivery_public_parent **public_parent,
     struct delivery_private_document **document);
 void delivery_public_parent_free(struct delivery_public_parent *parent);

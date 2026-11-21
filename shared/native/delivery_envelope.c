@@ -89,6 +89,12 @@ static int take(struct reader *r, char c) {
     ++r->offset;
     return 1;
 }
+static int literal_true(struct reader *r) {
+    whitespace(r);
+    if (r->length-r->offset < 4 || memcmp(r->buffer+r->offset,"true",4)) return 0;
+    r->offset += 4;
+    return 1;
+}
 static int equal(struct text s, const char *literal) {
     size_t length = strlen(literal);
     return s.length == length && !memcmp(s.data,literal,length);
@@ -274,7 +280,8 @@ static int fragment(struct reader *r, uint64_t remaining,
 }
 static int fragments(struct reader *r, uint64_t expected, struct delivery_fragment **out) {
     uint64_t total = 0, n;
-    if (!take(r,'[') || take(r,']')) return 0;
+    if (!take(r,'[')) return 0;
+    if (take(r,']')) return expected == 0;
     for (;;) {
         if (!fragment(r,expected-total,out,&n)) return 0;
         total += n;
@@ -414,8 +421,8 @@ static int private_document(struct reader *r, struct delivery_private_document *
     return private_document_type(r,output,1);
 }
 
-int delivery_envelope_parse(const char *body, size_t length,
-    const char *request_id, const char *original_url, uint64_t occurrences,
+static int delivery_envelope_read(const char *body, size_t length,
+    const char *request_id, const char *original_url, uint64_t occurrences, int cookie_delivery,
     struct delivery_fragment **output, struct delivery_public_parent **snapshot,
     struct delivery_private_document **document) {
     struct reader r;
@@ -427,7 +434,7 @@ int delivery_envelope_parse(const char *body, size_t length,
     *output = NULL;
     *snapshot = NULL;
     *document = NULL;
-    if (!body || !request_id || !original_url || !length || length == SIZE_MAX || !occurrences) return 0;
+    if (!body || !request_id || !original_url || !length || length == SIZE_MAX || (!occurrences && !cookie_delivery)) return 0;
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
     if (!r.buffer) return 0;
     memcpy(r.buffer,body,length); r.buffer[length] = '\0';
@@ -441,6 +448,7 @@ int delivery_envelope_parse(const char *body, size_t length,
         else if (equal(key,"renderedFragments")) bit = 8;
         else if (equal(key,"publicParent")) bit = 16;
         else if (equal(key,"privateDocument")) bit = 32;
+        else if (equal(key,"cookieDelivery")) bit = 64;
         else goto done;
         if (seen&bit) goto done;
         seen |= bit;
@@ -450,11 +458,16 @@ int delivery_envelope_parse(const char *body, size_t length,
         } else if (bit == 8) {
             if (!fragments(&r,occurrences,output)) goto done;
         } else if (bit == 16) { if (!public_parent(&r,snapshot)) goto done; }
+        else if (bit == 64) { if (!cookie_delivery || !literal_true(&r)) goto done; }
         else if (!private_document(&r,document)) goto done;
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
     }
     whitespace(&r);
+    if (cookie_delivery) {
+        if (!(seen&64)) goto done;
+        seen &= ~64u;
+    }
     ok = (seen == 15 || seen == 31 || seen == 39) && r.offset == length;
 done:
     free(r.buffer);
@@ -464,6 +477,19 @@ done:
         delivery_private_document_free(*document); *document = NULL;
     }
     return ok;
+}
+
+int delivery_envelope_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, uint64_t occurrences,
+    struct delivery_fragment **output, struct delivery_public_parent **snapshot,
+    struct delivery_private_document **document) {
+    return delivery_envelope_read(body,length,request_id,original_url,occurrences,0,output,snapshot,document);
+}
+int delivery_cookie_envelope_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, uint64_t occurrences, int cookie_delivery,
+    struct delivery_fragment **output, struct delivery_public_parent **snapshot,
+    struct delivery_private_document **document) {
+    return delivery_envelope_read(body,length,request_id,original_url,occurrences,cookie_delivery,output,snapshot,document);
 }
 
 #include "delivery_selection.c"

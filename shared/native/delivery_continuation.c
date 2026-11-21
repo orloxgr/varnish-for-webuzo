@@ -18,6 +18,7 @@ struct continuation {
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
     unsigned cold_entry;
+    unsigned cookie_delivery;
     unsigned debug_fallback;
     unsigned outcome; /* 0 unverified, 1 verified, 2 degraded; this owner only */
     double public_deadline, prepare_response_time;
@@ -68,6 +69,7 @@ static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
 static const hdr_t h_contained_error = HDR("X-UltraCache-ESI-Error-Contained");
 static const hdr_t h_delivery_outcome = HDR("X-UltraCache-Delivery-Outcome");
 static const hdr_t h_lookup_variant = HDR("X-SCP-Admin-Variant");
+static const hdr_t h_cookie_delivery = HDR("X-UltraCache-Cookie-Delivery");
 static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
@@ -137,8 +139,8 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
 
 static int delivery_parse(struct continuation *d) {
     if (d->selection_entry) return public_selection_parse(d);
-    int ok = delivery_envelope_parse(d->body,d->length,d->request_id,d->url,
-        d->occurrences,&d->fragments,&d->public_parent,&d->document);
+    int ok = delivery_cookie_envelope_parse(d->body,d->length,d->request_id,d->url,
+        d->occurrences,(int)d->cookie_delivery,&d->fragments,&d->public_parent,&d->document);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
     return ok;
 }
@@ -385,6 +387,9 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             else http_Unset(ctx->http_bereq,h_private_cache_version);
             if (d->phase == D_PREPARE) http_ForceHeader(ctx->http_bereq,h_private_document_version,"1");
             else http_Unset(ctx->http_bereq,h_private_document_version);
+            if (d->cookie_delivery && d->phase == D_PREPARE)
+                http_ForceHeader(ctx->http_bereq,h_cookie_delivery,"1");
+            else http_Unset(ctx->http_bereq,h_cookie_delivery);
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
             if (d->manifest) http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
@@ -525,6 +530,11 @@ VCL_BOOL vmod_selection_raw(VRT_CTX, struct vmod_priv *priv) {
     pthread_mutex_unlock(&lock); return raw;
 }
 
+static int delivery_cookie_marker(const struct http *hp) {
+    const char *value;
+    if (!http_GetHdr(hp,h_cookie_delivery,&value)) return 0;
+    return http_CountHdr(hp,h_cookie_delivery) == 1 && !strcmp(value,"1") ? 1 : -1;
+}
 VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target,
     VCL_INT occurrences, VCL_BOOL begin) {
     struct continuation *d = priv->priv;
@@ -532,8 +542,11 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     if (ctx->req->esi_level > 0) return 0;
     if (!d) {
         struct handoff *entry;
+        int cookie_delivery;
         if (!begin || !target || !*target) return 0;
-        if (!delivery_relative(target) || occurrences < 1 ||
+        cookie_delivery = delivery_cookie_marker(ctx->http_resp);
+        if (cookie_delivery < 0 || !delivery_relative(target) || occurrences < 0 ||
+            (!occurrences && !cookie_delivery) ||
             ctx->req->restarts+2 > ctx->req->max_restarts) return -1;
         d = calloc(1,sizeof(*d));
         if (!d) return -1;
@@ -559,6 +572,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         pthread_mutex_unlock(&lock);
         snprintf(d->request_id,sizeof(d->request_id),"%" PRIu64,entry->key);
         d->restart = ctx->req->restarts; d->occurrences = (uint64_t)occurrences;
+        d->cookie_delivery = (unsigned)cookie_delivery;
         d->parent = ctx->req->objcore;
         d->phase = D_QUEUED;
         return 1;
@@ -600,7 +614,9 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     if (d->phase == D_READY || d->phase == D_RECOVERY) {
         if (http_GetStatus(ctx->http_resp) != 200 ||
             (d->phase == D_READY && ctx->req->objcore != d->parent && !d->recovery_ready) ||
-            !target || strcmp(target,d->target) || occurrences < (d->selection_entry ? 0 : 1) ||
+            !target || strcmp(target,d->target) ||
+            delivery_cookie_marker(ctx->http_resp) != (int)d->cookie_delivery ||
+            occurrences < ((d->selection_entry || d->cookie_delivery) ? 0 : 1) ||
             (uint64_t)occurrences != d->occurrences) {
             if (d->phase == D_READY && d->recovery_ready && !d->recovery_sent &&
                 ctx->req->restarts < ctx->req->max_restarts) {
@@ -649,6 +665,8 @@ VCL_BOOL vmod_delivery_synth(VRT_CTX, struct vmod_priv *priv) {
             }
             http_SetHeader(ctx->http_resp,line);
         }
+        if (d->cookie_delivery) http_ForceHeader(ctx->http_resp,h_cookie_delivery,"1");
+        else http_Unset(ctx->http_resp,h_cookie_delivery);
         http_ForceHeader(ctx->http_resp,H_Cache_Control,"private, no-store");
         http_ForceHeader(ctx->http_resp,h_surrogate_control,"no-store");
         if (*d->document->content_type) http_ForceHeader(ctx->http_resp,H_Content_Type,d->document->content_type);

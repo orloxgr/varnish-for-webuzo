@@ -149,6 +149,7 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
     set bereq.http.X-UltraCache-Delivery-Version = "1";
     set bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
+    set bereq.http.X-UltraCache-VCL-Cookie-Delivery-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Recovery-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Request-Snapshot-Version = "1";
     # Reuse the existing signed private capability probe; no new probe or
@@ -317,8 +318,9 @@ sub scp_ultracache_deliver {
     if (req.esi_level == 0 && req.method == "GET" &&
         (obj.hits > 0 || resp.http.X-SCP-Delivery-Public-Snapshot == "1") &&
         req.http.X-SCP-Pass != "1" && !obj.uncacheable && resp.status == 200 &&
-        resp.http.X-UltraCache-ESI-Shared-Parent == "1" &&
-        resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$" &&
+        ((resp.http.X-UltraCache-ESI-Shared-Parent == "1" &&
+          resp.http.X-UltraCache-ESI-Private-Count ~ "^[1-9][0-9]*$") ||
+         (resp.http.X-UltraCache-Cookie-Delivery == "1" && resp.http.X-UltraCache-ESI-Private-Count == "0")) &&
         resp.http.X-UltraCache-Delivery-Prepare) {
         set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver(
             resp.http.X-UltraCache-Delivery-Prepare,
@@ -332,6 +334,7 @@ sub scp_ultracache_deliver {
     if (req.http.X-SCP-Delivery-State == "2") { return (synth(200, "Private document")); }
     if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }
     unset req.http.X-SCP-Delivery-State;
+    if (resp.http.X-UltraCache-Cookie-Delivery == "1") { call scp_private_delivery; }
     unset resp.http.X-UltraCache-Delivery-Prepare;
     unset resp.http.X-UltraCache-Delivery-Version;
     unset resp.http.X-UltraCache-Delivery-Phase;
