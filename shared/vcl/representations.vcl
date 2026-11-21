@@ -142,11 +142,13 @@ sub scp_representation_recv {
 }
 sub scp_representation_response {
     std.collect(beresp.http.Vary);
-    # Apache static files and actual page-cache HITs identify stored HTML,
-    # including ESI parents. A new dynamic STORE is not this contract.
+    # Apache static, an actual page-cache HIT, or this authenticated selected
+    # public snapshot identifies the publication's real image representation.
+    # An ordinary dynamic STORE or a request/response marker cannot attest it.
     if (bereq.http.X-SCP-HTML-Accept && !beresp.uncacheable &&
         beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html(;|$)" &&
-        (beresp.http.X-Ultra-Cache-Source == "apache-static" || beresp.http.X-UltraCache-Source == "apache-static" ||
+        (cookie_handoff.selection_local() ||
+         beresp.http.X-Ultra-Cache-Source == "apache-static" || beresp.http.X-UltraCache-Source == "apache-static" ||
          beresp.http.X-Ultra-Cache == "HIT") &&
         beresp.http.X-UltraCache-Cacheable == "1" &&
         beresp.http.X-UltraCache-Variant ~ "^(orig|webp|avif)$" &&

@@ -33,3 +33,20 @@ acceptance remains separate. The stopped-origin plain-HIT fixture verifies zero
 backend work, while the private-parent fixture verifies one prepare for two
 contexts and three slots. Existing public-selection scope, invalidation,
 continuation, owner-binding and outcome regressions also remain applicable.
+
+## Representation metadata on selected public snapshots
+
+The producer must rebuild its normal owned Vary contract when stored source
+headers intentionally omit it. Include actual image-bucket/cacheability and
+cookie-policy ownership fields with the public parent. Different representation
+contexts retain different signed manifests even when HTML bytes are identical.
+Missing Accept Vary can select another bucket's parent and must never be worked
+around by relaxing the manifest/publication binding.
+
+An authenticated native selected-public snapshot is actual public artifact
+provenance even when freshly created. Semantic image-Accept projection accepts
+that native-owned source alongside actual page-cache HIT/apache-static sources,
+while retaining Cacheable:1, known bucket, public storage and no Set-Cookie checks.
+The producer does not fabricate an inner HIT. Ordinary origin STORE and client
+markers cannot claim this provenance. Equivalent browser Accept forms reuse the
+appropriate warmed bucket with its original signed prepare pointer.

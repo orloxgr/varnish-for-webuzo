@@ -12,9 +12,10 @@ from test_public_selection_runtime import control
 
 
 class ImagePublications(Application):
-    def __init__(self, image_vary=True):
+    def __init__(self, image_vary=True, inner_status="HIT"):
         super().__init__(private=True)
         self.image_vary=image_vary
+        self.inner_status=inner_status
     def __call__(self,path,headers):
         accept=headers.get('Accept','')
         bucket='avif' if 'image/avif' in accept else 'webp' if 'image/webp' in accept else 'orig'
@@ -29,16 +30,20 @@ class ImagePublications(Application):
         selected['headers']=[line for line in selected['headers'] if not line.startswith(('Vary:','X-UltraCache-Delivery-Prepare:'))]
         selected['headers'] += ['Vary: '+('Accept, Cookie' if self.image_vary else 'Cookie'),
             'X-UltraCache-Delivery-Prepare: /index.php?ultracache_delivery='+quote(manifest,safe=''),
-            'X-UltraCache-Variant: '+bucket,'X-UltraCache-Cacheable: 1','X-Ultra-Cache: HIT']
+            'X-UltraCache-Variant: '+bucket,'X-UltraCache-Cacheable: 1']
+        if self.inner_status is not None:selected['headers'].append('X-Ultra-Cache: '+self.inner_status)
         return json.dumps(output),fields
 
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required')
 class SelectionRepresentations(unittest.TestCase):
-    def application(self):
-        return ImagePublications()
     def test_three_equal_body_publications_keep_their_own_locator_and_reuse_each_bucket(self):
-        app=self.application();path='/same-body-three-publications'
+        self.exercise(ImagePublications())
+    def test_fresh_selected_snapshot_without_inner_hit_uses_its_actual_representation(self):
+        for status in (None, 'STORE'):
+            with self.subTest(inner_status=status):self.exercise(ImagePublications(inner_status=status))
+    def exercise(self,app):
+        path='/same-body-three-publications'
         with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
             self.assertEqual(control(get,enabled=True,names='')[0],200)
             visits=[('text/html','orig','MISS'),('text/html,image/webp','webp','MISS'),
@@ -56,6 +61,21 @@ class SelectionRepresentations(unittest.TestCase):
                 self.assertEqual(body.count('nonce:'+visitor),1)
                 self.assertIn('Accept',dict(fields).get('Vary',''))
             self.assertEqual([phase for _,phase,_ in app.calls],['public-select']*3+['prepare']*3)
+
+    def test_ordinary_store_and_client_marker_cannot_claim_authenticated_selection(self):
+        for profile in ('basic','ultracache'):
+            calls=[]
+            def origin(path,headers):
+                calls.append(headers.get('Accept'))
+                return '<html>ordinary STORE</html>',[('Content-Type','text/html'),
+                    ('Cache-Control','public, max-age=120'),('Vary','Accept'),
+                    ('X-UltraCache-Variant','webp'),('X-UltraCache-Cacheable','1'),
+                    ('X-Ultra-Cache','STORE'),('X-SCP-Selection-Local','1')]
+            with self.subTest(profile=profile),proxy(profile,origin) as get:
+                for accept in ('text/html,image/webp','text/html,application/xhtml+xml,image/webp'):
+                    status,fields,body=get('/ordinary-store',extra={'Accept':accept,'X-SCP-Selection-Local':'1'})
+                    self.assertEqual((status,cache(fields),body),(200,'MISS','<html>ordinary STORE</html>'))
+                self.assertEqual(len(calls),2)
 
 
 if __name__=='__main__':unittest.main()
