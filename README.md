@@ -6,6 +6,8 @@ successful authenticated prepare under the existing WordPress Debug control.
 The complete envelope and owner binding must validate first. No browser header,
 new envelope field or control is introduced; absent diagnostics add no new log.
 See the [shared diagnostic contract](shared/CONTRACT.md#debug-only-prepared-fallback-diagnostic).
+The [qualification record](shared/PREPARE-DIAGNOSTICS.md) separates paired native
+checks from actual WordPress wire acceptance.
 
 The native loader also fixes false VCL-load failures when compilation takes
 longer than ten seconds. The addon waits for the native load result, checks the
