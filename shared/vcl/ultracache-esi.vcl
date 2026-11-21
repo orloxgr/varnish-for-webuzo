@@ -148,6 +148,7 @@ if (bereq.http.X-ESI-Private-Request == "1") {
     # Revision 2 does not advertise private TTL or preflight cookie issuance.
     set bereq.http.X-UltraCache-ESI-Transport-Version = "2";
     set bereq.http.X-UltraCache-Delivery-Version = "1";
+    set bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Recovery-Version = "1";
     set bereq.http.X-UltraCache-Delivery-Request-Snapshot-Version = "1";
     # Reuse the existing signed private capability probe; no new probe or
@@ -354,6 +355,7 @@ sub vcl_backend_error {
     }
 }
 sub vcl_synth {
+    unset resp.http.X-UltraCache-Delivery-Outcome;
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level > 0 &&
         req.http.X-SCP-Fragment-HTTP-Failure ~ "^[1-5][0-9][0-9]$") {
         std.log("UltraCache signed child HTTP failure " + req.http.X-SCP-Fragment-HTTP-Failure);
@@ -369,6 +371,7 @@ sub vcl_synth {
         if (req.esi_level == 0) {
             set resp.http.X-Cache = "PASS";
             call scp_private_document_diagnostics;
+            set resp.http.X-UltraCache-Delivery-Outcome = cookie_handoff.delivery_outcome();
         }
         return (deliver);
     }

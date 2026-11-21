@@ -1,6 +1,7 @@
 """Read real HTTP header fields: cookie commas are not header separators."""
 import contextlib
 import http.client
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import shutil
@@ -64,6 +65,9 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
             selected=dict(configuration or {})
             if policies is not None:selected['cookie_policies']=policies
             source = program(profile, config=selected,site_settings=site_settings,other_profile=other_profile).replace('${s1_port}', str(origin.server_port))
+            module = os.environ.get('SCP_TEST_COOKIE_MODULE')
+            if module:
+                source = source.replace('import cookie_handoff;', 'import cookie_handoff from "'+module+'";')
             if transform is not None:
                 source = transform(source)
             (root / 'policy.vcl').write_text(source)

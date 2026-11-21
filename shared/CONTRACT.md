@@ -1,5 +1,8 @@
 # Shared cache policy contract
 
+The [request-owned prepared delivery outcome](DELIVERY-OUTCOME.md) is separate
+from the cached parent's HIT status and the optional Debug-only fallback log.
+
 `cache-policy.vcl` and its explicit `vcl/*.vcl` source modules are shipped
 byte-for-byte in each distribution. `vcl_source.py` expands them into one complete
 runtime program before compilation (see `VCL-ARCHITECTURE.md`). They contain

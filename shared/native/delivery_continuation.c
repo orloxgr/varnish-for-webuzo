@@ -18,6 +18,7 @@ struct continuation {
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
     unsigned debug_fallback;
+    unsigned outcome; /* 0 unverified, 1 verified, 2 degraded; this owner only */
     double public_deadline, prepare_response_time;
     uint64_t occurrences;
     /* Identity check only; exact installed-engine lifetime still needs native
@@ -64,6 +65,7 @@ static const hdr_t h_selection_scope = HDR("X-UltraCache-Delivery-Public-Selecti
 static const char selection_content_type[] = "application/vnd.ultracache.delivery+json";
 static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
 static const hdr_t h_contained_error = HDR("X-UltraCache-ESI-Error-Contained");
+static const hdr_t h_delivery_outcome = HDR("X-UltraCache-Delivery-Outcome");
 static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
@@ -437,7 +439,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     struct handoff *entry;
     struct vmod_priv *filter;
     struct continuation *d;
-    const char *encoding, *recovery, *selection_version = NULL, *content_type = NULL, *contained = NULL;
+    const char *encoding, *recovery, *selection_version = NULL, *content_type = NULL, *contained = NULL, *outcome = NULL;
     unsigned i;
     int owned, valid;
     if (!task || !task->key) return 0;
@@ -487,6 +489,13 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
         clear_fields(entry->fields); entry->fields = first; first = NULL;
         entry->delivery->debug_fallback = http_CountHdr(ctx->http_beresp,h_contained_error) == 1 &&
             http_GetHdr(ctx->http_beresp,h_contained_error,&contained) && !strcmp(contained,"1");
+        entry->delivery->outcome = 0;
+        if (http_CountHdr(ctx->http_beresp,h_delivery_outcome) == 1 &&
+            http_GetHdr(ctx->http_beresp,h_delivery_outcome,&outcome)) {
+            if (!strcmp(outcome,"degraded")) entry->delivery->outcome = 2;
+            else if (!strcmp(outcome,"verified") && !entry->delivery->debug_fallback)
+                entry->delivery->outcome = 1;
+        }
         entry->delivery->recovery_ready = !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
             (!strcmp(recovery,"public-snapshot-v1") || !strcmp(recovery,"request-snapshot-v1"));
         entry->delivery->snapshot_ready = !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
@@ -498,6 +507,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     http_Unset(ctx->http_beresp,H_Set_Cookie);
     http_Unset(ctx->http_beresp,h_set_cookie2);
     http_Unset(ctx->http_beresp,h_contained_error);
+    http_Unset(ctx->http_beresp,h_delivery_outcome);
     if (!valid) VRT_fail(ctx,"UltraCache prepare response rejected");
     return 1;
 }
@@ -608,6 +618,17 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         return 0;
     }
     return -1;
+}
+
+VCL_STRING vmod_delivery_outcome(VRT_CTX, struct vmod_priv *priv) {
+    const struct continuation *d = priv->priv;
+    /* Capture is provisional. Only complete, bound, final delivery may report
+     * its outcome; ordinary late ESI and failed/raw responses stay unknown. */
+    if (ctx->req->esi_level || !d || d->failed ||
+        (d->phase != D_DELIVERED && d->phase != D_DOCUMENT_SENT)) return "unverified";
+    if (d->outcome == 1) return "verified";
+    if (d->outcome == 2) return "degraded";
+    return "unverified";
 }
 
 VCL_BOOL vmod_delivery_synth(VRT_CTX, struct vmod_priv *priv) {

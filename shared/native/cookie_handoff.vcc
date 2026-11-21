@@ -115,6 +115,13 @@ A fragment continuation appends authentic provider fields and returns 0 for fina
 Only begin=true may start a new continuation; resumed deliveries still receive
 the actual parent metadata even when the parent was fetched after eviction.
 
+$Function STRING delivery_outcome(PRIV_TOP)
+$Restrict vcl_deliver vcl_synth
+
+Request-owned verified/degraded/unverified outcome after complete authenticated
+prepare and final delivery validation. Never reads a cached parent health field.
+An ordinary late ESI child or missing/invalid producer outcome stays unverified.
+
 $Function BOOL delivery_synth(PRIV_TOP)
 $Restrict vcl_synth
 
