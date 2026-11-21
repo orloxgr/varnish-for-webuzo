@@ -47,14 +47,21 @@
     integrationBox.append(syncLabel,element('p','Configure the matching site token in UltraCache’s Varnish settings, then enable this connection. No password or server administration key is used. Disabling a saved connection restores the application’s baseline policy before disconnecting.'),endpoint,testConnection,connectionResult);
     const filters = element('div'); filters.className = 'wvw-toolbar';
     const search = element('input'); search.type = 'search'; search.placeholder = 'Search cookies, descriptions or providers'; search.setAttribute('aria-label', 'Search cookie policies');
-    const actionFilter = element('select'); actionFilter.setAttribute('aria-label', 'Filter cookie action in either profile');actionFilter.title='Match either the Basic or UltraCache column.';
-    actionFilter.append(new Option('All actions', ''));
-    for (const [value, [label]] of Object.entries(ACTIONS)) actionFilter.append(new Option(label, value));
+    const actionFilters = {};
+    filters.append(search);
+    for (const profile of PROFILES) {
+      const label = element('label', PROFILE_LABEL[profile] + ' '), select = element('select');
+      select.setAttribute('aria-label', 'Filter ' + PROFILE_LABEL[profile] + ' cookie action');
+      select.title = 'Match only the ' + PROFILE_LABEL[profile] + ' column. Both profile filters apply when selected.';
+      select.append(new Option('All actions', ''));
+      for (const [value, [caption]] of Object.entries(ACTIONS)) select.append(new Option(caption, value));
+      actionFilters[profile] = select; label.append(select); filters.append(label);
+    }
     const sourceFilter = element('select'); sourceFilter.setAttribute('aria-label', 'Filter cookie policy source');
     for (const [value, label] of [['','All rows'],['overrides','Overrides in this scope'],['bundled','Bundled defaults'],['central','Central choices'],['custom','Custom rows'],['proposals','New recognition proposals'],['recognition','Recognition database']]) sourceFilter.append(new Option(label, value));
     const size = element('select'); size.setAttribute('aria-label', 'Cookie policies per page');
     for (const value of ['20','50','100','500','all']) size.append(new Option(value === 'all' ? 'All' : value, value));
-    filters.append(search, actionFilter, sourceFilter, element('span', 'Show per page'), size);
+    filters.append(sourceFilter, element('span', 'Show per page'), size);
     const bulk = element('div'); bulk.className = 'wvw-toolbar';
     const bulkAction = element('select'); bulkAction.setAttribute('aria-label', 'Action for selected cookies');
     for (const [value, [label]] of Object.entries(ACTIONS)) bulkAction.append(new Option(label, value));
@@ -108,7 +115,7 @@
         if (source === 'proposals' && row.active_rule !== false && !row.from_proposal) return false;
         if (source === 'custom' && !row.id.startsWith('custom:')) return false;
         if (source === 'recognition' && !row.id.startsWith('ocd:')) return false;
-        return (!actionFilter.value || PROFILES.some(p=>row.actions[p]===actionFilter.value)) && (!term || [row.id, row.name, row.description, row.provider, row.category].join(' ').toLowerCase().includes(term));
+        return PROFILES.every(p => !actionFilters[p].value || row.actions[p] === actionFilters[p].value) && (!term || [row.id, row.name, row.description, row.provider, row.category].join(' ').toLowerCase().includes(term));
       });
     }
     function pagination() { const all = filtered(), amount = size.value === 'all' ? Math.max(all.length, 1) : Number(size.value); const pages = Math.max(1, Math.ceil(all.length / amount)); page = Math.min(page, pages); return {all, pages, visible: all.slice((page - 1) * amount, page * amount)}; }
@@ -224,7 +231,7 @@
       }catch(failure){error.textContent=failure.message;connectionResult.textContent='Connection check failed; saved settings are unchanged.';}
       finally{controls(false);render();}
     });
-    for (const input of [search, actionFilter, sourceFilter, size]) input.addEventListener(input === search ? 'input' : 'change', () => { page = 1; render(); });
+    for (const input of [search, ...Object.values(actionFilters), sourceFilter, size]) input.addEventListener(input === search ? 'input' : 'change', () => { page = 1; render(); });
     previous.addEventListener('click', () => { page--; render(); }); next.addEventListener('click', () => { page++; render(); });
     selectPage.addEventListener('change', () => { for (const row of pagination().visible) selectPage.checked ? selected.add(row.id) : selected.delete(row.id); renderCount(); });
     apply.addEventListener('click', () => { for (const row of rows) if (selected.has(row.id)) edit(row,{action:bulkAction.value},'basic'); render(); });
@@ -240,7 +247,7 @@
       if (!existing) rows.unshift({...rule, name, proposal:'variant', scope:model.scope, inherited:null, unsaved_new:true, reason:'Custom cookie policy.', policy_behavior:ACTIONS[basic][1],profile_actions:Object.fromEntries(PROFILES.map(p=>[p,{action:'variant',inherited_action:'variant',proposal:'variant',inherited_scope:'recognition'}]))});
       drafts.set(id, rule); changed(); return id;
     }
-    add.addEventListener('click', () => { if (!model) return; const id = appendRule(); search.value = ''; sourceFilter.value = ''; actionFilter.value = ''; page = 1; render(); body.querySelector('input[type=text]')?.focus(); });
+    add.addEventListener('click', () => { if (!model) return; const id = appendRule(); search.value = ''; sourceFilter.value = ''; for (const filter of Object.values(actionFilters)) filter.value = ''; page = 1; render(); body.querySelector('input[type=text]')?.focus(); });
     append.addEventListener('click', () => {
       if (!model) return; error.textContent = '';
       try {
@@ -251,7 +258,7 @@
           if(!name||!ACTIONS[basic]||!ACTIONS[ultra])throw new Error('Use shared, variant or private in both profile columns.');
           return [name,cells[offset+1],basic,ultra,offset&&rows.some(r=>r.id===cells[0])?cells[0]:null];
         });
-        for (const row of parsed) appendRule(...row); paste.value = ''; search.value = ''; sourceFilter.value = ''; actionFilter.value = ''; page = 1; render();
+        for (const row of parsed) appendRule(...row); paste.value = ''; search.value = ''; sourceFilter.value = ''; for (const filter of Object.values(actionFilters)) filter.value = ''; page = 1; render();
       } catch (failure) { error.textContent = failure.message; }
     });
     download.addEventListener('click', () => {

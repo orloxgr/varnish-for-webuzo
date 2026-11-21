@@ -79,3 +79,53 @@ await (product==='hestia'?ids.get('cookie-import'):find('button','Append pasted 
 payload=await save();const added=payload.rules.find(r=>r.match.value==='my_cookie');
 assert.ok(added,'Paste did not preserve tab-separated columns');assert.deepEqual(added.actions,{basic:'variant',ultracache:'private'});
 console.log(product+': two columns, three choices, isolated edits/reset, schema2 save and four-column paste passed');
+
+if (product === 'webuzo') {
+  const filterRoot = new Element('div'), actions = ['shared','variant','private'], filterRows = [];
+  for (const basic of actions) for (const ultracache of actions) for (let index = 0; index < 3; index++) {
+    const fixture = structuredClone(row);
+    fixture.id = `filter:${basic}:${ultracache}:${index}`;
+    fixture.match.value = `cookie_${basic}_${ultracache}_${index}`; fixture.match.kind = 'exact';
+    for (const [profile, action] of Object.entries({basic, ultracache})) {
+      fixture.profile_actions[profile] = {...fixture.profile_actions[profile],action,proposal:action,inherited_action:action,effective_action:action,reset_metadata:{proposal:action,effective_action:action}};
+    }
+    filterRows.push(fixture);
+  }
+  let requests = 0, downloaded;
+  class DownloadURL extends URL {
+    static createObjectURL(blob) { downloaded = blob; return 'blob:cookie-filter-test'; }
+    static revokeObjectURL() {}
+  }
+  context.URL = DownloadURL;
+  window.WebuzoCookiePolicies.mount(filterRoot, async action => {
+    requests++; assert.equal(action, 'cookie_policies_status', 'Filtering must not save or apply policies');
+    return {cookie_policies:{...initial,rows:filterRows,administrator:true,id:null,scope:'central',sites:[],enabled:true}};
+  });
+  await new Promise(resolve=>setImmediate(resolve));
+  const control = label => filterRoot.querySelectorAll('select').find(n=>n.getAttribute('aria-label')===label);
+  const filters = Object.fromEntries(Object.entries(labels).map(([p,label])=>[p,control('Filter '+label+' cookie action')]));
+  for (const filter of Object.values(filters)) assert.deepEqual(Array.from(filter.children,n=>n.value),['','shared','variant','private']);
+  const visibleNames = () => filterRoot.querySelector('tbody').querySelectorAll('input').filter(n=>n.getAttribute('aria-label')==='Cookie name').map(n=>n.value);
+  const setFilter = async (profile, value) => { filters[profile].value = value; await filters[profile].fire('change'); };
+  const button = label => filterRoot.querySelectorAll('button').find(n=>n.textContent===label);
+  await button('Next').fire('click'); assert.equal(visibleNames().length,7);
+  await setFilter('ultracache','shared'); assert.equal(visibleNames().length,9,'Changing a profile filter must return to the first page');
+  assert.ok(filterRoot.querySelectorAll('span').some(n=>n.textContent==='9 rows · Page 1/1'));
+  const pageSize = control('Cookie policies per page'); pageSize.value='all'; await pageSize.fire('change');
+  for (const profile of ['basic','ultracache']) for (const action of actions) {
+    await setFilter(profile==='basic'?'ultracache':'basic',''); await setFilter(profile,action);
+    assert.equal(visibleNames().length,9);
+    assert.ok(visibleNames().every(name=>name.split('_')[profile==='basic'?1:2]===action));
+  }
+  await setFilter('basic','private'); await setFilter('ultracache','shared');
+  assert.equal(visibleNames().length,3,'Both selected columns must match the same row');
+  await button('Download CSV').fire('click');
+  const csv = await downloaded.text();
+  assert.equal(csv.split('\r\n').length,4,'CSV must export precisely the rows matching both profile filters');
+  assert.ok(csv.includes('"cookie_private_shared_0"'));
+  await setFilter('basic','');
+  assert.equal(visibleNames().length,9);
+  assert.ok(visibleNames().includes('cookie_private_shared_0'),'UltraCache Shared must include Basic Private');
+  assert.equal(requests,1,'Filters and CSV must use the loaded table without server writes');
+  console.log('webuzo: independent profile filters, all three actions, combined matches, pagination reset and filtered CSV passed');
+}
