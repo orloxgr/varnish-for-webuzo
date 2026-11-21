@@ -81,6 +81,7 @@ sub scp_selection_recv {
          ((!req.http.Accept || req.http.Accept ~ "(^|,)[[:blank:]]*[*]/[*]([[:blank:];,]|$)") &&
           (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$")))) {
         set req.http.X-SCP-Selection-Operation = "begin";
+        set req.http.X-SCP-Selection-Eligible = "1";
         call scp_selection_context;
         unset req.http.X-SCP-Selection-Operation;
         if (req.http.X-SCP-Selection-State == "1") { return (pass); }
@@ -88,6 +89,9 @@ sub scp_selection_recv {
     }
     if (cookie_handoff.selection_manifest()) {
         set req.http.X-SCP-Admin-Variant = cookie_handoff.selection_variant();
+        # Native Vary/hash distinguishes absent from present-but-empty.
+        # A Shared-only cold selection must rejoin the original no-Variant key.
+        if (req.http.X-SCP-Admin-Variant == "") { unset req.http.X-SCP-Admin-Variant; }
     }
     unset req.http.X-SCP-Selection-State;
 }

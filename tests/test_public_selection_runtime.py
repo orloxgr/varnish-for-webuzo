@@ -321,23 +321,29 @@ class PublicSelectionRuntime(unittest.TestCase):
             self.assertEqual(shop.calls[-1][1],None)
             self.assertIn('USD10',get('/blog/')[2]);self.assertEqual(blog.calls[-1][1],'public-select')
 
-    def test_empty_resolver_boundary_shadows_ancestor_without_provider_entry(self):
+    def test_empty_resolver_boundary_prepares_only_its_own_cold_parent(self):
         resolver=Resolver()
-        with proxy('ultracache',resolver,policies=rules()) as get:
+        child=Resolver(scope='/blog/',wordpress_policy='c'*64)
+        def origin(path,headers):
+            base=path.split('?',1)[0]
+            return (child if base=='/blog' or base.startswith('/blog/') else resolver)(path,headers)
+        with proxy('ultracache',origin,policies=rules()) as get:
             self.declare(get)
             fields=self.declare(get,scope='/blog/',names='',wordpress_policy='c'*64)
             self.assertEqual(json.loads(fields['X-UltraCache-VCL-Public-Selection-Actions']),{})
             for path in ('/blog','/blog/','/blog/book/?next=/shop/'):
-                self.assertEqual(get(path)[2],'ordinary public')
+                self.assertIn('USD10',get(path)[2])
                 self.assertEqual(dict(get(path)[1])['X-Cache'],'HIT')
-            self.assertTrue(all(phase is None for _,phase,_ in resolver.calls))
+            self.assertEqual([phase for _,phase,_ in child.calls],['public-select']*3)
+            self.assertEqual(resolver.calls,[])
             self.assertIn('USD10',get('/blogger/')[2]);self.assertEqual(resolver.calls[-1][1],'public-select')
             # No-op query and a nested application's registration preserve the
             # empty boundary. Removing a nested scope cannot remove its parent.
             self.assertEqual(control(get,scope='/blog/')[1]['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],'c'*64)
             self.assertEqual(control(get,enabled=True,scope='/blog/shop/')[0],200)
             self.assertEqual(control(get,enabled=False,scope='/blog/shop/')[0],200)
-            self.assertEqual(get('/blog/new/')[2],'ordinary public')
+            self.assertIn('USD10',get('/blog/new/')[2])
+            self.assertEqual(child.calls[-1][2]['X-UltraCache-Delivery-Public-Selection-Scope'],'/blog/')
     def test_browser_cache_directives_still_select_and_hit_correct_target(self):
         resolver=Resolver()
         with proxy('ultracache',resolver,policies=rules()) as get:
@@ -366,8 +372,8 @@ class PublicSelectionRuntime(unittest.TestCase):
             self.assertEqual(actions,{CURRENCY:'shared',LANGUAGE:'shared'})
             self.assertEqual(get('/book/',CURRENCY+'=USD')[0],200)
             _,fields,body=get('/book/',CURRENCY+'=EUR')
-            self.assertEqual(dict(fields)['X-Cache'],'HIT');self.assertEqual(body,'ordinary public')
-            self.assertEqual([phase for _,phase,_ in resolver.calls],[None])
+            self.assertEqual(dict(fields)['X-Cache'],'HIT');self.assertIn('USD10',body)
+            self.assertEqual([phase for _,phase,_ in resolver.calls],['public-select'])
         for profile in ('basic','ultracache'):
             resolver=Resolver()
             with self.subTest(profile=profile),proxy(profile,resolver,policies=rules('private','shared')) as get:

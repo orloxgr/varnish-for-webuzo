@@ -157,7 +157,7 @@ VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {
     return out;
 }
 VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
-    VCL_STRING site, VCL_STRING policy, VCL_STRING rules) {
+    VCL_STRING site, VCL_STRING policy, VCL_STRING rules, VCL_BOOL cold) {
     struct continuation *d;
     struct handoff *entry;
     struct public_declaration *declaration;
@@ -176,12 +176,17 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     if (!names || !wordpress_policy || !scope) { free(names); free(wordpress_policy); free(scope); return -1; }
     actions = public_actions(rules,names,&has_variant); free(names);
     if (!actions) { free(wordpress_policy); free(scope); return -1; }
-    if (!has_variant) { free(actions); free(wordpress_policy); free(scope); return 0; }
+    /* Dynamic resolvers run before lookup. A registered non-resolver boundary
+     * prepares on an actual cold MISS, leaving plain warm HITs alone. */
+    if ((!has_variant && !cold) || (has_variant && cold)) {
+        free(actions); free(wordpress_policy); free(scope); return 0;
+    }
     if (ctx->req->restarts+1 > ctx->req->max_restarts) { free(actions); free(wordpress_policy); free(scope); return -1; }
     d = calloc(1,sizeof(*d));
     if (!d) { free(actions); free(wordpress_policy); free(scope); return -1; }
     priv->priv = d; priv->methods = &delivery_methods;
-    d->phase = D_FAILED; d->selection_entry = 1; d->wordpress_policy = wordpress_policy; d->selection_actions = actions;
+    d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;
+    d->wordpress_policy = wordpress_policy; d->selection_actions = actions;
     d->selection_scope = scope;
     d->selection_policy = strdup(policy); d->selection_rules = strdup(rules ? rules : "");
     d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site);
@@ -189,6 +194,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         !delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
         !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
         !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)) return -1;
+    if (cold && !delivery_copy_header(ctx->http_req,h_lookup_variant,&d->lookup_variant)) return -1;
     for (i = 0; i < 6; ++i)
         if (!delivery_copy_header(ctx->http_req,conditional_headers[i],&d->conditional[i])) return -1;
     entry = calloc(1,sizeof(*entry));
@@ -220,6 +226,12 @@ static int public_selection_parse(struct continuation *d) {
     s = d->selection;
     if (!delivery_selection_candidate(s,d->cookie,d->selection_rules,&d->candidate)) return 0;
     d->variant = delivery_selection_projection(d->candidate,d->selection_rules);
+    if (d->cold_entry) {
+        char *original = delivery_selection_projection(d->cookie,d->selection_rules);
+        int same = original && d->variant && !strcmp(original,d->variant);
+        free(original);
+        if (!same) return 0;
+    }
     d->target = strdup(s->target); d->manifest = strdup(s->manifest);
     if (!d->variant || !d->target || !d->manifest) return 0;
     for (header = s->headers; header; header = header->next) {
@@ -235,6 +247,12 @@ static int public_selection_parse(struct continuation *d) {
     d->snapshot_ready = d->recovery_ready = 1;
     return 1;
 }
+VCL_BOOL vmod_selection_cold(VRT_CTX, struct vmod_priv *priv) {
+    const struct continuation *d = priv->priv;
+    return ctx->req->esi_level == 0 && d && d->selection_entry && d->cold_entry &&
+        (d->phase == D_READY || d->phase == D_RECOVERY || d->phase == D_DELIVERED);
+}
+
 VCL_STRING vmod_selection_manifest(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
     if (ctx->req->esi_level || !d || !d->selection_entry || !d->manifest ||
@@ -245,6 +263,7 @@ VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
     if (ctx->req->esi_level || !d || !d->selection_entry || !d->variant ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
+    if (d->cold_entry) return d->lookup_variant ? WS_Copy(ctx->ws,d->lookup_variant,-1) : NULL;
     return WS_Copy(ctx->ws,d->variant,-1);
 }
 VCL_BOOL vmod_selection_local(VRT_CTX, struct vmod_priv *priv) {

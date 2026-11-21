@@ -17,6 +17,7 @@ struct continuation {
     unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
+    unsigned cold_entry;
     unsigned debug_fallback;
     unsigned outcome; /* 0 unverified, 1 verified, 2 degraded; this owner only */
     double public_deadline, prepare_response_time;
@@ -27,7 +28,7 @@ struct continuation {
     const struct objcore *parent;
     char *url, *host, *site, *target, *manifest, *cookie, *encoding;
     char *selection_rules, *selection_policy, *wordpress_policy, *selection_actions, *selection_scope;
-    char *candidate, *variant;
+    char *candidate, *variant, *lookup_variant;
     char *conditional[6];
     char request_id[32];
     char *body;
@@ -66,6 +67,7 @@ static const char selection_content_type[] = "application/vnd.ultracache.deliver
 static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
 static const hdr_t h_contained_error = HDR("X-UltraCache-ESI-Error-Contained");
 static const hdr_t h_delivery_outcome = HDR("X-UltraCache-Delivery-Outcome");
+static const hdr_t h_lookup_variant = HDR("X-SCP-Admin-Variant");
 static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
@@ -92,7 +94,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     (void)ctx;
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
-    free(d->selection_actions); free(d->selection_scope); free(d->candidate); free(d->variant);
+    free(d->selection_actions); free(d->selection_scope); free(d->candidate); free(d->variant); free(d->lookup_variant);
     delivery_selection_free(d->selection);
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);

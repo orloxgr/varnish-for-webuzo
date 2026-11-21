@@ -9,6 +9,15 @@ sub scp_private_delivery {
 # client task that caused this fetch. No cookie value is stored in the object.
 sub scp_cookie_miss {
     if (req.esi_level == 0) {
+        if (req.http.X-SCP-Profile == "ultracache" && req.restarts == 0 &&
+            req.http.X-SCP-Selection-Eligible == "1") {
+            set req.http.X-SCP-Selection-Operation = "cold-begin";
+            call scp_selection_context;
+            unset req.http.X-SCP-Selection-Operation;
+            if (req.http.X-SCP-Selection-State == "1") { return (pass); }
+            if (req.http.X-SCP-Selection-State == "-1") { return (synth(503, "Cold public selection unavailable")); }
+            unset req.http.X-SCP-Selection-State;
+        }
         if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_recover()) {
             # Existing request-owned association and snapshot-only phase.
         } else {

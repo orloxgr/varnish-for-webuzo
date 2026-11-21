@@ -150,16 +150,25 @@ $Restrict vcl_recv vcl_synth
 Return the independent accepted WP policy identity.
 
 $Function STRING selection_actions(STRING rules, STRING names)
-$Restrict vcl_recv vcl_synth
+$Restrict vcl_recv vcl_miss vcl_synth
 
 Project exact names through the active generated ordered matcher. Existing
 unmatched-name behavior is Shared; no additional cookie decision list.
 
-$Function INT selection_begin(PRIV_TOP, STRING site, STRING policy, STRING rules)
-$Restrict vcl_recv
+$Function INT selection_begin(PRIV_TOP, STRING site, STRING policy, STRING rules, BOOL cold = 0)
+$Restrict vcl_recv vcl_miss
 
 After normal route/auth/cookie decisions: 1 owned original-route preparation,
-0 no negotiated active Variant resolver, -1 allocation/binding error.
+0 no applicable negotiated boundary at this stage, -1 allocation/binding error.
+Early receive resolves active provider variants. Cold MISS prepares a registered
+non-resolver boundary without turning a warm plain HIT into an application call.
+
+$Function BOOL selection_cold(PRIV_TOP)
+$Restrict vcl_hash
+
+Whether this validated selected parent belongs to the ordinary cold-lookup key.
+Its manifest still binds rendering, but does not create a separate publication
+namespace which would require an application call to rediscover on every HIT.
 
 $Function STRING selection_manifest(PRIV_TOP)
 $Restrict vcl_recv vcl_hash vcl_hit vcl_deliver

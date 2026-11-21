@@ -24,6 +24,7 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-Recovery;
     unset req.http.X-SCP-Cookie-Contract;
     unset req.http.X-SCP-Selection-Operation;
+    unset req.http.X-SCP-Selection-Eligible;
     unset req.http.X-SCP-Selection-State;
     unset req.http.X-SCP-Selection-Names;
     unset req.http.X-SCP-Selection-Scope;
@@ -187,6 +188,7 @@ sub scp_backend_fetch {
     }
     unset bereq.http.X-SCP-Selection-Native-Policy;
     unset bereq.http.X-SCP-Selection-Operation;
+    unset bereq.http.X-SCP-Selection-Eligible;
     unset bereq.http.X-SCP-Selection-State;
     unset bereq.http.X-SCP-Selection-Names;
     unset bereq.http.X-SCP-Selection-Scope;

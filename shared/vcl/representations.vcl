@@ -4,7 +4,7 @@ sub scp_cookie_hash {
     if (req.http.X-SCP-Profile == "ultracache") {
         hash_data("native-public-selection-epoch");
         hash_data(cookie_handoff.selection_epoch());
-        if (cookie_handoff.selection_manifest()) {
+        if (cookie_handoff.selection_manifest() && !cookie_handoff.selection_cold()) {
             hash_data("authenticated-public-publication");
             hash_data(cookie_handoff.selection_manifest());
         }

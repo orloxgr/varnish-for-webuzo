@@ -433,3 +433,10 @@ released native/application qualification and its boundaries. Basic enters
 neither ESI nor these continuation/private-document/private-TTL paths.
 No new panel controls, reverse policy bridge, provider-specific issuer or live
 configuration is introduced.
+
+### Registered cold public selection
+
+Registered non-resolver applications prepare only an eligible actual MISS. Plain
+warm HITs retain zero backend work; parents with private slots retain one bound
+prepare per visit. See `COLD-PUBLIC-SELECTION.md` for lookup keys, scope and
+qualification boundaries. This does not add ESI to Basic or a generic issuer.
