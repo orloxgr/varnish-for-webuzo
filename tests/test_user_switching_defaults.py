@@ -33,7 +33,7 @@ class UserSwitchingDefaults(unittest.TestCase):
     def test_visible_prefix_profile_choices_match_artifact_and_catalogue(self):
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         catalogue=load_catalogue();policy,metadata=defaults.bundle()
-        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.20.11',)*3)
+        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.21.1',)*3)
         for source in (artifact['rules'],policy['rules'],catalogue['policies']):
             for kind,name in MATCHES:
                 rows=[r for r in source if r['match']==dict(kind=kind,value=name)]
@@ -48,7 +48,10 @@ class UserSwitchingDefaults(unittest.TestCase):
     def test_new_explicit_row_changes_both_fingerprints_without_other_policy_deltas(self):
         import hashlib
         prior=json.loads((ROOT/'tests/fixtures/cookie-defaults-2026.11.20.10.json').read_text(encoding='utf-8'))
-        remaining=[r for r in defaults.defaults()['rules'] if r['match']!=dict(kind='prefix',value='wordpress_user_sw_')]
+        # Later CMS defaults are independent additions to the .11 bundle.
+        added_cms={'SSESS','SESS','PrestaShop-','joomla_user_state','joomla_remember_me_'}
+        remaining=[r for r in defaults.defaults()['rules'] if r['match']!=dict(kind='prefix',value='wordpress_user_sw_')
+                   and r['match']['value'] not in added_cms]
         for profile in ACTIONS:
             projection=sorted((r['match']['kind'],r['match']['value'],r['actions'][profile]) for r in remaining)
             old=hashlib.sha256(json.dumps(projection,ensure_ascii=True,separators=(',',':')).encode()).hexdigest()

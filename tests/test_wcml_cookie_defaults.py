@@ -25,7 +25,7 @@ class WcmlCookieDefaults(unittest.TestCase):
     def test_catalogue_artifact_and_derived_defaults_have_both_exact_variant_choices(self):
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))
         catalogue=load_catalogue();policy,metadata=defaults.bundle()
-        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.20.11',)*3)
+        self.assertEqual((artifact['version'],catalogue['version'],metadata['version']),('2026.11.21.1',)*3)
         for source in (artifact['rules'],policy['rules'],catalogue['policies']):
             for name in NAMES:
                 rows=[r for r in source if r['match']==dict(kind='exact',value=name)]

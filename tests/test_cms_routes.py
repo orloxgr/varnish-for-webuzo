@@ -169,7 +169,7 @@ class NativeCMS(unittest.TestCase):
         self.run_cms('drupal', [http.origin('/article', 'public'), http.origin('/article', 'private')],
                      [http.get('/article', 'public', cache='MISS'),
                       http.get('/article', 'private', ['Cookie: SSESSabcdef123456=alice'], cache='PASS'),
-                      'expect resp.http.X-Webuzo-Varnish-Reason == "drupal-authenticated-session"',
+                      'expect resp.http.X-Webuzo-Varnish-Reason == "cookie-policy-private"',
                       http.get('/article', 'public', cache='HIT')])
 
     def test_configured_query_identity_is_scoped_to_its_real_public_base(self):

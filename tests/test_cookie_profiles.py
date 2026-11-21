@@ -34,7 +34,7 @@ class CookieProfiles(unittest.TestCase):
             self.assertTrue(all(a in ('shared','variant','private') for a in r['actions'].values()))
             if r['actions']['basic']!=r['actions']['ultracache']:different.append(r['match'])
         self.assertCountEqual(different,[dict(kind='prefix',value=n) for n in
-            ('comment_author_','comment_author_url_','yith_wcwl_session_','wp_woocommerce_session_')]+[
+            ('comment_author_','comment_author_url_','yith_wcwl_session_','wp_woocommerce_session_','wordpress_user_sw_')]+[
             dict(kind='exact',value='yith_wcwl_session_'),
             dict(kind='exact',value='woocommerce_recently_viewed'),
             dict(kind='exact',value='woocommerce_items_in_cart'),

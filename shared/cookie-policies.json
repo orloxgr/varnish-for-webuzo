@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.20.11",
+  "version": "2026.11.21.1",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -2267,6 +2267,226 @@
         "ultracache": "shared"
       },
       "description": "User Switching 1.12.2 plain, secure and old-user authentication cookies select the personal switch-back region. Basic passes matching requests; UltraCache isolates the actual provider return link in a request-owned private fragment."
+    },
+    {
+      "id": "drupal-secure-session",
+      "match": {
+        "kind": "prefix",
+        "value": "SSESS"
+      },
+      "provider": "Drupal",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "authentication-session",
+        "authority": "provider"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://github.com/drupal/drupal/blob/11.2.0/core/lib/Drupal/Core/Session/SessionConfiguration.php"
+      ],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      },
+      "description": "Drupal HTTPS session cookie. The default is Private in both profiles; an explicit Shared HTML or Public variant choice uses the ordinary scoped cookie resolver."
+    },
+    {
+      "id": "drupal-session",
+      "match": {
+        "kind": "prefix",
+        "value": "SESS"
+      },
+      "provider": "Drupal",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "authentication-session",
+        "authority": "provider"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://github.com/drupal/drupal/blob/11.2.0/core/lib/Drupal/Core/Session/SessionConfiguration.php"
+      ],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      },
+      "description": "Drupal HTTP session cookie. The default is Private in both profiles; an explicit Shared HTML or Public variant choice uses the ordinary scoped cookie resolver."
+    },
+    {
+      "id": "prestashop-session",
+      "match": {
+        "kind": "prefix",
+        "value": "PrestaShop-"
+      },
+      "provider": "PrestaShop",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "authentication-session",
+        "authority": "provider"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://github.com/PrestaShop/PrestaShop/blob/9.0.0/classes/Cookie.php"
+      ],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      },
+      "description": "PrestaShop combined encrypted cookie can contain customer identity, authentication and cart state. The default is Private in both profiles; the site can explicitly select another action."
+    },
+    {
+      "id": "joomla-user-state",
+      "match": {
+        "kind": "exact",
+        "value": "joomla_user_state"
+      },
+      "provider": "Joomla!",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "authentication-session",
+        "authority": "provider"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://github.com/joomla/joomla-cms/blob/5.4.0/plugins/user/joomla/src/Extension/Joomla.php"
+      ],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      },
+      "description": "Joomla sets this login marker to logged_in after site login and deletes it on logout. The default is Private in both profiles; the selected cookie action remains overrideable."
+    },
+    {
+      "id": "joomla-remember-me",
+      "match": {
+        "kind": "prefix",
+        "value": "joomla_remember_me_"
+      },
+      "provider": "Joomla!",
+      "integration": null,
+      "htmlEffect": "private",
+      "cacheKey": "private",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "authentication-session",
+        "authority": "provider"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": false
+      },
+      "sources": [
+        "https://github.com/joomla/joomla-cms/blob/5.4.0/plugins/system/remember/src/Extension/Remember.php"
+      ],
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      },
+      "description": "Joomla uses this cookie to initiate remembered authentication. The default is Private in both profiles; the selected cookie action remains overrideable."
     }
   ]
 }

@@ -27420,8 +27420,68 @@
         "basic": "private",
         "ultracache": "shared"
       }
+    },
+    {
+      "id": "bundled:policy:drupal-secure-session",
+      "match": {
+        "kind": "prefix",
+        "value": "SSESS"
+      },
+      "description": "Drupal HTTPS session cookie. The default is Private in both profiles; an explicit Shared HTML or Public variant choice uses the ordinary scoped cookie resolver.",
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
+    },
+    {
+      "id": "bundled:policy:drupal-session",
+      "match": {
+        "kind": "prefix",
+        "value": "SESS"
+      },
+      "description": "Drupal HTTP session cookie. The default is Private in both profiles; an explicit Shared HTML or Public variant choice uses the ordinary scoped cookie resolver.",
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
+    },
+    {
+      "id": "bundled:policy:prestashop-session",
+      "match": {
+        "kind": "prefix",
+        "value": "PrestaShop-"
+      },
+      "description": "PrestaShop combined encrypted cookie can contain customer identity, authentication and cart state. The default is Private in both profiles; the site can explicitly select another action.",
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
+    },
+    {
+      "id": "bundled:policy:joomla-user-state",
+      "match": {
+        "kind": "exact",
+        "value": "joomla_user_state"
+      },
+      "description": "Joomla sets this login marker to logged_in after site login and deletes it on logout. The default is Private in both profiles; the selected cookie action remains overrideable.",
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
+    },
+    {
+      "id": "bundled:policy:joomla-remember-me",
+      "match": {
+        "kind": "prefix",
+        "value": "joomla_remember_me_"
+      },
+      "description": "Joomla uses this cookie to initiate remembered authentication. The default is Private in both profiles; the selected cookie action remains overrideable.",
+      "actions": {
+        "basic": "private",
+        "ultracache": "private"
+      }
     }
   ],
-  "version": "2026.11.20.11",
+  "version": "2026.11.21.1",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }
