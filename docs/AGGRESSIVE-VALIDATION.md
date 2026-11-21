@@ -1,5 +1,10 @@
 # Aggressive public HIT validation — 0.10.0
 
+Current cookie behavior is documented in [the shared contract](../shared/AGGRESSIVE-COOKIE-CHOICES.md).
+The 0.10.0 session-sharing observations below are historical. Aggressive mode
+no longer rewrites cookie actions; the zero-backend fixture now selects Shared
+cookies explicitly. Private defaults remain Private.
+
 Acceptance completed for the user-approved pure-VCL aggressive mode on the
 disposable Webuzo and Hestia labs. No customer server was changed or public
 release published by this validation.

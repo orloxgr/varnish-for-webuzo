@@ -42,6 +42,7 @@ def inventory(config,discover=False,discover_id=None,refresh_changed=False):
         site['cookie_policies']=copy.deepcopy(previous.get('cookie_policies'))
         site['cookie_integration']=copy.deepcopy(previous.get('cookie_integration'))
         site.update(aggressive.settings(previous))
+        site['cookie_rules_revision']=aggressive.COOKIE_RULE_REVISION
         site['cms_excluded_directories']=cms_discovery.exclusions(previous.get('cms_excluded_directories',[]))
         cms_inventory.retain(site,previous)
         if (discover or sid==discover_id or (refresh_changed and cms_inventory.root_changed(site))) and site.get('path'):
@@ -170,6 +171,7 @@ def apply(previous,next_config,cookie_force_sites=()):
                 changed=changed or old.get('cms_installations',[])!=site.get('cms_installations',[])
                 changed=changed or old.get('cms_cookies',[])!=site.get('cms_cookies',[])
                 changed=changed or aggressive.settings(old)!=aggressive.settings(site)
+                changed=changed or aggressive.cookie_rules_changed(old,site)
                 changed=changed or execution(previous.get('cookie_policies'),old.get('cookie_policies'),old.get('profile','basic'))!=execution(next_config.get('cookie_policies'),site.get('cookie_policies'),site.get('profile','basic'))
                 changed=changed or sid in cookie_purge_sites
                 changed=changed or profiles.selected(old)!=profiles.selected(site) or profiles.rules(previous,profiles.selected(site))!=profiles.rules(next_config,profiles.selected(site))

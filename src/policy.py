@@ -37,13 +37,13 @@ import cookie_handoff;
     admin_rules=[];response_rules=[];response_groups={};cookie_groups={}
     for site in sorted(sites.values(),key=lambda s:s['id']):
         if site.get('enabled') and not site.get('error'):
-            key=json.dumps([cookie_views.cookie_admin.project(cookie_views.normalize(site.get('cookie_policies')),profiles.selected(site)),aggressive.settings(site)['aggressive'],aggressive.session_names(site),profiles.selected(site)],sort_keys=True)
+            key=json.dumps([cookie_views.cookie_admin.project(cookie_views.normalize(site.get('cookie_policies')),profiles.selected(site)),profiles.selected(site)],sort_keys=True)
             cookie_groups.setdefault(key,dict(site=site,ids=[]))['ids'].append(site['id'])
     for group in cookie_groups.values():
         body=cookie_views.compile_recv(config,group['site'])
         condition=' || '.join('req.http.X-WV-Site == '+quoted(identity) for identity in group['ids'])
         if body:admin_rules.append('if ('+condition+') {\n'+body+'\n}')
-        rules=cookie_views.cookie_admin.response_rules(config.get('cookie_policies'),group['site'].get('cookie_policies'),aggressive_mode=aggressive.settings(group['site'])['aggressive'],automatic_shared=aggressive.session_names(group['site']),profile=profiles.selected(group['site']))
+        rules=cookie_views.cookie_admin.response_rules(config.get('cookie_policies'),group['site'].get('cookie_policies'),profile=profiles.selected(group['site']))
         response_groups.setdefault(rules,[]).extend(group['ids'])
     for rules,identities in response_groups.items():
         # Response matching has no row-ID diagnostics. Identical literal action

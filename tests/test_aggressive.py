@@ -46,18 +46,18 @@ class NativeAggressive(unittest.TestCase):
     def test_generic_session_cookie_is_forwarded_but_not_a_public_html_variant(self):
         for profile in ('basic','ultracache'):
             self.aggressive(profile,[http.origin('/?utm_source=A','public',headers=['Vary: Cookie'],cache='no-store',
-                expect=['expect req.http.Cookie == "PHPSESSID=alice; _ga=A"','expect req.url == "/?utm_source=A"'])],
-                [http.get('/?utm_source=A','public',['Cookie: PHPSESSID=alice; _ga=A'],cache='MISS'),
-                 http.get('/?utm_source=B','public',['Cookie: PHPSESSID=bob; _ga=B'],cache='HIT')])
+                expect=['expect req.http.Cookie == "_ga=alice; _ga=A"','expect req.url == "/?utm_source=A"'])],
+                [http.get('/?utm_source=A','public',['Cookie: _ga=alice; _ga=A'],cache='MISS'),
+                 http.get('/?utm_source=B','public',['Cookie: _ga=bob; _ga=B'],cache='HIT')])
 
     def test_session_response_cookie_is_not_replayed_to_another_visitor(self):
         for profile in ('basic','ultracache'):
-            self.aggressive(profile,[http.origin('/page','public',['Set-Cookie: PHPSESSID=alice; Path=/; HttpOnly','Vary: Cookie'],cache='no-cache, no-store'),
-                                     http.origin('/other','other',['Set-Cookie: PHPSESSID=bob; Path=/; HttpOnly'],cache='no-store')],
-                [http.get('/page','public',cache='MISS'),'expect resp.http.Set-Cookie == "PHPSESSID=alice; Path=/; HttpOnly"',
+            self.aggressive(profile,[http.origin('/page','public',['Set-Cookie: _ga=alice; Path=/; HttpOnly','Vary: Cookie'],cache='no-cache, no-store'),
+                                     http.origin('/other','other',['Set-Cookie: _ga=bob; Path=/; HttpOnly'],cache='no-store')],
+                [http.get('/page','public',cache='MISS'),'expect resp.http.Set-Cookie == "_ga=alice; Path=/; HttpOnly"',
                  http.get('/page','public',cache='HIT'),'expect resp.http.Set-Cookie == <undef>',
-                 http.get('/other','other',cache='MISS'),'expect resp.http.Set-Cookie == "PHPSESSID=bob; Path=/; HttpOnly"',
-                 http.get('/page','public',['Cookie: PHPSESSID=bob'],cache='HIT'),'expect resp.http.Set-Cookie == <undef>'])
+                 http.get('/other','other',cache='MISS'),'expect resp.http.Set-Cookie == "_ga=bob; Path=/; HttpOnly"',
+                 http.get('/page','public',['Cookie: _ga=bob'],cache='HIT'),'expect resp.http.Set-Cookie == <undef>'])
 
     def test_login_cart_actions_authentication_and_explicit_private_choices_still_pass(self):
         for profile in ('basic','ultracache'):

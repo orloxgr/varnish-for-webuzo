@@ -154,29 +154,14 @@ def executable(central=None, site=None,profile='basic'):
             for row in active(central, site,profile)]
 
 
-def response_rules(central=None, site=None, *, aggressive_mode=False, automatic_shared=(),profile='basic'):
+def response_rules(central=None, site=None, *, profile='basic'):
     """Same ordered choices for every real response cookie, without values.
 
     The same scoped resolver owns request and response cookie classification.
     HTTP authentication, routes/actions and origin privacy are separate checks.
     Tab/newline cannot occur in normalized literal matches.
     """
-    from aggressive import GENERIC_COOKIES
-    generic = lambda row: row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES
     resolved = active(central, site,profile)
-    if aggressive_mode:
-        resolved = [dict(row,action='shared') if row['scope']=='central' and row['id'].startswith('bundled:') and generic(row) else row for row in resolved]
-        # Explicit site/central choices precede these generic session defaults.
-        resolved += [dict(action='shared',match=dict(kind='exact',value=name)) for name in sorted(GENERIC_COOKIES)]
-        # Installed CMS names are automatic defaults, never user overrides.
-        # Any explicit Private/Variant/Shared match keeps its existing priority.
-        automatic=[]
-        for name in automatic_shared:
-            if not re.fullmatch('[0-9a-f]{32}',name):raise ValueError('Invalid automatic session name')
-            match=dict(kind='exact',value=name)
-            if not any(not row.get('id','').startswith('bundled:') and _matches(row['match'],match) for row in resolved):
-                automatic.append(dict(action='shared',match=match))
-        resolved=automatic+resolved
     return ''.join(row['action']+'\t'+row['match']['kind']+'\t'+row['match']['value']+'\n'
                    for row in resolved)
 
@@ -371,33 +356,20 @@ def _tidy(header):
             'if (req.http.' + header + ' == "") { unset req.http.' + header + '; }')
 
 
-def compile_vcl(central=None, site=None, *, chain_defaults=False, automatic_shared=(),profile='basic'):
+def compile_vcl(central=None, site=None, *, chain_defaults=False,profile='basic'):
     """Body for scp_admin_cookie_rules, after independent HTTP/route checks.
 
     Remove already handled pairs from a working copy so a lower-priority prefix
     cannot undo an exact/site decision. Keep the real origin Cookie unchanged.
     """
     rules = resolve(concrete(central),concrete(site),profile) if chain_defaults else active(central, site,profile)
-    generated=_compile_rules(rules,chain_defaults=chain_defaults)
-    if automatic_shared:
-        automatic=[]
-        for name in automatic_shared:
-            if not re.fullmatch('[0-9a-f]{32}',name):raise ValueError('Invalid automatic session name')
-            automatic.append(dict(id='cms:joomla-session',match=dict(kind='exact',value=name),action='shared',scope='cms'))
-        body=_compile_rules(automatic,initialize=False,finish=False)
-        generated=generated.replace('call scp_bundled_cookie_rules;',body+'\ncall scp_bundled_cookie_rules;')
-    return generated
+    return _compile_rules(rules,chain_defaults=chain_defaults)
 
 
 def defaults_vcl():
     """Emit once per program; explicit site rules consume their pairs first."""
-    from aggressive import GENERIC_COOKIES
     def body(profile):
-        rows=resolve(defaults(),profile=profile)
-        generic=[row for row in rows if row['match']['kind']=='exact' and row['match']['value'] in GENERIC_COOKIES]
-        remaining=[row for row in rows if row not in generic]
-        branch='if (req.http.X-SCP-Aggressive == "1") {\n'+_compile_rules([dict(row,action='shared') for row in generic],initialize=False,finish=False)+'\n} else {\n'+_compile_rules(generic,initialize=False,finish=False)+'\n}\n'
-        return branch+_compile_rules(remaining,initialize=False,finish=False)
+        return _compile_rules(resolve(defaults(),profile=profile),initialize=False,finish=False)
     return 'sub scp_bundled_cookie_rules {\nif (req.http.X-SCP-Profile == "ultracache") {\n'+body('ultracache')+'\n} else {\n'+body('basic')+'\n}\n}'
 
 

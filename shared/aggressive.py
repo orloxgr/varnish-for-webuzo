@@ -1,7 +1,6 @@
 """Explicit per-site shared-cache override; no settings migration or old TTL cap."""
-import re
 DEFAULT_TTL = 86400
-GENERIC_COOKIES = frozenset(('PHPSESSID', '__Secure-PHPSESSID'))
+COOKIE_RULE_REVISION = 1
 
 
 def settings(site):
@@ -14,15 +13,6 @@ def settings(site):
     return dict(aggressive=enabled, aggressive_ttl=ttl)
 
 
-def session_names(site):
-    if not settings(site)['aggressive']:return []
-    rows=site.get('cms_cookies',[])
-    if not isinstance(rows,list):raise ValueError('Invalid CMS session descriptors')
-    names=[]
-    for row in rows:
-        if not isinstance(row,dict) or row.get('cms')!='joomla':raise ValueError('Invalid CMS session descriptor')
-        if row.get('supported') is not True:continue
-        name=row.get('cookie_name')
-        if not isinstance(name,str) or not re.fullmatch('[0-9a-f]{32}',name):raise ValueError('Invalid Joomla session cookie name')
-        if name not in names:names.append(name)
-    return sorted(names)
+def cookie_rules_changed(before, after):
+    """Invalidate old aggressive replicas once when its cookie override retires."""
+    return settings(before)['aggressive'] and before.get('cookie_rules_revision',0) != after.get('cookie_rules_revision',0)

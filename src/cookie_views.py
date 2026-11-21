@@ -71,7 +71,7 @@ def executable(config, site):
 
 def compile_recv(config, site):
     return cookie_admin.compile_vcl(normalize(config.get('cookie_policies')),
-                                    normalize(site.get('cookie_policies')),chain_defaults=True,automatic_shared=aggressive.session_names(site),profile=site.get('profile','basic'))
+                                    normalize(site.get('cookie_policies')),chain_defaults=True,profile=site.get('profile','basic'))
 
 
 def defaults_vcl():
@@ -91,18 +91,10 @@ def view(config, sites, request):
     for parent in rows+inherited:
         for row in parent['profile_actions'].values():
             if site and aggressive.settings(site)['aggressive']:
-                explanation='Aggressive mode shares this generic anonymous session cookie. Known authentication, private routes and explicit Private choices still select PASS.'
                 for metadata in (row,row['reset_metadata']):
                     metadata['core_precedence']=metadata.get('core_precedence','').replace(
                         'origin private/no-store are independent of cookie classification.',
                         'origin privacy are independent of cookie classification. Aggressive mode can override generic origin privacy for anonymous public HTML.')
-                if parent['match']['kind']=='exact' and parent['match']['value'] in aggressive.GENERIC_COOKIES:
-                    if not row.get('override'):
-                        row.update(action='shared',effective_action='shared',mode_default_action='shared',
-                                   core_precedence=explanation,policy_behavior='Shares anonymous public HTML without storing or replaying personal cookie values.')
-                    if row['inherited_scope']=='bundled':row['inherited_action']='shared'
-                if parent['reset_match']['kind']=='exact' and parent['reset_match']['value'] in aggressive.GENERIC_COOKIES and row['inherited_scope']=='bundled':
-                    row['reset_metadata'].update(effective_action='shared',mode_default_action='shared',core_precedence=explanation)
         parent.update(parent['profile_actions'][profile or 'basic'])
     inherited_by_id = {row['id']: row for row in inherited}
     for row in rows:
