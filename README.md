@@ -1,13 +1,16 @@
 # Varnish for Webuzo
 
-Version **0.12.2** adds one value-free, request-bound VSL diagnostic when a
-cooperating UltraCache application reports contained renderer fallback on a
-successful authenticated prepare under the existing WordPress Debug control.
-The complete envelope and owner binding must validate first. No browser header,
-new envelope field or control is introduced; absent diagnostics add no new log.
-See the [shared diagnostic contract](shared/CONTRACT.md#debug-only-prepared-fallback-diagnostic).
-The [qualification record](shared/PREPARE-DIAGNOSTICS.md) separates paired native
-checks from actual WordPress wire acceptance.
+Version **0.12.4** applies CMS cookie choices through the ordinary scoped
+resolver and reports the current request's prepared private fragment outcome
+separately from parent cache HIT. The outcome works with WordPress Debug off;
+the optional Debug-only VSL diagnostic remains separate. See [CMS choices](shared/CMS-COOKIE-CHOICES.md)
+and the [delivery outcome contract](shared/DELIVERY-OUTCOME.md).
+
+Cookie Policies uses the low-memory native response bridge from the standalone
+0.12.3 fix. The complete editor response is delivered without expanding it into
+PHP arrays and encoding it again; the panel's PHP memory limit is unchanged.
+The editor has separate Basic and UltraCache action filters; when both are
+selected, rows must match both profile choices.
 
 The native loader also fixes false VCL-load failures when compilation takes
 longer than ten seconds. The addon waits for the native load result, checks the
@@ -17,23 +20,37 @@ only a safe category/status; original diagnostics remain root-private at
 `/var/lib/varnish-for-webuzo/last-vcl-error.json`.
 See [load validation and scope](docs/VCL-LOAD-VALIDATION.md).
 
+Registered UltraCache applications now prepare their public representation on
+an eligible cold MISS even without resolver-cookie variants. Plain warm HITs
+retain zero backend work. See [cold public selection](shared/COLD-PUBLIC-SELECTION.md).
+
+Observed server-cookie publications can negotiate a separate
+[cookie-only delivery contract](shared/COOKIE-ONLY-DELIVERY.md). A marked HIT
+reuses public HTML and executes its actual application issuer once per visitor,
+including its real consent and lifecycle decisions. Original cookie fields stay
+request-owned. Unmarked plain pages keep their zero-backend path; Basic keeps
+its existing best-effort behavior without ESI. Existing old WordPress publications
+need the application's normal capability redetection, cache clear and warm-up
+after both compatible components are upgraded. A native addon update does not
+rebuild an old local application snapshot. See the [qualification record](shared/COOKIE-WARM-VALIDATION.md).
+
 The UltraCache profile adds request-owned pre-header cookie
 delivery, scoped private-fragment TTL, actual application-private documents and
 public-fragment TTL/error containment. **Basic stays best effort without ESI.**
-Cookie Database remains the sole cookie classification authority. This candidate
-adds independent profile cookie choices and [application-scoped public selection](shared/PUBLIC-SELECTION.md),
+Cookie Database remains the sole cookie classification authority. Profiles provide
+independent cookie choices and [application-scoped public selection](shared/PUBLIC-SELECTION.md),
 including actual provider context before lookup and private streaming/range
-delivery. Common bundle `2026.11.20.11` keeps personal commenter, YITH, Recently
+delivery. Common bundle `2026.11.21.1` keeps personal commenter, YITH, Recently
 Viewed, cart/session and User Switching defaults Private in Basic and Shared in the integrated UC
-profile; manual choices still win. Final coordinated distribution acceptance is
-pending. The [earlier qualified release evidence](shared/ESI-VALIDATION.md) remains
-the record for 0.22.0/0.11.0, not publication of this candidate.
+profile; manual choices still win. The [current qualification record](shared/COOKIE-WARM-VALIDATION.md)
+separates native, application and installation checks; [earlier evidence](shared/ESI-VALIDATION.md)
+remains the historical record for 0.22.0/0.11.0.
 
 Cache public HTTP responses with Varnish while Nginx handles HTTPS and serves existing public images, styles, scripts and fonts directly. Application profiles add WordPress and WooCommerce integration. Cache misses and private requests go to the site's native Apache/PHP backend.
 
 ## Installation
 
-1. Upload the Webuzo ZIP in **Admin β†’ Plugins β†’ Add New**, then activate it.
+1. Upload the Webuzo ZIP in **Admin > Plugins > Add New**, then activate it.
 2. Open **Varnish Cache** and click **Install & set up Varnish**. Setup installs Varnish and its matching official modules from the signed repository for the installed Ubuntu release and creates a separate `varnish-for-webuzo` service. Its initial cache size is 256 MiB; change it under **Server cache**. Existing supported Varnish instances and their configuration are preserved; an older shared binary is not upgraded while another instance is running.
 3. Choose a profile, enable the desired domains and click **Save & Apply**. New domains start disabled and receive the central default profile, initially **Basic**, when you refresh the site list.
 4. Use **Clear cache** to clear that site's cached pages, including its aliases and HTTP/HTTPS variants.
@@ -87,11 +104,12 @@ When enabled, eligible anonymous 200 HTML uses the selected **Aggressive HTML
 lifetime** (initially 86400 seconds) instead of generic origin private/no-store,
 Pragma or Expires prohibitions. No smaller addon TTL is imposed. The origin's
 browser policy is restored on delivery; this setting changes server storage.
-Generic PHP session cookies alone no longer force PASS. Explicit Private cookie
-choices, recognized authentication, cart state and private CMS actions still do.
-PrestaShop's encrypted `PrestaShop-*` cookie combines customer authentication
-and cart state; matching requests use `prestashop-private-session` rather than
-being treated as a generic PHP session.
+Aggressive caching does not change cookie actions. The same bundled and saved
+per-profile choices apply, including Private defaults for `PHPSESSID` and
+`__Secure-PHPSESSID`. CMS-discovered opaque names are no longer silently Shared;
+ordinary rules and functional Vary handling apply. The independent HTTP override
+and private routes/actions remain active. PrestaShop session defaults are visible,
+editable Private rows rather than a second CMS cookie veto.
 
 **Refresh sites** discovers WordPress/WooCommerce, Joomla, Drupal, Magento and
 PrestaShop inside native document roots. Known private paths and query actions

@@ -46,3 +46,14 @@ Native mock transport tests and portable real-C grammar tests are separate from
 actual WordPress/provider/browser lifecycle qualification. The application must
 verify template/footer/shutdown timing as applicable and publish accurate cost
 and acceptance results.
+
+## Existing publications after an upgrade
+
+An old unmarked cached publication does not prove its source issued a cookie.
+Its plain HIT remains zero-backend until normal application republication. After
+updating both compatible components, use normal capability redetection, clear
+old application cache and warm the desired pages. The application's optional
+purge-after-plugin-updates setting is not assumed to be enabled. No unconditional
+production purge or cookie-name inference is added by this native contract.
+
+Application tracking: https://github.com/orloxgr/ultracache-dev/issues/1000.

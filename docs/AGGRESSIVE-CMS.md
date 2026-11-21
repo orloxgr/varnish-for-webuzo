@@ -11,7 +11,8 @@ not read or migrated. Existing sites are not opted in during installation.
 
 The opt-in overrides origin cache restrictions for otherwise eligible HTTP 200
 HTML responses. It does not override request PASS decisions or explicit Private
-cookie choices. Browser Cache-Control, Surrogate-Control, Pragma and Expires are
+cookie choices. Every cookie uses its ordinary active profile action; see
+[the cookie contract](../shared/AGGRESSIVE-COOKIE-CHOICES.md). Browser Cache-Control, Surrogate-Control, Pragma and Expires are
 saved separately and restored at delivery. The request URL and cookies are not
 rewritten to implement shared tracking/session lookup keys. Set-Cookie fields
 remain owned by the fetching visitor through the existing native handoff.
@@ -49,8 +50,8 @@ custom bypass textarea remains available for site-specific prefixes.
 
 The opt-in preserves original Joomla HTML and tokens. It no longer reconstructs
 opaque-session authentication, scans response bodies, injects token ESI or calls
-an application token provider. Known private paths/actions and cookie markers
-still match in VCL. The panel discovers the Joomla cookie name statically with
+an application token provider. Known private paths/actions still match in VCL. Cookie defaults are visible,
+editable policy rows; the mode does not force PHP or opaque Joomla cookies Shared. The panel discovers the Joomla cookie name statically with
 `cms_cookies.joomla_name`; runtime visitors never execute this Python module.
 
 The CMS helper service and worker sources are removed. Successful native upgrade
