@@ -8,6 +8,7 @@ sub scp_init {
     unset req.http.X-SCP-Personal-Delivery;
     unset req.http.X-SCP-Public-Fragment;
     unset req.http.X-SCP-Fragment-HTTP-Failure;
+    unset req.http.X-UltraCache-ESI-Error-Contained;
     unset req.http.X-UltraCache-Application-Private;
     unset req.http.X-SCP-Private-Key;
     unset req.http.X-SCP-Private-Lookup;
@@ -132,6 +133,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Personal-Delivery;
     unset bereq.http.X-SCP-Public-Fragment;
     unset bereq.http.X-SCP-Fragment-HTTP-Failure;
+    unset bereq.http.X-UltraCache-ESI-Error-Contained;
     unset bereq.http.X-UltraCache-Application-Private;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     unset bereq.http.X-UltraCache-Delivery-Public-Selection-Version;

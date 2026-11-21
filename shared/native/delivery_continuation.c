@@ -17,6 +17,7 @@ struct continuation {
     unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
+    unsigned debug_fallback;
     double public_deadline, prepare_response_time;
     uint64_t occurrences;
     /* Identity check only; exact installed-engine lifetime still needs native
@@ -62,6 +63,7 @@ static const hdr_t h_selection_actions = HDR("X-UltraCache-Delivery-Public-Selec
 static const hdr_t h_selection_scope = HDR("X-UltraCache-Delivery-Public-Selection-Scope");
 static const char selection_content_type[] = "application/vnd.ultracache.delivery+json";
 static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
+static const hdr_t h_contained_error = HDR("X-UltraCache-ESI-Error-Contained");
 static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
@@ -135,6 +137,15 @@ static int delivery_parse(struct continuation *d) {
         d->occurrences,&d->fragments,&d->public_parent,&d->document);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
     return ok;
+}
+
+static void delivery_log_fallback(VRT_CTX, struct continuation *d) {
+    /* The application emits this aggregate only under its existing Debug
+     * setting. Log after complete validation, bound to this native request. */
+    if (!d->debug_fallback) return;
+    d->debug_fallback = 0;
+    if (ctx->vsl) VSLb(ctx->vsl,SLT_VCL_Log,
+        "UltraCache prepare degraded: contained renderer fallback");
 }
 
 static int delivery_header_name(const char *line, const char *name) {
@@ -426,7 +437,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     struct handoff *entry;
     struct vmod_priv *filter;
     struct continuation *d;
-    const char *encoding, *recovery, *selection_version = NULL, *content_type = NULL;
+    const char *encoding, *recovery, *selection_version = NULL, *content_type = NULL, *contained = NULL;
     unsigned i;
     int owned, valid;
     if (!task || !task->key) return 0;
@@ -474,6 +485,8 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     else if (!valid) entry->delivery->failed = 1;
     else {
         clear_fields(entry->fields); entry->fields = first; first = NULL;
+        entry->delivery->debug_fallback = http_CountHdr(ctx->http_beresp,h_contained_error) == 1 &&
+            http_GetHdr(ctx->http_beresp,h_contained_error,&contained) && !strcmp(contained,"1");
         entry->delivery->recovery_ready = !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
             (!strcmp(recovery,"public-snapshot-v1") || !strcmp(recovery,"request-snapshot-v1"));
         entry->delivery->snapshot_ready = !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
@@ -484,6 +497,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     clear_fields(first);
     http_Unset(ctx->http_beresp,H_Set_Cookie);
     http_Unset(ctx->http_beresp,h_set_cookie2);
+    http_Unset(ctx->http_beresp,h_contained_error);
     if (!valid) VRT_fail(ctx,"UltraCache prepare response rejected");
     return 1;
 }
@@ -558,6 +572,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
                 d->phase = D_FAILED; return -1;
             }
             d->phase = D_DOCUMENT;
+            delivery_log_fallback(ctx,d);
             return 2; /* private synth now, never another parent lookup/store */
         }
         if (d->snapshot_ready) {
@@ -567,6 +582,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
             if (application_deadline < d->public_deadline) d->public_deadline = application_deadline;
         }
         d->phase = D_RETURN;
+        delivery_log_fallback(ctx,d);
         return 1;
     }
     if (d->phase == D_READY || d->phase == D_RECOVERY) {

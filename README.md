@@ -1,6 +1,13 @@
 # Varnish for Webuzo
 
-Version **0.12.1** fixes false VCL-load failures when native compilation takes
+Version **0.12.2** adds one value-free, request-bound VSL diagnostic when a
+cooperating UltraCache application reports contained renderer fallback on a
+successful authenticated prepare under the existing WordPress Debug control.
+The complete envelope and owner binding must validate first. No browser header,
+new envelope field or control is introduced; absent diagnostics add no new log.
+See the [shared diagnostic contract](shared/CONTRACT.md#debug-only-prepared-fallback-diagnostic).
+
+The native loader also fixes false VCL-load failures when compilation takes
 longer than ten seconds. The addon waits for the native load result, checks the
 complete VCLI status frame and verifies the registered generation before the
 normal apply can activate it. Real errors retain the working policy and expose

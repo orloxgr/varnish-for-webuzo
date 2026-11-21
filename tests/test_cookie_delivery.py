@@ -120,6 +120,7 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
                 get.stop_origin=stop_origin
                 get.origin_endpoint=('127.0.0.1',origin.server_port)
                 get.source=source
+                get.instance=root/'instance'
                 if management:
                     def adm(*args):
                         result=subprocess.run(['varnishadm','-T','127.0.0.1:'+str(admin_port),'-S',str(secret),*args],capture_output=True,text=True)

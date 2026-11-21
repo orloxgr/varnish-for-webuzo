@@ -388,6 +388,35 @@ Bound publication/request-owned snapshot recovery does not rerun providers or
 refresh parent TTL; invalid/unrecoverable continuations fail503. An exclusive
 negotiated privateDocument outcome preserves actual status/body/fresh headers.
 
+### Debug-only prepared fallback diagnostic
+
+The application may emit the existing response header
+`X-UltraCache-ESI-Error-Contained: 1` on a successful authenticated prepare
+response when at least one renderer used a contained fallback, **only while the
+existing WordPress Debug control is enabled**. This is an aggregate diagnostic;
+it does not change the schema1 envelope, rendering, cacheability or acceptance.
+The marker is optional and its absence adds no new logging.
+
+Native accepts exactly one marker with value `1` from an owned protocol capture
+and keeps only a boolean in that request's continuation. Client/request copies
+are removed before the origin. The captured response marker is consumed and
+does not reach the shared parent or visitor response. Only after the complete
+body, envelope and owner binding validate and the continuation reaches D_RETURN
+or D_DOCUMENT, native emits one transaction-bound VCL_Log message:
+`UltraCache prepare degraded: contained renderer fallback`.
+It includes no cookie, token, URL or renderer output. A valid public-selection
+protocol envelope may carry the same optional marker; a raw/nonprotocol response
+cannot use it to claim a prepared fallback.
+
+Absent, zero, malformed or duplicate markers add no diagnostic and do not alter
+validation. An HTTP409/500, malformed envelope or incorrect owner binding still
+fails through the existing prepare rejection, without a degraded-success log.
+An application status inside a valid privateDocument retains its existing
+semantics. The ordinary child HTTP-failure containment and its existing logs are
+unchanged. Load measurements can correlate this VSL event with the request to
+distinguish degraded delivery from a parent HTTP200/HIT; no late browser header,
+new control, background automation or new envelope field is introduced.
+
 Positive private-fragment TTL is implemented with authenticated application
 claims and native scoped objects. The existing signed private probe and live
 owned prepare declare Private-Cache-Version1; UC-PRIVATE-GET reads a scoped native
