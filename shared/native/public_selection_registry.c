@@ -2,26 +2,40 @@
  * Included by delivery_continuation.c. Registry contains declarations only:
  * site/host/application scope, resolver names and WP identity, never values.
  */
+#include "vrnd.h"
+
 struct public_declaration {
     struct public_declaration *next;
     char *site, *host, *scope, *wordpress_policy, *names;
 };
 static struct public_declaration *public_declarations;
 static unsigned public_selection_vcls;
+static char public_registry_epoch[65];
 
 static void public_declaration_free(struct public_declaration *p) {
     free(p->site); free(p->host); free(p->scope); free(p->wordpress_policy); free(p->names); free(p);
 }
-static void public_selection_vcl_event(enum vcl_event_e event) {
+static int public_selection_vcl_event(enum vcl_event_e event) {
+    unsigned char identity[sizeof(PACKAGE_VERSION)-1+32];
     pthread_mutex_lock(&lock);
-    if (event == VCL_EVENT_LOAD) ++public_selection_vcls;
-    else if (event == VCL_EVENT_DISCARD && public_selection_vcls && !--public_selection_vcls) {
+    if (event == VCL_EVENT_LOAD) {
+        if (!public_selection_vcls) {
+            memcpy(identity,PACKAGE_VERSION,sizeof(PACKAGE_VERSION)-1);
+            if (VRND_RandomCrypto(identity+sizeof(PACKAGE_VERSION)-1,32) != 0 ||
+                !delivery_selection_digest(identity,sizeof(identity),public_registry_epoch)) {
+                pthread_mutex_unlock(&lock); return 0;
+            }
+        }
+        ++public_selection_vcls;
+    } else if (event == VCL_EVENT_DISCARD && public_selection_vcls && !--public_selection_vcls) {
         while (public_declarations) {
             struct public_declaration *next = public_declarations->next;
             public_declaration_free(public_declarations); public_declarations = next;
         }
+        public_registry_epoch[0] = 0;
     }
     pthread_mutex_unlock(&lock);
+    return 1;
 }
 static struct public_declaration *public_declaration(const char *site, const char *host, const char *scope) {
     struct public_declaration *p;
@@ -106,7 +120,13 @@ static char *public_actions(const char *rules, const char *names, int *has_varia
     }
     out[used++] = '}'; out[used] = 0; return out;
 }
-VCL_STRING vmod_selection_epoch(VRT_CTX) { (void)ctx; return PACKAGE_VERSION; }
+VCL_STRING vmod_selection_epoch(VRT_CTX) {
+    const char *epoch;
+    pthread_mutex_lock(&lock);
+    epoch = *public_registry_epoch ? WS_Copy(ctx->ws,public_registry_epoch,-1) : NULL;
+    pthread_mutex_unlock(&lock);
+    return epoch;
+}
 VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     VCL_STRING scope, VCL_STRING wordpress_policy, VCL_STRING names, VCL_BOOL enabled) {
     struct public_declaration *next = NULL, **p;

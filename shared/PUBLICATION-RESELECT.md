@@ -49,6 +49,22 @@ prepare, the current request may finish its already captured A without minting
 a new fresh lifetime; only the following request can independently select B.
 Basic never enters this protocol.
 
+## Registry lifetime and restarts
+
+Application declarations live in the native child process. The public selection
+epoch identifies that actual registry lifetime, incorporating the native build
+identity and native entropy at its first VCL load. A new child/registry gets a
+new 64-hex epoch even with the same build. Overlapping VCL loads sharing the
+registry retain its epoch and declarations; discarding its last VCL clears both.
+Initialization failure rejects the candidate VCL rather than reporting an old or
+empty registry identity. The existing authenticated application synchronization
+can therefore notice a fresh registry without a manual reset or declaration.
+
+A source-only native baseline reproduced the previous defect: a new manager had
+an empty registry but advertised the exact same build-only epoch. This made a
+persisted application registration appear current. No WordPress special case or
+relaxation of registry authorization is used to recover from that condition.
+
 This is an unpublished source candidate. Actual producer integration and native
 regression results must be qualified before release. No production changes are
 part of this source change.

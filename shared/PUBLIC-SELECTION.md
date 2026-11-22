@@ -69,7 +69,7 @@ The authenticated capabilities response advertises:
 
 ```
 X-UltraCache-VCL-Public-Selection-Version: 1
-X-UltraCache-VCL-Public-Selection-Epoch: <native DSO build identity>
+X-UltraCache-VCL-Public-Selection-Epoch: <native registry-lifetime identity including build>
 X-UltraCache-VCL-Public-Selection-Native-Policy: <active native digest>
 X-UltraCache-VCL-Public-Selection-WordPress-Policy: <accepted WP digest>
 X-UltraCache-VCL-Public-Selection-Scope: <accepted exact frontend base>
@@ -84,7 +84,7 @@ native Variant behavior. Recompute native actions after policy changes.
 The accepted Scope and WP digest are both absent if no exact registration exists
 for the queried scope; an empty names list still has an accepted Scope/digest.
 Registration contains site/host/scope, names and WP identity only. It survives ordinary
-VCL reload in module-global state. DSO build identity participates in the cache
+VCL reload in module-global state. The registry-lifetime epoch participates in the cache
 namespace; a new DSO cannot deliver old warmed objects before registration.
 Normal origin requests advertise capability, epoch and current native policy
 before PHP bootstrap, allowing existing connection/settings/capability flows to
@@ -441,7 +441,7 @@ selection on ordinary pages, route lookalikes, private/404 responses, and native
 public/private ESI composition. Their origin is a declared transport fixture;
 actual WordPress/WCML detection remains a separate application qualification.
 
-### Diagnostic routing qualification — 21 November 2026
+### Diagnostic routing qualification β€” 21 November 2026
 
 Coordinating WordPress/Lab issue [#982](https://github.com/orloxgr/ultracache-dev/issues/982)
 tracks this integration gap. The Lab owner reported these actual results:
@@ -472,7 +472,7 @@ final coordinated WordPress artifact checks and distribution/publication remain
 pending. They do not upgrade the separate Aelia declared-model evidence to a
 commercial-provider runtime claim. No further cookie policy was changed.
 
-## User Switching standalone boundary — bundle 2026.11.20.11
+## User Switching standalone boundary β€” bundle 2026.11.20.11
 
 The presented policy delta adds one ordinary visible prefix row,
 `wordpress_user_sw_`, with **Basic Private / UltraCache Shared**. This covers
@@ -522,11 +522,11 @@ choices/reset and native declared-origin request/issuer ownership. The new .11
 Lab qualification is recorded below; earlier .10 results alone do not establish
 its acceptance.
 
-### Bundle .11 qualification — 21 November 2026
+### Bundle .11 qualification β€” 21 November 2026
 
 The coordinating Linux/Lab owner reported eight methods passed per adapter:
 all seven User Switching default/wire/manual/reset methods plus the normal
-`.10 → .11` apply method. Both runs had zero skips, errors or failures:
+`.10 β†’ .11` apply method. Both runs had zero skips, errors or failures:
 
 | Adapter | Qualified source | Methods passed | Elapsed |
 | --- | --- | --- | --- |

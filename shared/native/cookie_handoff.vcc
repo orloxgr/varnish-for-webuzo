@@ -129,7 +129,8 @@ Replay an owned complete private document or pre-rendered private child.
 
 $Function STRING selection_epoch()
 
-Native build identity; no visitor data. Namespaces only new UltraCache replicas.
+Registry-lifetime identity including the native build; no visitor data. Changes
+after a worker/registry restart and stays stable across overlapping VCL loads.
 
 $Function BOOL selection_register(STRING site, STRING host, STRING scope, STRING wordpress_policy, STRING names, BOOL enabled)
 $Restrict vcl_recv

@@ -45,7 +45,7 @@ struct continuation {
 };
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static int public_selection_parse(struct continuation *);
-static void public_selection_vcl_event(enum vcl_event_e);
+static int public_selection_vcl_event(enum vcl_event_e);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -832,7 +832,12 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
             VRT_fail(ctx,"UltraCache request snapshot backend registration failed");
             return -1;
         }
-        public_selection_vcl_event(event);
+        if (!public_selection_vcl_event(event)) {
+            delivery_snapshot_unload(ctx,priv);
+            VRT_RemoveFilter(ctx,&delivery_filter,NULL);
+            VRT_fail(ctx,"UltraCache registry epoch initialization failed");
+            return -1;
+        }
     } else if (event == VCL_EVENT_DISCARD) {
         public_selection_vcl_event(event);
         delivery_snapshot_unload(ctx,priv);
