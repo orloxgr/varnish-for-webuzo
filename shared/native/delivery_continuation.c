@@ -49,6 +49,27 @@ VCL_STRING vmod_guest_key(VRT_CTX) {
     return g && !g->disabled && g->key ? WS_Copy(ctx->ws,g->key,-1) : NULL;
 }
 
+VCL_STRING vmod_guest_issuer_authorization(VRT_CTX, VCL_STRING credential, VCL_STRING canonical) {
+    const char *host = NULL, *start, *end, *method, *url, *message;
+    char *normalized;
+    char digest[65];
+    size_t i, length;
+    method = ctx->http_bereq->hd[HTTP_HDR_METHOD].b; url = ctx->http_bereq->hd[HTTP_HDR_URL].b;
+    if (!credential || !*credential || !delivery_relative(canonical) || !method || strcmp(method,"POST") ||
+        !url || http_CountHdr(ctx->http_bereq,H_Host) != 1 || !http_GetHdr(ctx->http_bereq,H_Host,&host)) return NULL;
+    start = host; while (*start == ' ' || *start == '\t') ++start;
+    end = start+strlen(start); while (end > start && (end[-1] == ' ' || end[-1] == '\t')) --end;
+    length = (size_t)(end-start); normalized = WS_Copy(ctx->ws,start,-1);
+    if (!normalized || !length) return NULL;
+    normalized[length] = 0;
+    for (i = 0; i < length; ++i)
+        if (normalized[i] >= 'A' && normalized[i] <= 'Z') normalized[i] += 'a'-'A';
+    message = WS_Printf(ctx->ws,"ultracache-guest-issuer-v1\nPOST\n%s\n%s\n%s",normalized,url,canonical);
+    if (!message || !delivery_hmac_sha256((const unsigned char *)credential,strlen(credential),
+        (const unsigned char *)message,strlen(message),digest)) return NULL;
+    return WS_Printf(ctx->ws,"v1:%s",digest);
+}
+
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY, D_FAILED };
@@ -62,7 +83,7 @@ struct continuation {
     unsigned reselect_attempted, conflict_verified;
     unsigned cold_entry;
     unsigned guest_requested, guest_reply, guest_complete, guest_has_variant;
-    char *guest_policy, *guest_epoch, *guest_key;
+    char *guest_policy, *guest_epoch, *guest_key, *guest_canonical;
     unsigned cookie_delivery;
     unsigned debug_fallback;
     unsigned outcome; /* 0 unverified, 1 verified, 2 degraded; this owner only */
@@ -149,7 +170,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     /* The table lock excludes an aborting backend filter before freeing d. */
     close_owner(&d->association);
     (void)ctx;
-    free(d->guest_policy); free(d->guest_epoch); free(d->guest_key);
+    free(d->guest_policy); free(d->guest_epoch); free(d->guest_key); free(d->guest_canonical);
     free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
@@ -575,6 +596,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
                 if (d->guest_requested) {
                     http_ForceHeader(ctx->http_bereq,h_guest_version,"1");
                     http_ForceHeader(ctx->http_bereq,h_guest_policy,d->guest_policy);
+                    http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Guest-Publication-Canonical-URL"),d->guest_canonical);
                 }
             }
             if (d->cookie) http_ForceHeader(ctx->http_bereq,H_Cookie,d->cookie);

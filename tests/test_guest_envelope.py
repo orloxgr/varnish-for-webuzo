@@ -3,6 +3,7 @@ import base64
 import copy
 import ctypes
 import hashlib
+import hmac
 import json
 import unittest
 import test_public_selection as selection
@@ -31,6 +32,8 @@ class GuestEnvelope(unittest.TestCase):
         cls.lib.delivery_guest_selection_parse.argtypes=[ctypes.c_void_p,ctypes.c_size_t]+[ctypes.c_char_p]*7+[
             ctypes.POINTER(selection.SelectionPointer)]
         cls.lib.delivery_guest_selection_parse.restype=ctypes.c_int
+        cls.lib.delivery_hmac_sha256.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p]
+        cls.lib.delivery_hmac_sha256.restype=ctypes.c_int
     tearDownClass=classmethod(selection.PublicSelection.tearDownClass.__func__)
     def parse(self,value,**changes):
         body=json.dumps(value,ensure_ascii=False).encode() if isinstance(value,dict) else value
@@ -44,6 +47,15 @@ class GuestEnvelope(unittest.TestCase):
             return dict(guest=result.contents.guest,body=ctypes.string_at(p.body,p.length),
                 ttl=p.fresh_remaining,privateCount=result.contents.occurrences)
         finally:self.lib.delivery_selection_free(result)
+    def test_hmac_rfc4231_vectors_and_independent_block_boundary_inputs(self):
+        vectors=[(b'\x0b'*20,b'Hi There','b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7'),
+            (b'Jefe',b'what do ya want for nothing?','5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843')]
+        vectors += [(bytes(range(256))[:n],b'context'+b'x'*length,None) for n in (0,1,63,64,65,131) for length in (0,1,55,56,63,64,65,1024)]
+        for key,body,expected in vectors:
+            out=ctypes.create_string_buffer(65)
+            self.assertEqual(self.lib.delivery_hmac_sha256(key,len(key),body,len(body),out),1)
+            self.assertEqual(out.value.decode(),expected or hmac.new(key,body,hashlib.sha256).hexdigest())
+
     def test_complete_guest_bytes_and_real_remaining_budget(self):
         s=sample();out=self.parse(s)
         self.assertEqual(out['guest'],1);self.assertEqual(out['ttl'],1234)

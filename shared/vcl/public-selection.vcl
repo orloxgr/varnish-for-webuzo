@@ -130,3 +130,39 @@ sub scp_selection_origin {
     set bereq.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();
     set bereq.http.X-UltraCache-VCL-Public-Selection-Native-Policy = bereq.http.X-SCP-Selection-Native-Policy;
 }
+
+
+# A shape-only private POST declaration. The producer still validates its
+# separate public ticket/HMAC, origin, scope, policy and permitted issuer work.
+sub scp_guest_issuer_recv {
+    if (req.esi_level == 0 && req.method == "POST" &&
+        req.http.X-SCP-Query ~ "(^|&)ultracache_guest_cookie_delivery=[^&]+(&|$)") {
+        set req.http.X-SCP-Guest-Issuer-Query = regsub(req.http.X-SCP-Query,
+            "(^|&)ultracache_guest_cookie_delivery=[^&]*(?=&|$)", "\1");
+        if (req.http.X-SCP-Guest-Issuer-Query ~ "(^|&)ultracache_guest_cookie_delivery=") {
+            unset req.http.X-SCP-Guest-Issuer-Query;
+            return;
+        }
+        # Remove only that one operation pair and one adjacent separator.
+        # Unrelated empty/repeated/encoded functional parameters are retained.
+        if (req.http.X-SCP-Query ~ "^ultracache_guest_cookie_delivery=[^&]*&") {
+            set req.http.X-SCP-Guest-Issuer-Query = regsub(req.http.X-SCP-Query,
+                "^ultracache_guest_cookie_delivery=[^&]*&", "");
+        } else if (req.http.X-SCP-Query ~ "^ultracache_guest_cookie_delivery=[^&]*$") {
+            set req.http.X-SCP-Guest-Issuer-Query = "";
+        } else {
+            set req.http.X-SCP-Guest-Issuer-Query = regsub(req.http.X-SCP-Query,
+                "&ultracache_guest_cookie_delivery=[^&]*(?=&|$)", "");
+        }
+        set req.http.X-SCP-Key-URL = regsub(req.url, "[?].*$", "");
+        if (req.http.X-SCP-Guest-Issuer-Query != "") {
+            set req.http.X-SCP-Key-URL = req.http.X-SCP-Key-URL + "?" + req.http.X-SCP-Guest-Issuer-Query;
+        }
+        call scp_normalize_key_copy;
+        # The engine also hashes PASS requests. Keep this owned copy separate
+        # from the ordinary raw-request hash fields that may be recomputed.
+        set req.http.X-SCP-Guest-Issuer-Canonical = req.http.X-SCP-Key-URL;
+        set req.http.X-SCP-Guest-Issuer = "1";
+        unset req.http.X-SCP-Guest-Issuer-Query;
+    }
+}

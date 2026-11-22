@@ -21,9 +21,14 @@ sub scp_cookie_hash {
 
 sub scp_key {
     set req.http.X-SCP-Key-URL = req.url;
-    if (req.url ~ "[?]") {
-        set req.http.X-SCP-Key-Path = regsub(req.url, "[?].*$", "");
-        set req.http.X-SCP-Key-Query = regsub(req.url, "^[^?]*[?]", "");
+    call scp_normalize_key_copy;
+}
+# Both cache lookup and the private issuer use this one existing tracking rule.
+# Only the supplied native-owned copy changes; req.url is never rewritten.
+sub scp_normalize_key_copy {
+    if (req.http.X-SCP-Key-URL ~ "[?]") {
+        set req.http.X-SCP-Key-Path = regsub(req.http.X-SCP-Key-URL, "[?].*$", "");
+        set req.http.X-SCP-Key-Query = regsub(req.http.X-SCP-Key-URL, "^[^?]*[?]", "");
         if (req.http.X-SCP-Key-Query ~ "(?i)(^|&)(utm_[a-z0-9_]+|gclid|dclid|fbclid|msclkid|gbraid|wbraid|igshid)=") {
             set req.http.X-SCP-Key-Query = regsuball(req.http.X-SCP-Key-Query,
                 "(?i)(^|&)(utm_[a-z0-9_]+|gclid|dclid|fbclid|msclkid|gbraid|wbraid|igshid)=[^&]*", "\1");

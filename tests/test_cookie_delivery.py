@@ -20,7 +20,7 @@ def policy_for_choices(profile,choices):
 
 
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None,management=False,daemon_parameters=()):
+def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None,management=False,daemon_parameters=(),allow_post=False):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -55,6 +55,7 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
         def log_message(self, *args):
             pass
 
+    if allow_post:Origin.do_POST=Origin.do_GET
     origin = ThreadingHTTPServer(('127.0.0.1', 0), Origin)
     thread = threading.Thread(target=origin.serve_forever, daemon=True)
     thread.start()

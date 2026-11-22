@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * SHA-256 of authenticated public snapshot bytes, not a MAC or cookie issuer.
+ * SHA-256 snapshots and HMAC-SHA256 private issuer context, never a cookie issuer.
  * Portable to the standalone parser test; no external crypto/JSON ABI.
  */
 static uint32_t selection_rotate(uint32_t x, unsigned n) { return (x>>n)|(x<<(32-n)); }
@@ -49,4 +49,30 @@ int delivery_selection_digest(const unsigned char *body, size_t length, char dig
         digest[2*i]=hex[value>>4];digest[2*i+1]=hex[value&15];
     }
     digest[64]=0;return 1;
+}
+
+/* RFC 2104 construction; RFC 4231 vectors and independent stdlib comparisons
+ * are exercised by the portable parser tests. No external crypto ABI. */
+int delivery_hmac_sha256(const unsigned char *key, size_t key_length,
+    const unsigned char *body, size_t length, char digest[65]) {
+    unsigned char block[64] = {0}, outer[96], *inner;
+    char reduced[65], inside[65];
+    unsigned i;
+    static const char hex[] = "0123456789abcdef";
+    if (!digest || (!key && key_length) || (!body && length) || length > SIZE_MAX-64) return 0;
+    if (key_length > sizeof(block)) {
+        if (!delivery_selection_digest(key,key_length,reduced)) return 0;
+        for (i = 0; i < 32; ++i)
+            block[i] = (unsigned char)((strchr(hex,reduced[2*i])-hex)*16+(strchr(hex,reduced[2*i+1])-hex));
+    } else if (key_length) memcpy(block,key,key_length);
+    inner = malloc(64+length);
+    if (!inner) return 0;
+    for (i = 0; i < 64; ++i) { inner[i] = block[i]^0x36; outer[i] = block[i]^0x5c; }
+    if (length) memcpy(inner+64,body,length);
+    i = delivery_selection_digest(inner,64+length,inside);
+    memset(inner,0,64); free(inner);
+    if (!i) return 0;
+    for (i = 0; i < 32; ++i)
+        outer[64+i] = (unsigned char)((strchr(hex,inside[2*i])-hex)*16+(strchr(hex,inside[2*i+1])-hex));
+    return delivery_selection_digest(outer,sizeof(outer),digest);
 }

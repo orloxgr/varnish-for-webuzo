@@ -3,7 +3,14 @@
 sub scp_init {
     cookie_handoff.reset();
     cookie_handoff.guest_ingress();
+    unset req.http.X-SCP-Guest-Issuer;
+    unset req.http.X-SCP-Guest-Issuer-Canonical;
+    unset req.http.X-SCP-Guest-Issuer-Query;
     unset req.http.X-SCP-Cookie-Handoff;
+    unset req.http.X-UltraCache-Guest-Issuer-Version;
+    unset req.http.X-UltraCache-Guest-Issuer-Canonical-URL;
+    unset req.http.X-UltraCache-Guest-Issuer-Authorization;
+    unset req.http.X-UltraCache-Delivery-Guest-Publication-Canonical-URL;
     unset req.http.X-UltraCache-Delivery-Guest-Publication-Version;
     unset req.http.X-UltraCache-Delivery-Guest-Publication-Policy;
     unset req.http.X-UltraCache-VCL-Guest-Publication-Version;
@@ -127,6 +134,7 @@ sub scp_recv {
     # The signed/shaped raw session-source operation above remains separate.
     std.collect(req.http.Cache-Control);
     if (req.url ~ "[?]") { set req.http.X-SCP-Query = regsub(req.url, "^[^?]*[?]", ""); }
+    if (req.http.X-SCP-Profile == "ultracache") { call scp_guest_issuer_recv; }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_recv; }
     call scp_common_recv;
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0 && req.method == "GET") {
@@ -146,6 +154,10 @@ sub scp_hit {
 sub scp_backend_fetch {
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     unset bereq.http.X-SCP-Cookie-Handoff;
+    unset bereq.http.X-UltraCache-Guest-Issuer-Version;
+    unset bereq.http.X-UltraCache-Guest-Issuer-Canonical-URL;
+    unset bereq.http.X-UltraCache-Guest-Issuer-Authorization;
+    unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Canonical-URL;
     unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Version;
     unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Policy;
     unset bereq.http.X-UltraCache-VCL-Guest-Publication-Version;
@@ -240,6 +252,9 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
+    unset beresp.http.X-UltraCache-Guest-Issuer-Version;
+    unset beresp.http.X-UltraCache-Guest-Issuer-Canonical-URL;
+    unset beresp.http.X-UltraCache-Guest-Issuer-Authorization;
     unset beresp.http.X-UltraCache-Guest-Publication;
     if (!cookie_handoff.delivery_local_source()) {
         unset beresp.http.X-SCP-Guest-Key;
@@ -298,6 +313,7 @@ sub scp_backend_response {
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
     # The prepare capture consumes its own outcome before this cleanup. An
     # ordinary origin response cannot store a delivery verdict in the parent.
+    unset beresp.http.X-UltraCache-Delivery-Guest-Publication-Canonical-URL;
     unset beresp.http.X-UltraCache-Delivery-Guest-Publication-Version;
     unset beresp.http.X-UltraCache-Delivery-Guest-Publication-Policy;
     unset beresp.http.X-UltraCache-VCL-Guest-Publication-Version;
@@ -315,6 +331,10 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    unset resp.http.X-UltraCache-Guest-Issuer-Version;
+    unset resp.http.X-UltraCache-Guest-Issuer-Canonical-URL;
+    unset resp.http.X-UltraCache-Guest-Issuer-Authorization;
+    unset resp.http.X-UltraCache-Delivery-Guest-Publication-Canonical-URL;
     unset resp.http.X-UltraCache-Delivery-Guest-Publication-Version;
     unset resp.http.X-UltraCache-Delivery-Guest-Publication-Policy;
     unset resp.http.X-UltraCache-VCL-Guest-Publication-Version;

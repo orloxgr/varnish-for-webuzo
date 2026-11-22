@@ -143,6 +143,17 @@ if (cookie_handoff.delivery_backend()) {
         unset bereq.http.X-SCP-Aggressive-TTL;
     }
 } else {
+    if (bereq.method == "POST" && bereq.http.X-SCP-Guest-Issuer == "1" && bereq.http.X-SCP-Guest-Issuer-Canonical) {
+        call scp_delivery_authorization;
+        if (bereq.http.X-UltraCache-Delivery-Authorization) {
+            set bereq.http.X-UltraCache-Guest-Issuer-Version = "1";
+            set bereq.http.X-UltraCache-Guest-Issuer-Canonical-URL = bereq.http.X-SCP-Guest-Issuer-Canonical;
+            set bereq.http.X-UltraCache-Guest-Issuer-Authorization = cookie_handoff.guest_issuer_authorization(bereq.http.X-UltraCache-Delivery-Authorization,bereq.http.X-SCP-Guest-Issuer-Canonical);
+        }
+        unset bereq.http.X-UltraCache-Delivery-Authorization;
+    }
+    unset bereq.http.X-SCP-Guest-Issuer;
+    unset bereq.http.X-SCP-Guest-Issuer-Canonical;
 # Advertise generic ESI capability to any compatible application.
 set bereq.http.Surrogate-Capability = "varnish=ESI/1.0";
 unset bereq.http.X-UltraCache-ESI-Transport-Version;
@@ -191,8 +202,9 @@ unset bereq.http.X-UltraCache-ESI-Shared-Parent;
 }
 }
 sub scp_delivery_authorization {
-    # Filled from native adapter-owned site credentials, never a request field.
-    # This sub is called only after the native task association proves prepare.
+    # Resolve native adapter-owned site credentials, never a browser field.
+    # Callers own either a bound prepare or the separate private issuer stamp;
+    # the latter is not authorization to execute the prepare protocol.
     @@DELIVERY_AUTHORIZATION@@
 }
 sub scp_ultracache_public_fragment_response {

@@ -84,9 +84,15 @@ policy binding. Add these native-owned request fields:
 ```
 X-UltraCache-Delivery-Guest-Publication-Version: 1
 X-UltraCache-Delivery-Guest-Publication-Policy: <accepted producer guest policy>
+X-UltraCache-Delivery-Guest-Publication-Canonical-URL: <native canonical relative URI>
 ```
 
-The existing origin epoch hint carries the current registry epoch. The producer
+The canonical field is the exact native COPY used for cache hashing, preserving
+unknown/repeated/encoded functional query bytes and omitting only the existing
+native tracking parameters. The raw original URL remains unchanged. The producer
+uses this owned field for its public issuer ticket identity rather than its own
+potentially different query normalizer. The existing origin epoch hint carries
+the current registry epoch. The producer
 checks both negotiated fields, literal absent Cookie/Authorization and the full
 existing authenticated original-route entry before doing guest publication work.
 A browser copy of either field cannot authorize this operation. No new shared
@@ -203,7 +209,50 @@ an expiry no later than the publication's existing validity. It grants only the
 anonymous side effects already available from visiting that page.
 
 The browser performs one separate same-origin credentialed POST outside the HTML
-critical path. Use the original route plus the reserved operation query key
+critical path. It appends the operation pair to the current real browser route,
+preserving that visitor's raw tracking and functional query bytes. It does not
+reuse a cached publisher's raw route or reserialize unrelated query pairs.
+
+For this private POST, native removes exactly one literal reserved operation
+pair from a COPY, then applies the very same native tracking canonicalizer used
+for ordinary HTML keys. Duplicate operation pairs receive no stamp. Actual
+req.url/URI stays unchanged. The private origin request receives exactly:
+
+```
+X-UltraCache-Guest-Issuer-Version: 1
+X-UltraCache-Guest-Issuer-Canonical-URL: <native canonical relative URI>
+X-UltraCache-Guest-Issuer-Authorization: v1:<lowercase HMAC-SHA256>
+```
+
+The HMAC key is the existing scoped connection secret, which is never sent on
+this browser-shaped POST. Exact message bytes, with newline separators and no
+trailing newline, are:
+
+```
+ultracache-guest-issuer-v1
+POST
+<lowercase(trim(final forwarded HTTP Host)), including any explicit port>
+<actual raw request URI including the reserved operation pair>
+<native canonical relative URI>
+```
+
+The producer calculates hash_hmac('sha256', message, existing_connection_secret)
+and compares the `v1:`-prefixed result with hash_equals. Sign the actual forwarded
+origin Host, not an unrelated private selector. Even a phpinfo-like endpoint that
+echoes request fields sees only a request-bound proof, never a reusable purge or
+prepare credential. The proof cannot move to another method, host, raw URI or
+canonical identity. Public ticket validity supplies its existing expiry; there
+is no new timer, replay database or per-HIT work.
+
+The producer verifies this proof and compares the canonical field directly with
+its signed ticket. No duplicated tracking allowlist or
+application normalizer can discard an unknown functional key for authorization.
+Native strips forged ingress and echoed response fields. This stamp grants no
+prepare identity; Delivery-Authorization remains separate. The producer still
+verifies ticket HMAC, origin, scope, guest policy, expiry and allowed issuer work.
+No field or credential is returned in the browser response.
+
+Use the original route plus the reserved operation query key
 `ultracache_guest_cookie_delivery`, whose value is the signed entry ticket. The
 producer validates the ticket and restores its exact original route context;
 this key cannot route an arbitrary URL. Native's existing non-GET rules pass the

@@ -259,12 +259,13 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     if (guest) {
         d->guest_requested = 1; d->guest_has_variant = has_variant;
         d->guest_policy = strdup(g->policy); d->guest_epoch = strdup(g->epoch); d->guest_key = strdup(g->key);
+        delivery_copy_header(ctx->http_req,HDR("X-SCP-Key-URL"),&d->guest_canonical);
     }
     d->wordpress_policy = wordpress_policy; d->selection_actions = actions;
     d->selection_scope = scope;
     d->selection_policy = strdup(policy); d->selection_rules = strdup(rules ? rules : "");
     if (!reselect) { d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site); }
-    if ((guest && (!d->guest_policy || !d->guest_epoch || !d->guest_key)) ||
+    if ((guest && (!d->guest_policy || !d->guest_epoch || !d->guest_key || !d->guest_canonical)) ||
         !d->selection_policy || !d->selection_rules || !d->url || !delivery_relative(d->url) || !d->site ||
         (!reselect && (!delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
         !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||

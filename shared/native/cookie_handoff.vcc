@@ -232,3 +232,9 @@ $Function STRING selection_guest_policy(STRING site, STRING host, STRING scope)
 $Restrict vcl_recv vcl_synth
 
 Read the accepted exact-scope guest declaration without changing registration.
+
+$Function STRING guest_issuer_authorization(STRING credential, STRING canonical)
+$Restrict vcl_backend_fetch
+
+Domain-separated HMAC of the actual POST method, forwarded Host, raw URI and
+native canonical context. The reusable credential is not forwarded to PHP.
