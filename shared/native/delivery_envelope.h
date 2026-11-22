@@ -38,6 +38,7 @@ struct delivery_public_selection {
     char *manifest, *target;
     uint64_t occurrences;
     unsigned cookie_delivery;
+    unsigned guest;
     struct delivery_cookie_update *updates;
     struct delivery_header *headers;
     struct delivery_public_parent *parent;
@@ -48,6 +49,10 @@ int delivery_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection,
     struct delivery_private_document **document);
+int delivery_guest_selection_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    const char *guest_policy, const char *epoch, const char *scope,
+    struct delivery_public_selection **selection);
 void delivery_selection_free(struct delivery_public_selection *selection);
 /* Ordered action TAB kind TAB literal-name LF, from the effective resolver. */
 int delivery_selection_candidate(const struct delivery_public_selection *selection,

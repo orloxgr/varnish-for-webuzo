@@ -132,7 +132,7 @@ $Function STRING selection_epoch()
 Registry-lifetime identity including the native build; no visitor data. Changes
 after a worker/registry restart and stays stable across overlapping VCL loads.
 
-$Function BOOL selection_register(STRING site, STRING host, STRING scope, STRING wordpress_policy, STRING names, BOOL enabled)
+$Function BOOL selection_register(STRING site, STRING host, STRING scope, STRING wordpress_policy, STRING names, BOOL enabled, STRING guest_policy = "")
 $Restrict vcl_recv
 
 Called only after existing per-site HTTP capabilities authentication. Stores
@@ -207,3 +207,28 @@ $Function BOOL delivery_conflict_response(PRIV_TASK)
 $Restrict vcl_backend_response
 
 Validate early conflict proof before removing its ephemeral request bindings.
+
+$Function VOID guest_ingress()
+$Restrict vcl_recv
+
+Capture original absent Cookie/Authorization before normalization; no continuation.
+
+$Function VOID guest_select(STRING site, STRING policy)
+$Restrict vcl_recv vcl_miss
+
+Select registered complete guest namespace for the native-owned first-visit predicate.
+
+$Function STRING guest_key()
+$Restrict vcl_recv vcl_hash vcl_hit vcl_deliver
+
+Current request-owned guest namespace, never a browser cookie classification.
+
+$Function BOOL guest_result()
+$Restrict vcl_deliver
+
+Complete guest object provenance matches the selected request namespace.
+
+$Function STRING selection_guest_policy(STRING site, STRING host, STRING scope)
+$Restrict vcl_recv vcl_synth
+
+Read the accepted exact-scope guest declaration without changing registration.

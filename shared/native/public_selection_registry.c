@@ -6,14 +6,14 @@
 
 struct public_declaration {
     struct public_declaration *next;
-    char *site, *host, *scope, *wordpress_policy, *names;
+    char *site, *host, *scope, *wordpress_policy, *names, *guest_policy;
 };
 static struct public_declaration *public_declarations;
 static unsigned public_selection_vcls;
 static char public_registry_epoch[65];
 
 static void public_declaration_free(struct public_declaration *p) {
-    free(p->site); free(p->host); free(p->scope); free(p->wordpress_policy); free(p->names); free(p);
+    free(p->guest_policy); free(p->site); free(p->host); free(p->scope); free(p->wordpress_policy); free(p->names); free(p);
 }
 static int public_selection_vcl_event(enum vcl_event_e event) {
     unsigned char identity[sizeof(PACKAGE_VERSION)-1+32];
@@ -128,17 +128,18 @@ VCL_STRING vmod_selection_epoch(VRT_CTX) {
     return epoch;
 }
 VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
-    VCL_STRING scope, VCL_STRING wordpress_policy, VCL_STRING names, VCL_BOOL enabled) {
+    VCL_STRING scope, VCL_STRING wordpress_policy, VCL_STRING names, VCL_BOOL enabled, VCL_STRING guest_policy) {
     struct public_declaration *next = NULL, **p;
     (void)ctx;
     if (!site || !*site || !host || !*host || !delivery_selection_scope_valid(scope) ||
-        (enabled && !public_policy(wordpress_policy))) return 0;
+        (enabled && (!public_policy(wordpress_policy) || (guest_policy && *guest_policy && !public_policy(guest_policy))))) return 0;
     if (enabled) {
         next = calloc(1,sizeof(*next));
         if (!next) return 0;
         next->site = strdup(site); next->host = strdup(host); next->scope = strdup(scope);
         next->wordpress_policy = strdup(wordpress_policy); next->names = public_names(names);
-        if (!next->site || !next->host || !next->scope || !next->wordpress_policy || !next->names) { public_declaration_free(next); return 0; }
+        next->guest_policy = strdup(guest_policy ? guest_policy : "");
+        if (!next->site || !next->host || !next->scope || !next->wordpress_policy || !next->names || !next->guest_policy) { public_declaration_free(next); return 0; }
     }
     pthread_mutex_lock(&lock);
     p = &public_declarations;
@@ -166,6 +167,34 @@ VCL_STRING vmod_selection_wordpress_policy(VRT_CTX, VCL_STRING site, VCL_STRING 
     if (p) out = WS_Copy(ctx->ws,p->wordpress_policy,-1);
     pthread_mutex_unlock(&lock); return out;
 }
+VCL_STRING vmod_selection_guest_policy(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope) {
+    struct public_declaration *p;
+    const char *out = NULL;
+    if (!site || !host || !delivery_selection_scope_valid(scope)) return NULL;
+    pthread_mutex_lock(&lock); p = public_declaration(site,host,scope);
+    if (p && *p->guest_policy) out = WS_Copy(ctx->ws,p->guest_policy,-1);
+    pthread_mutex_unlock(&lock); return out;
+}
+VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy) {
+    struct guest_request *g = guest_context(ctx);
+    struct public_declaration *p;
+    const char *host = NULL, *identity;
+    char digest[65];
+    if (!g || !g->eligible || g->disabled || g->key || ctx->req->esi_level ||
+        !site || !public_policy(policy) || !http_GetHdr(ctx->http_req,H_Host,&host)) return;
+    pthread_mutex_lock(&lock);
+    p = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
+    if (p && *p->guest_policy) {
+        g->policy = strdup(p->guest_policy); g->wordpress_policy = strdup(p->wordpress_policy);
+        g->scope = strdup(p->scope); g->epoch = strdup(public_registry_epoch);
+    }
+    pthread_mutex_unlock(&lock);
+    if (!g->policy) return;
+    if (!g->wordpress_policy || !g->scope || !g->epoch) { VRT_fail(ctx,"Guest policy snapshot unavailable"); return; }
+    identity = WS_Printf(ctx->ws,"guest-v1|%s|%s|%s|%s|%s|%s|%s",site,host,policy,g->wordpress_policy,g->policy,g->epoch,g->scope);
+    if (!identity || !delivery_selection_digest((const unsigned char *)identity,strlen(identity),digest) ||
+        !(g->key = strdup(digest))) VRT_fail(ctx,"Guest namespace unavailable");
+}
 VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {
     char *canonical = names && *names ? public_names(names) : NULL;
     char *actions;
@@ -183,7 +212,8 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     struct public_declaration *declaration;
     const char *host = NULL, *method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     char *names = NULL, *wordpress_policy = NULL, *scope = NULL, *actions;
-    int has_variant, found;
+    int has_variant, found, guest;
+    struct guest_request *g = guest_context(ctx);
     unsigned i;
     if ((reselect ? (!d || d->phase != D_RESELECT_READY || !d->reselect_attempted || d->failed ||
             d->selection_entry || ctx->req->restarts != d->restart+2) : (d || ctx->req->restarts)) ||
@@ -200,9 +230,11 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     if (!names || !wordpress_policy || !scope) { free(names); free(wordpress_policy); free(scope); return -1; }
     actions = public_actions(rules,names,&has_variant); free(names);
     if (!actions) { free(wordpress_policy); free(scope); return -1; }
+    guest = !reselect && g && g->eligible && !g->disabled && g->key &&
+        !strcmp(g->wordpress_policy,wordpress_policy) && !strcmp(g->scope,scope);
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
      * prepares on an actual cold MISS, leaving plain warm HITs alone. */
-    if (!reselect && ((!has_variant && !cold) || (has_variant && cold))) {
+    if (!reselect && ((guest && !cold) || (!guest && ((!has_variant && !cold) || (has_variant && cold))))) {
         free(actions); free(wordpress_policy); free(scope); return 0;
     }
     if (ctx->req->restarts+1 > ctx->req->max_restarts) { free(actions); free(wordpress_policy); free(scope); return -1; }
@@ -224,11 +256,16 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         cold = !has_variant;
     }
     d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;
+    if (guest) {
+        d->guest_requested = 1; d->guest_has_variant = has_variant;
+        d->guest_policy = strdup(g->policy); d->guest_epoch = strdup(g->epoch); d->guest_key = strdup(g->key);
+    }
     d->wordpress_policy = wordpress_policy; d->selection_actions = actions;
     d->selection_scope = scope;
     d->selection_policy = strdup(policy); d->selection_rules = strdup(rules ? rules : "");
     if (!reselect) { d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site); }
-    if (!d->selection_policy || !d->selection_rules || !d->url || !delivery_relative(d->url) || !d->site ||
+    if ((guest && (!d->guest_policy || !d->guest_epoch || !d->guest_key)) ||
+        !d->selection_policy || !d->selection_rules || !d->url || !delivery_relative(d->url) || !d->site ||
         (!reselect && (!delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
         !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
         !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)))) return -1;
@@ -254,14 +291,21 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     for (i = 1; i < 5; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
     return WS_Overflowed(ctx->ws) ? -1 : 1;
 }
-static int public_selection_parse(struct continuation *d) {
+static int public_selection_parse(VRT_CTX, struct continuation *d) {
     struct delivery_public_selection *s;
     struct delivery_header *header;
     struct fields **tail = &d->public_headers;
-    if (!delivery_selection_parse(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
-        &d->selection,&d->document)) return 0;
+    if (d->guest_reply) {
+        if (!d->guest_requested || !delivery_guest_selection_parse(d->body,d->length,d->request_id,d->url,
+            d->selection_policy,d->wordpress_policy,d->guest_policy,d->guest_epoch,d->selection_scope,&d->selection)) return 0;
+    } else {
+        if (!delivery_selection_parse(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
+            &d->selection,&d->document)) return 0;
+        if (d->guest_requested) { guest_disable(ctx); d->cold_entry = !d->guest_has_variant; }
+    }
     if (d->document) return 1;
     s = d->selection;
+    d->guest_complete = s->guest;
     if (!delivery_selection_candidate(s,d->cookie,d->selection_rules,&d->candidate)) return 0;
     d->variant = delivery_selection_projection(d->candidate,d->selection_rules);
     if (d->cold_entry) {
@@ -294,7 +338,7 @@ VCL_BOOL vmod_selection_cold(VRT_CTX, struct vmod_priv *priv) {
 
 VCL_STRING vmod_selection_manifest(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
-    if (ctx->req->esi_level || !d || !d->selection_entry || !d->manifest ||
+    if (ctx->req->esi_level || !d || !d->selection_entry || d->guest_complete || !d->manifest ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
     return WS_Copy(ctx->ws,d->manifest,-1);
 }

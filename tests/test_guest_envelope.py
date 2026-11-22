@@ -1,0 +1,86 @@
+"""Strict negotiated guest grammar executed by the real portable C parser."""
+import base64
+import copy
+import ctypes
+import hashlib
+import json
+import unittest
+import test_public_selection as selection
+
+POLICY='a'*64
+WP='b'*64
+GUEST='d'*64
+EPOCH='e'*64
+URL='/guest/?functional=1'
+
+def sample():
+    body='<html>empty cart; nonce placeholder; Ελληνικά</html>'.encode()
+    return dict(schemaVersion=1,requestId='42',originalUrl=URL,guestPublic=dict(
+        policyDigest=POLICY,wordpressPolicyDigest=WP,guestPolicyDigest=GUEST,
+        registryEpoch=EPOCH,scope='/',manifest='signed.guest',sourceManifest='signed.source',
+        sourceGeneration='f'*64,resolvedOccurrences=13,
+        publicParent=dict(generation=hashlib.sha256(body).hexdigest(),
+            bodyBase64=base64.b64encode(body).decode(),freshRemaining=1234),
+        headers=['Content-Type: text/html; charset=UTF-8','Vary: Accept'],cookieDelivery='deferred'))
+
+@unittest.skipUnless(selection.CC,'C compiler required; skip is not acceptance')
+class GuestEnvelope(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        selection.PublicSelection.setUpClass.__func__(cls)
+        cls.lib.delivery_guest_selection_parse.argtypes=[ctypes.c_void_p,ctypes.c_size_t]+[ctypes.c_char_p]*7+[
+            ctypes.POINTER(selection.SelectionPointer)]
+        cls.lib.delivery_guest_selection_parse.restype=ctypes.c_int
+    tearDownClass=classmethod(selection.PublicSelection.tearDownClass.__func__)
+    def parse(self,value,**changes):
+        body=json.dumps(value,ensure_ascii=False).encode() if isinstance(value,dict) else value
+        result=selection.SelectionPointer()
+        args=dict(request='42',url=URL,policy=POLICY,wordpress=WP,guest=GUEST,epoch=EPOCH,scope='/')
+        args.update(changes)
+        try:
+            ok=self.lib.delivery_guest_selection_parse(body,len(body),*[v.encode() for v in args.values()],ctypes.byref(result))
+            if not ok:return None
+            p=result.contents.parent.contents
+            return dict(guest=result.contents.guest,body=ctypes.string_at(p.body,p.length),
+                ttl=p.fresh_remaining,privateCount=result.contents.occurrences)
+        finally:self.lib.delivery_selection_free(result)
+    def test_complete_guest_bytes_and_real_remaining_budget(self):
+        s=sample();out=self.parse(s)
+        self.assertEqual(out['guest'],1);self.assertEqual(out['ttl'],1234)
+        self.assertEqual(out['privateCount'],0)
+        self.assertEqual(out['body'],base64.b64decode(s['guestPublic']['publicParent']['bodyBase64']))
+    def test_all_owner_bindings_are_exact(self):
+        for name in ('request','url','policy','wordpress','guest','epoch','scope'):
+            with self.subTest(name=name):self.assertIsNone(self.parse(sample(),**{name:'different'}))
+    def test_missing_unknown_and_duplicate_fields_are_rejected(self):
+        for key in sample()['guestPublic']:
+            v=sample();del v['guestPublic'][key]
+            with self.subTest(key=key):self.assertIsNone(self.parse(v))
+        v=sample();v['guestPublic']['unexpected']=True;self.assertIsNone(self.parse(v))
+        raw=json.dumps(sample()).encode()
+        self.assertIsNone(self.parse(raw.replace(b'"resolvedOccurrences": 13',b'"resolvedOccurrences": 13,"resolvedOccurrences": 13')))
+        self.assertIsNone(self.parse(raw.replace(b'"requestId": "42"',b'"requestId": "42","requestId": "42"')))
+    def test_every_truncated_prefix_and_trailing_bytes_reject(self):
+        raw=json.dumps(sample()).encode()
+        for end in range(len(raw)):self.assertIsNone(self.parse(raw[:end]),str(end))
+        self.assertIsNone(self.parse(raw+b'{}'))
+    def test_no_private_transport_or_issuer_fields_in_guest_headers(self):
+        for header in ('Set-Cookie: owner=x','Set-Cookie2: owner=x','X-UltraCache-Delivery-Prepare: /private',
+            'X-UltraCache-ESI-Private-Count: 0','X-UltraCache-Cookie-Delivery: 1',
+            'Surrogate-Control: ESI/1.0','Cache-Control: private, no-store',
+            'Authorization: secret','X-SCP-Guest-Complete: 1','Vary: *'):
+            v=sample();v['guestPublic']['headers'].append(header)
+            with self.subTest(header=header):self.assertIsNone(self.parse(v))
+    def test_valid_guest_does_not_relax_old_selection_schema(self):
+        raw=json.dumps(sample()).encode();out=selection.SelectionPointer();document=selection.DocumentPointer()
+        try:self.assertEqual(self.lib.delivery_selection_parse(raw,len(raw),b'42',URL.encode(),POLICY.encode(),WP.encode(),ctypes.byref(out),ctypes.byref(document)),0)
+        finally:self.lib.delivery_selection_free(out);self.lib.delivery_private_document_free(document)
+    def test_bad_body_digest_unresolved_esi_and_invalid_integer_claims_reject(self):
+        v=sample();v['guestPublic']['publicParent']['generation']='0'*64;self.assertIsNone(self.parse(v))
+        for val in (True,-1,1.5,'13'):
+            v=sample();v['guestPublic']['resolvedOccurrences']=val;self.assertIsNone(self.parse(v))
+        for body in (b'<html><esi:include src="/private"/></html>',b'<html><ESI:INCLUDE src="/private"/></html>'):
+            v=sample();v['guestPublic']['publicParent'].update(bodyBase64=base64.b64encode(body).decode(),generation=hashlib.sha256(body).hexdigest())
+            self.assertIsNone(self.parse(v))
+
+if __name__=='__main__':unittest.main()

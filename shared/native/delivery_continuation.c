@@ -7,6 +7,48 @@
 #include "vrt_obj.h"
 #include "delivery_envelope.h"
 
+/* Separate top-request eligibility storage does not create a continuation. */
+static const char guest_top_token;
+struct guest_request {
+    unsigned captured, eligible, disabled;
+    char *key, *policy, *wordpress_policy, *epoch, *scope;
+};
+static void guest_fini(VRT_CTX, void *value) {
+    struct guest_request *g = value;
+    (void)ctx;
+    free(g->key); free(g->policy); free(g->wordpress_policy); free(g->epoch); free(g->scope); free(g);
+}
+static const struct vmod_priv_methods guest_methods = {
+    .magic = VMOD_PRIV_METHODS_MAGIC, .type = "ultracache-guest-top", .fini = guest_fini,
+};
+static struct guest_request *guest_context(VRT_CTX) {
+    struct vmod_priv *p = VRT_priv_top_get(ctx,&guest_top_token);
+    return p ? p->priv : NULL;
+}
+VCL_VOID vmod_guest_ingress(VRT_CTX) {
+    struct vmod_priv *p;
+    struct guest_request *g;
+    if (ctx->req->esi_level || ctx->req->restarts) return;
+    p = VRT_priv_top(ctx,&guest_top_token);
+    if (!p) { VRT_fail(ctx,"Guest ingress association unavailable"); return; }
+    if (p->priv) return;
+    g = calloc(1,sizeof(*g));
+    if (!g) { VRT_fail(ctx,"Guest ingress state unavailable"); return; }
+    g->captured = 1;
+    g->eligible = !http_CountHdr(ctx->http_req,H_Cookie) && !http_CountHdr(ctx->http_req,H_Authorization);
+    p->priv = g; p->methods = &guest_methods;
+}
+static void guest_disable(VRT_CTX) {
+    struct guest_request *g = guest_context(ctx);
+    if (g) g->disabled = 1;
+}
+VCL_STRING vmod_guest_key(VRT_CTX) {
+    struct guest_request *g;
+    if (ctx->req->esi_level) return NULL;
+    g = guest_context(ctx);
+    return g && !g->disabled && g->key ? WS_Copy(ctx->ws,g->key,-1) : NULL;
+}
+
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY, D_FAILED };
@@ -19,6 +61,8 @@ struct continuation {
     unsigned selection_entry;
     unsigned reselect_attempted, conflict_verified;
     unsigned cold_entry;
+    unsigned guest_requested, guest_reply, guest_complete, guest_has_variant;
+    char *guest_policy, *guest_epoch, *guest_key;
     unsigned cookie_delivery;
     unsigned debug_fallback;
     unsigned outcome; /* 0 unverified, 1 verified, 2 degraded; this owner only */
@@ -44,7 +88,7 @@ struct continuation {
     struct fields *document_headers;
 };
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
-static int public_selection_parse(struct continuation *);
+static int public_selection_parse(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
 static const char filter_task_token;
 static const char private_filter_task_token;
@@ -76,6 +120,11 @@ static const hdr_t h_contained_error = HDR("X-UltraCache-ESI-Error-Contained");
 static const hdr_t h_delivery_outcome = HDR("X-UltraCache-Delivery-Outcome");
 static const hdr_t h_lookup_variant = HDR("X-SCP-Admin-Variant");
 static const hdr_t h_cookie_delivery = HDR("X-UltraCache-Cookie-Delivery");
+static const hdr_t h_guest_version = HDR("X-UltraCache-Delivery-Guest-Publication-Version");
+static const hdr_t h_guest_policy = HDR("X-UltraCache-Delivery-Guest-Publication-Policy");
+static const hdr_t h_guest_object_key = HDR("X-SCP-Guest-Key");
+static const hdr_t h_guest_object_manifest = HDR("X-SCP-Guest-Manifest");
+static const hdr_t h_guest_object_complete = HDR("X-SCP-Guest-Complete");
 static const hdr_t h_surrogate_control = HDR("Surrogate-Control");
 static const hdr_t conditional_headers[] = {
     HDR("Range"), HDR("If-None-Match"), HDR("If-Modified-Since"), HDR("If-Match"),
@@ -100,6 +149,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     /* The table lock excludes an aborting backend filter before freeing d. */
     close_owner(&d->association);
     (void)ctx;
+    free(d->guest_policy); free(d->guest_epoch); free(d->guest_key);
     free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
@@ -144,8 +194,8 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
     return 1;
 }
 
-static int delivery_parse(struct continuation *d) {
-    if (d->selection_entry) return public_selection_parse(d);
+static int delivery_parse(VRT_CTX, struct continuation *d) {
+    if (d->selection_entry) return public_selection_parse(ctx,d);
     int ok = delivery_cookie_envelope_parse(d->body,d->length,d->request_id,d->url,
         d->occurrences,(int)d->cookie_delivery,&d->fragments,&d->public_parent,&d->document);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
@@ -326,6 +376,24 @@ static int delivery_header_equals(const struct http *hp, hdr_t name, const char 
     return expected && http_CountHdr(hp,name) == 1 && http_GetHdr(hp,name,&value) && !strcmp(value,expected);
 }
 /* Only the negotiated pre-bootstrap conflict can authorize another entry. */
+static int guest_object_matches(VRT_CTX, const char *key, const char *manifest) {
+    const char *value;
+    char digest[65];
+    return key && delivery_header_equals(ctx->http_resp,h_guest_object_key,key) &&
+        delivery_header_equals(ctx->http_resp,h_guest_object_complete,"1") &&
+        http_CountHdr(ctx->http_resp,h_guest_object_manifest) == 1 &&
+        http_GetHdr(ctx->http_resp,h_guest_object_manifest,&value) && strlen(value) == 64 &&
+        strspn(value,"0123456789abcdef") == 64 &&
+        (!manifest || (delivery_selection_digest((const unsigned char *)manifest,strlen(manifest),digest) &&
+            !strcmp(value,digest)));
+}
+VCL_BOOL vmod_guest_result(VRT_CTX) {
+    struct guest_request *g;
+    if (ctx->req->esi_level) return 0;
+    g = guest_context(ctx);
+    return g && !g->disabled && g->key && guest_object_matches(ctx,g->key,NULL);
+}
+
 static int delivery_conflict(VRT_CTX, const struct continuation *d) {
     const char *reason;
     char digest[65];
@@ -496,7 +564,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             if (d->phase == D_PREPARE && !d->selection_entry && !d->reselect_attempted)
                 http_ForceHeader(ctx->http_bereq,h_reselect_version,"1");
             else http_Unset(ctx->http_bereq,h_reselect_version);
-            if (d->manifest) http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
+            if (d->manifest && !d->guest_complete) http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
             else http_Unset(ctx->http_bereq,h_manifest);
             if (d->selection_entry && d->phase == D_PREPARE) {
                 http_ForceHeader(ctx->http_bereq,h_selection_version,"1");
@@ -504,6 +572,10 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
                 http_ForceHeader(ctx->http_bereq,h_wordpress_policy,d->wordpress_policy);
                 http_ForceHeader(ctx->http_bereq,h_selection_actions,d->selection_actions);
                 http_ForceHeader(ctx->http_bereq,h_selection_scope,d->selection_scope);
+                if (d->guest_requested) {
+                    http_ForceHeader(ctx->http_bereq,h_guest_version,"1");
+                    http_ForceHeader(ctx->http_bereq,h_guest_policy,d->guest_policy);
+                }
             }
             if (d->cookie) http_ForceHeader(ctx->http_bereq,H_Cookie,d->cookie);
             else http_Unset(ctx->http_bereq,H_Cookie);
@@ -565,7 +637,8 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     if (!owned) { pthread_mutex_unlock(&lock); return 0; }
     http_GetHdr(ctx->http_beresp,H_Content_Type,&content_type);
     if (d->selection_entry) {
-        int declared = http_GetHdr(ctx->http_beresp,h_selection_version,&selection_version) ||
+        http_GetHdr(ctx->http_beresp,h_selection_version,&selection_version);
+        int declared = http_CountHdr(ctx->http_beresp,h_guest_version) || http_GetHdr(ctx->http_beresp,h_selection_version,&selection_version) ||
             (content_type && !strncasecmp(content_type,selection_content_type,sizeof(selection_content_type)-1));
         valid = declared ? selection_version && !strcmp(selection_version,"1") &&
             http_CountHdr(ctx->http_beresp,h_selection_version) == 1 &&
@@ -591,6 +664,10 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
         if (!filter) VRT_fail(ctx,"UltraCache conflict capture association unavailable");
         return 1;
     }
+    d->guest_reply = http_CountHdr(ctx->http_beresp,h_guest_version) != 0;
+    if (d->guest_reply) valid = valid && d->selection_entry && d->guest_requested &&
+        delivery_header_equals(ctx->http_beresp,h_guest_version,"1") &&
+        !http_CountHdr(ctx->http_beresp,H_Set_Cookie) && !http_CountHdr(ctx->http_beresp,h_set_cookie2);
     valid = valid && http_GetStatus(ctx->http_beresp) == 200 &&
         (!http_GetHdr(ctx->http_beresp,H_Content_Encoding,&encoding) || !strcmp(encoding,"identity"));
     pthread_mutex_unlock(&lock);
@@ -719,7 +796,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         pthread_mutex_lock(&lock);
         valid = d->complete && !d->failed;
         pthread_mutex_unlock(&lock);
-        if (!valid || http_GetStatus(ctx->http_resp) != 200 || !delivery_parse(d) || !delivery_restore(ctx,d)) {
+        if (!valid || http_GetStatus(ctx->http_resp) != 200 || !delivery_parse(ctx,d) || !delivery_restore(ctx,d)) {
             d->phase = D_FAILED; return -1;
         }
         if (d->document) {
@@ -740,6 +817,24 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->phase = D_RETURN;
         delivery_log_fallback(ctx,d);
         return 1;
+    }
+    if (d->guest_complete && (d->phase == D_READY || d->phase == D_RECOVERY)) {
+        if (http_GetStatus(ctx->http_resp) != 200 || !guest_object_matches(ctx,d->guest_key,d->manifest)) {
+            if (d->phase == D_READY && d->recovery_ready && !d->recovery_sent && ctx->req->restarts < ctx->req->max_restarts) {
+                d->phase = D_RECOVERY_QUEUED; d->recovery_restart = ctx->req->restarts+1; return 1;
+            }
+            d->phase = D_FAILED; return -1;
+        }
+        const char *site = NULL, *host = NULL;
+        if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) || !delivery_restore(ctx,d) ||
+            !http_GetHdr(ctx->http_req,h_adapter_site,&site) || !d->site || strcmp(site,d->site) ||
+            !http_GetHdr(ctx->http_req,H_Host,&host) || strcmp(host,d->host) ||
+            strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b) || strcmp("GET",ctx->http_req->hd[HTTP_HDR_METHOD].b) ||
+            ctx->req->restarts != (d->recovery_restart ? d->recovery_restart : d->restart+1)) {
+            d->phase = D_FAILED; return -1;
+        }
+        d->phase = D_DELIVERED;
+        return 0; /* Complete guest bytes: no provider cookies or private batch. */
     }
     if (d->phase == D_READY || d->phase == D_RECOVERY) {
         if (http_GetStatus(ctx->http_resp) != 200 ||
@@ -772,7 +867,7 @@ VCL_STRING vmod_delivery_outcome(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
     /* Capture is provisional. Only complete, bound, final delivery may report
      * its outcome; ordinary late ESI and failed/raw responses stay unknown. */
-    if (ctx->req->esi_level || !d || d->failed ||
+    if (ctx->req->esi_level || !d || d->failed || d->guest_complete ||
         (d->phase != D_DELIVERED && d->phase != D_DOCUMENT_SENT)) return "unverified";
     if (d->outcome == 1) return "verified";
     if (d->outcome == 2) return "degraded";

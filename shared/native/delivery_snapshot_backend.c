@@ -139,6 +139,17 @@ static int delivery_snapshot_gethdrs(VRT_CTX, VCL_BACKEND backend) {
             if (!line || ctx->http_beresp->nhd >= ctx->http_beresp->shd) { failed = 1; break; }
             http_SetHeader(ctx->http_beresp,line);
         }
+        if (d->guest_complete) {
+            char digest[65];
+            if (!delivery_selection_digest((const unsigned char *)d->manifest,strlen(d->manifest),digest)) failed = 1;
+            else {
+                /* No opaque publication token is copied into HTTP metadata.
+                 * Its digest keeps the final binding at constant header cost. */
+                http_ForceHeader(ctx->http_beresp,h_guest_object_key,d->guest_key);
+                http_ForceHeader(ctx->http_beresp,h_guest_object_manifest,digest);
+                http_ForceHeader(ctx->http_beresp,h_guest_object_complete,"1");
+            }
+        }
         remaining = d->public_deadline-ctx->now;
         if (!isfinite(remaining) || remaining < 0) remaining = 0;
         http_PrintfHeader(ctx->http_beresp,"Cache-Control: public, max-age=%.0f",floor(remaining));

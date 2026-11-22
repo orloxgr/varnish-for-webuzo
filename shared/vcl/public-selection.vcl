@@ -5,6 +5,8 @@ sub scp_selection_context {
 
 # Called only inside the adapters' existing authenticated capabilities branch.
 sub scp_selection_negotiate {
+    std.collect(req.http.X-UltraCache-Public-Selection-Guest-Version);
+    std.collect(req.http.X-UltraCache-Public-Selection-Guest-Policy);
     std.collect(req.http.X-UltraCache-Public-Selection-Version);
     std.collect(req.http.X-UltraCache-Public-Selection-Enabled);
     std.collect(req.http.X-UltraCache-Public-Selection-WordPress-Policy);
@@ -13,17 +15,25 @@ sub scp_selection_negotiate {
     if (req.http.X-UltraCache-Public-Selection-Version ||
         req.http.X-UltraCache-Public-Selection-Enabled ||
         req.http.X-UltraCache-Public-Selection-WordPress-Policy ||
-        req.http.X-UltraCache-Public-Selection-Cookies) {
+        req.http.X-UltraCache-Public-Selection-Cookies ||
+        req.http.X-UltraCache-Public-Selection-Guest-Version ||
+        req.http.X-UltraCache-Public-Selection-Guest-Policy) {
         if ((req.http.X-SCP-Profile != "ultracache" && req.http.X-UltraCache-Public-Selection-Enabled != "0") ||
             req.http.X-UltraCache-Public-Selection-Version != "1" ||
             req.http.X-UltraCache-Public-Selection-Enabled !~ "^[01]$") {
             return (synth(400, "Invalid public selection declaration"));
         }
+        if ((req.http.X-UltraCache-Public-Selection-Guest-Version || req.http.X-UltraCache-Public-Selection-Guest-Policy) &&
+            (req.http.X-UltraCache-Public-Selection-Guest-Version != "1" ||
+             req.http.X-UltraCache-Public-Selection-Guest-Policy !~ "^[0-9a-f]{64}$")) {
+            return (synth(400, "Invalid guest publication declaration"));
+        }
         if (!cookie_handoff.selection_register(req.http.X-SCP-Site,req.http.host,
             req.http.X-UltraCache-Public-Selection-Scope,
             req.http.X-UltraCache-Public-Selection-WordPress-Policy,
             req.http.X-UltraCache-Public-Selection-Cookies,
-            req.http.X-UltraCache-Public-Selection-Enabled == "1")) {
+            req.http.X-UltraCache-Public-Selection-Enabled == "1",
+            req.http.X-UltraCache-Public-Selection-Guest-Policy)) {
             return (synth(400, "Public selection declaration rejected"));
         }
     }
@@ -46,6 +56,12 @@ sub scp_selection_capabilities {
         req.http.X-UltraCache-Operation == "capabilities") {
         set resp.http.X-UltraCache-VCL-Capabilities = resp.http.X-UltraCache-VCL-Capabilities + ",public-selection";
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
+        set resp.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
+        unset resp.http.X-UltraCache-VCL-Guest-Publication-Policy;
+        set resp.http.X-UltraCache-VCL-Guest-Publication-Policy = cookie_handoff.selection_guest_policy(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
+        if (resp.http.X-UltraCache-VCL-Guest-Publication-Policy !~ "^[0-9a-f]{64}$") {
+            unset resp.http.X-UltraCache-VCL-Guest-Publication-Policy;
+        }
         set resp.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
         set resp.http.X-UltraCache-VCL-Cookie-Delivery-Version = "1";
         set resp.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();
@@ -108,6 +124,7 @@ sub scp_selection_origin {
     # Hints cannot authorize an operation. Registration needs a successful
     # authenticated capabilities request, not these request fields.
     set bereq.http.X-UltraCache-VCL-Public-Selection-Version = "1";
+    set bereq.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
     set bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
     set bereq.http.X-UltraCache-VCL-Cookie-Delivery-Version = "1";
     set bereq.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();

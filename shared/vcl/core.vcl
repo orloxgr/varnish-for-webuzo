@@ -2,7 +2,16 @@
 
 sub scp_init {
     cookie_handoff.reset();
+    cookie_handoff.guest_ingress();
     unset req.http.X-SCP-Cookie-Handoff;
+    unset req.http.X-UltraCache-Delivery-Guest-Publication-Version;
+    unset req.http.X-UltraCache-Delivery-Guest-Publication-Policy;
+    unset req.http.X-UltraCache-VCL-Guest-Publication-Version;
+    unset req.http.X-UltraCache-VCL-Guest-Publication-Policy;
+    unset req.http.X-UltraCache-Guest-Publication;
+    unset req.http.X-SCP-Guest-Key;
+    unset req.http.X-SCP-Guest-Manifest;
+    unset req.http.X-SCP-Guest-Complete;
     unset req.http.X-UltraCache-Delivery-Parent-Source;
     unset req.http.X-SCP-Delivery-Public-Snapshot;
     unset req.http.X-SCP-Personal-Delivery;
@@ -137,6 +146,14 @@ sub scp_hit {
 sub scp_backend_fetch {
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     unset bereq.http.X-SCP-Cookie-Handoff;
+    unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Version;
+    unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Policy;
+    unset bereq.http.X-UltraCache-VCL-Guest-Publication-Version;
+    unset bereq.http.X-UltraCache-VCL-Guest-Publication-Policy;
+    unset bereq.http.X-UltraCache-Guest-Publication;
+    unset bereq.http.X-SCP-Guest-Key;
+    unset bereq.http.X-SCP-Guest-Manifest;
+    unset bereq.http.X-SCP-Guest-Complete;
     unset bereq.http.X-UltraCache-Delivery-Parent-Source;
     unset bereq.http.X-SCP-Delivery-Public-Snapshot;
     unset bereq.http.X-SCP-Personal-Delivery;
@@ -164,6 +181,8 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Actions;
+    unset bereq.http.X-UltraCache-Public-Selection-Guest-Version;
+    unset bereq.http.X-UltraCache-Public-Selection-Guest-Policy;
     unset bereq.http.X-UltraCache-Public-Selection-Version;
     unset bereq.http.X-UltraCache-Public-Selection-Enabled;
     unset bereq.http.X-UltraCache-Public-Selection-WordPress-Policy;
@@ -221,6 +240,12 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Adaptive-Nonce;
 }
 sub scp_backend_response {
+    unset beresp.http.X-UltraCache-Guest-Publication;
+    if (!cookie_handoff.delivery_local_source()) {
+        unset beresp.http.X-SCP-Guest-Key;
+        unset beresp.http.X-SCP-Guest-Manifest;
+        unset beresp.http.X-SCP-Guest-Complete;
+    }
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_private_backend_response; }
     unset beresp.http.X-SCP-Delivery-Public-Snapshot;
     unset beresp.http.X-SCP-Personal-Delivery;
@@ -273,6 +298,10 @@ sub scp_backend_response {
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
     # The prepare capture consumes its own outcome before this cleanup. An
     # ordinary origin response cannot store a delivery verdict in the parent.
+    unset beresp.http.X-UltraCache-Delivery-Guest-Publication-Version;
+    unset beresp.http.X-UltraCache-Delivery-Guest-Publication-Policy;
+    unset beresp.http.X-UltraCache-VCL-Guest-Publication-Version;
+    unset beresp.http.X-UltraCache-VCL-Guest-Publication-Policy;
     unset beresp.http.X-UltraCache-VCL-Publication-Reselect-Version;
     unset beresp.http.X-UltraCache-Delivery-Conflict-Version;
     unset beresp.http.X-UltraCache-Delivery-Conflict;
@@ -286,6 +315,10 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    unset resp.http.X-UltraCache-Delivery-Guest-Publication-Version;
+    unset resp.http.X-UltraCache-Delivery-Guest-Publication-Policy;
+    unset resp.http.X-UltraCache-VCL-Guest-Publication-Version;
+    unset resp.http.X-UltraCache-VCL-Guest-Publication-Policy;
     unset resp.http.X-UltraCache-VCL-Publication-Reselect-Version;
     unset resp.http.X-UltraCache-Delivery-Conflict-Version;
     unset resp.http.X-UltraCache-Delivery-Conflict;
@@ -320,6 +353,13 @@ sub scp_deliver {
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0) {
         set resp.http.X-UltraCache-Delivery-Outcome = cookie_handoff.delivery_outcome();
     }
+    unset resp.http.X-UltraCache-Guest-Publication;
+    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.guest_result()) {
+        set resp.http.X-UltraCache-Guest-Publication = "1";
+    }
+    unset resp.http.X-SCP-Guest-Key;
+    unset resp.http.X-SCP-Guest-Manifest;
+    unset resp.http.X-SCP-Guest-Complete;
     unset resp.http.X-UltraCache-Delivery-Parent-Source;
     unset resp.http.X-SCP-Delivery-Public-Snapshot;
     cookie_handoff.deliver();
@@ -342,7 +382,7 @@ sub scp_deliver {
     unset resp.http.X-Cache-Cookie-Delivery;
     # Original provider fields reach only this visitor, regardless of name.
     if (resp.http.Set-Cookie) { call scp_private_delivery; }
-    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.selection_manifest()) {
+    if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.selection_manifest() && resp.http.X-UltraCache-Guest-Publication != "1") {
         # The native replica remains public. A downstream cache must not skip
         # the real per-request provider selection, even without issuer fields.
         call scp_private_delivery;

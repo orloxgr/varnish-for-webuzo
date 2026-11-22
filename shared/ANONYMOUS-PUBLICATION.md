@@ -1,9 +1,9 @@
-# Complete anonymous publication - proposed protocol 1
+# Complete anonymous publication - protocol 1 (source candidate)
 
-Tracking: UltraCache issue #1006. This is a source-design proposal, not an
-implemented capability, released behavior or permission to bypass the existing
-private delivery protocol. Both producer and native owner must agree before
-changing runtime or ABI. Basic is outside this extension.
+Tracking: UltraCache issue #1006. Protocol 1 is agreed by the producer and native
+owners and implemented in an isolated native source candidate. It is not a
+released capability or completed real-application qualification. Existing
+private delivery validation remains intact. Basic is outside this extension.
 
 ## Required result and scope
 
@@ -169,7 +169,10 @@ Freshness is no greater than the actual remaining source publication lifetime
 and the real validity of embedded nonce material. No new fixed TTL, grace-based
 nonce extension or full-lifetime reset. The native body snapshot director stores
 only the complete guest object and its ordinary metadata under the guest key.
-It does not retain an owning visitor continuation as public state. Existing
+It does not retain an owning visitor continuation as public state. Cached native
+metadata retains a fixed-size digest of the opaque guest manifest, never the
+full token in an HTTP field. The complete signed token stays in the transient
+owned selection and is not passed to legacy prepare/selection getters. Existing
 site/URL/tag/publication invalidation covers guest and stateful namespaces.
 
 On guest HIT, return this object directly. Do not call delivery_deliver to start

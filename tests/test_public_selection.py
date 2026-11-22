@@ -16,7 +16,7 @@ Header._fields_=[('next',ctypes.POINTER(Header)),('line',ctypes.c_void_p)]
 class Selection(ctypes.Structure):
     _fields_=[('policy',ctypes.c_char*65),('wordpress_policy',ctypes.c_char*65),
         ('manifest',ctypes.c_void_p),('target',ctypes.c_void_p),('occurrences',ctypes.c_uint64),
-        ('cookie_delivery',ctypes.c_uint),('updates',ctypes.POINTER(Update)),('headers',ctypes.POINTER(Header)),
+        ('cookie_delivery',ctypes.c_uint),('guest',ctypes.c_uint),('updates',ctypes.POINTER(Update)),('headers',ctypes.POINTER(Header)),
         ('parent',ctypes.POINTER(PublicParent)),('fragments',ctypes.POINTER(Fragment))]
 SelectionPointer=ctypes.POINTER(Selection)
 NATIVE='a'*64

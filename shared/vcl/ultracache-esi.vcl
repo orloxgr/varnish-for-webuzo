@@ -94,6 +94,10 @@ if (req.http.Accept-Encoding) {
 # An explicitly opted-in composition request needs an origin-approved parent.
 # This is the ESI application contract, not another cookie classification list.
 sub scp_ultracache_hit {
+if (cookie_handoff.guest_key() &&
+    (obj.http.X-SCP-Guest-Key != cookie_handoff.guest_key() || obj.http.X-SCP-Guest-Complete != "1")) {
+    return (synth(503, "Complete guest object unavailable"));
+}
 # UltraCache composition candidates may reuse only origin-approved parents.
 # Saved Private cookie choices have already passed before this lookup.
 if (
