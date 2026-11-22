@@ -1,10 +1,16 @@
 # Varnish for Webuzo
 
-Version **0.12.4** applies CMS cookie choices through the ordinary scoped
+Version **0.12.5** applies CMS cookie choices through the ordinary scoped
 resolver and reports the current request's prepared private fragment outcome
 separately from parent cache HIT. The outcome works with WordPress Debug off;
 the optional Debug-only VSL diagnostic remains separate. See [CMS choices](shared/CMS-COOKIE-CHOICES.md)
 and the [delivery outcome contract](shared/DELIVERY-OUTCOME.md).
+
+UltraCache prepare requests clear completed routing/selection scratch before
+adding their authenticated transport fields, retaining ordinary browser headers
+and native Vary inputs at the default 64-entry HTTP header limit. Resource
+exhaustion and a real repeated prepare now have distinct diagnostics.
+See [backend header budget](shared/BACKEND-HEADER-BUDGET.md).
 
 Cookie Policies uses the low-memory native response bridge from the standalone
 0.12.3 fix. The complete editor response is delivered without expanding it into

@@ -368,14 +368,14 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
     struct handoff *entry;
     struct continuation *d;
-    int owned = 0, failed = 0;
+    int owned = 0, repeated = 0, association_failed = 0;
     if (!task || !task->key) return 0;
     pthread_mutex_lock(&lock);
     entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
     if (d) {
         owned = 1;
         if ((d->phase != D_PREPARE && d->phase != D_RECOVERY) ||
-            (d->phase == D_PREPARE ? d->sent++ : d->recovery_sent++)) d->failed = failed = 1;
+            (d->phase == D_PREPARE ? d->sent++ : d->recovery_sent++)) d->failed = repeated = 1;
         else {
             http_ForceHeader(ctx->http_bereq,h_version,"1");
             http_ForceHeader(ctx->http_bereq,h_phase,
@@ -406,12 +406,16 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
         }
     }
     pthread_mutex_unlock(&lock);
-    if (owned && !failed) {
+    if (owned && !repeated && !WS_Overflowed(ctx->ws)) {
         struct vmod_priv *filter = VRT_priv_task(ctx,&filter_task_token);
-        if (!filter) failed = 1;
+        if (!filter) association_failed = 1;
         else filter->priv = &task->key;
     }
-    if (failed || WS_Overflowed(ctx->ws)) VRT_fail(ctx,"UltraCache prepare cannot be repeated");
+    if (repeated) VRT_fail(ctx,"UltraCache prepare cannot be repeated");
+    else if (WS_Overflowed(ctx->ws))
+        VRT_fail(ctx,"UltraCache backend header slots or workspace exhausted");
+    else if (association_failed)
+        VRT_fail(ctx,"UltraCache prepare capture association unavailable");
     return owned;
 }
 

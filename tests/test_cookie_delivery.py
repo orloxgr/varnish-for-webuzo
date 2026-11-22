@@ -20,7 +20,7 @@ def policy_for_choices(profile,choices):
 
 
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None,management=False):
+def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None,management=False,daemon_parameters=()):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -85,7 +85,8 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
                     'varnishd', '-F', '-j', 'none', '-n', str(root / 'instance'),
                     '-f', str(root / 'policy.vcl'), '-a', '127.0.0.1:' + str(port),
                     *admin_args, '-s', 'malloc,16m',
-                    '-p', 'feature=+esi_ignore_other_elements'], stdout=log, stderr=log)
+                    '-p', 'feature=+esi_ignore_other_elements',
+                    *[arg for value in daemon_parameters for arg in ('-p',value)]], stdout=log, stderr=log)
                 deadline = time.monotonic() + 15
                 while True:
                     if daemon.poll() is not None:

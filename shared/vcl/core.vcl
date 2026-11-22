@@ -187,7 +187,20 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Cookie-Name;
     unset bereq.http.X-SCP-Cookie-Role;
     if (bereq.http.X-SCP-Profile == "ultracache") {
+        # Routing/selection scratch has completed its request-side work. Free
+        # its header slots BEFORE adding the authenticated prepare envelope.
+        # Keep representation fields: native Vary still reads them at storage.
+        unset bereq.http.X-SCP-CMS;
+        unset bereq.http.X-SCP-CMS-Path;
+        unset bereq.http.X-SCP-CMS-Query;
+        unset bereq.http.X-SCP-Selection-Operation;
+        unset bereq.http.X-SCP-Selection-Eligible;
+        unset bereq.http.X-SCP-Selection-State;
+        unset bereq.http.X-SCP-Selection-Names;
+        unset bereq.http.X-SCP-Selection-Scope;
+        unset bereq.http.X-SCP-Selection-Actions;
         call scp_selection_origin;
+        unset bereq.http.X-SCP-Selection-Native-Policy;
         call scp_ultracache_backend_fetch;
     }
     unset bereq.http.X-SCP-Selection-Native-Policy;
