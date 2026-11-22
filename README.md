@@ -1,5 +1,13 @@
 # Varnish for Webuzo
 
+Version **0.12.10** reduces request-workspace copying in the cookie policy
+compiler and reuses its result only for a native-owned continuation with the
+same original Cookie. This addresses retained-browser cookie requests failing
+during the internal restart. Cookie actions, raw origin cookies and native
+Varnish limits remain unchanged. The native module is unchanged, allowing the
+normal overlapping VCL activation to retain registrations and existing objects.
+See [request workspace](shared/REQUEST-WORKSPACE.md).
+
 Version **0.12.9** releases completed backend-only cookie, routing and Warm
 carriers before adding authenticated UltraCache transport headers. This fixes a
 returning-browser header-count boundary without dropping application fields or
