@@ -6,6 +6,22 @@ hint is consumed before its scratch field is removed. Client/application fields,
 credentials, cookie transport and native representation/Vary inputs are retained.
 Basic routing is unchanged. No Varnish parameter is changed.
 
+The returning-browser path also drops the backend copies of the original ESI
+cookie carrier, ESI opt-in and request-only PASS marker before constructing the
+prepare envelope. Their top-request originals remain available for composition
+and final response diagnostics. The Warm support scratch field is removed once
+its capability hint has been emitted. No actual Cookie, application field,
+credential or representation input is removed by this cleanup.
+
+The regression includes a negotiated guest/Warm registration with the captured
+Edge navigation header shape and a returning WooCommerce-shaped cookie context.
+It reproduces credential LostHeader/503 on the preceding source at the normal
+64-entry header limit and verifies cold selection followed by a parent HIT on the
+cleanup. An overlapping load/use/discard of the unchanged native module retains
+the registry epoch, current declarations and exact cached objects for both the
+guest site and a second Basic site. This is a shared VCL activation, without a
+service restart, namespace bump or purge; it still activates new code globally.
+
 Varnish counts header entries separately from workspace bytes. With
 `http_max_hdr=64`, five entries are reserved for the HTTP start line, leaving 59
 header entries. Exhausting these entries can also report `out of workspace (bo)`.

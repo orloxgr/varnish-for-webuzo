@@ -128,6 +128,7 @@ sub scp_selection_origin {
     if (bereq.http.X-SCP-Warm-Projection-Supported == "1") {
         set bereq.http.X-UltraCache-VCL-Warm-Projection-Version = "1";
     }
+    unset bereq.http.X-SCP-Warm-Projection-Supported;
     # Hints cannot authorize an operation. Registration needs a successful
     # authenticated capabilities request, not these request fields.
     set bereq.http.X-UltraCache-VCL-Public-Selection-Version = "1";

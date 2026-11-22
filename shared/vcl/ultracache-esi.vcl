@@ -195,9 +195,7 @@ if (bereq.http.X-ESI-Private-Request != "1" &&
 # Never expose internal scratch/cookie-carrier headers to the origin.
 # X-UltraCache-ESI-Candidate intentionally remains: the plugin uses it
 # to decide whether it can safely approve a shared ESI parent response.
-unset bereq.http.X-ESI-Original-Cookie;
 unset bereq.http.X-UltraCache-ESI-Cookie-Check;
-unset bereq.http.X-UltraCache-ESI-Opt-In;
 unset bereq.http.X-UltraCache-ESI-Shared-Parent;
 }
 }

@@ -10,6 +10,7 @@ from test_cookie_delivery import proxy
 from test_cms_cookie_choices import cache
 from test_cold_public_selection import Application, choices
 from test_public_selection_runtime import control
+from test_guest_publication import GUEST_POLICY, Guests, register
 
 BROWSER = {
     'X-Forwarded-Host':'example.test', 'X-Forwarded-Port':'443',
@@ -41,6 +42,100 @@ class BrowserApplication(Application):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required')
 class BackendHeaderBudget(unittest.TestCase):
+    def test_overlapping_cleanup_reload_preserves_registry_guest_and_other_site_object(self):
+        guest=Guests();candidate={}
+        def origin(path,headers):
+            if headers.get('Host')=='other.test':
+                return '<html>other site</html>',[('Cache-Control','public, max-age=120')]
+            return guest(path,headers)
+        def previous(source):
+            candidate['source']=source
+            source=source.replace('        set resp.http.X-UltraCache-VCL-Publication-Reselect-Version = "1";\n','')
+            source=source.replace('        unset bereq.http.X-ESI-Original-Cookie;\n'
+                                  '        unset bereq.http.X-UltraCache-ESI-Opt-In;\n'
+                                  '        unset bereq.http.X-SCP-Pass;\n','')
+            source=source.replace('    unset bereq.http.X-SCP-Warm-Projection-Supported;\n'
+                                  '    # Hints cannot authorize','    # Hints cannot authorize')
+            source=source.replace('unset bereq.http.X-UltraCache-ESI-Cookie-Check;',
+                                  'unset bereq.http.X-ESI-Original-Cookie;\n'
+                                  'unset bereq.http.X-UltraCache-ESI-Cookie-Check;\n'
+                                  'unset bereq.http.X-UltraCache-ESI-Opt-In;')
+            return source
+        with proxy('ultracache',origin,transform=previous,other_profile='basic',management=True) as get:
+            status,before,_=register(get)
+            self.assertEqual(status,200)
+            self.assertNotIn('X-UltraCache-VCL-Publication-Reselect-Version',before)
+            self.assertEqual(get('/warm',extra={'Accept':'text/html'})[0],200)
+            warmed=get('/warm',extra={'Accept':'text/html'})
+            other_headers={'Host':'other.test','Accept':'text/html'}
+            self.assertEqual(get('/other',extra=other_headers)[0],200)
+            other=get('/other',extra=other_headers)
+            self.assertEqual((cache(warmed[1]),cache(other[1])),('HIT','HIT'))
+            objects=[dict(response[1])['X-Varnish'].split()[-1] for response in (warmed,other)]
+            calls=len(guest.calls)
+            try:
+                get.activate('header_cleanup',candidate['source'])
+            except AssertionError as error:
+                # The manager can finish compilation after the CLI client's
+                # reply deadline. As in the installer, verify registration;
+                # never repeat the load or activate an absent candidate.
+                if 'CLI communication error' not in str(error):
+                    raise
+                listing=get.adm('vcl.list')
+                self.assertTrue(any(line.split()[-1:] == ['header_cleanup'] for line in listing.splitlines()),listing)
+                get.adm('vcl.use','header_cleanup')
+            get.adm('vcl.discard','boot')
+            status,after,_=control(get)
+            self.assertEqual(status,200)
+            self.assertEqual(after['X-UltraCache-VCL-Publication-Reselect-Version'],'1')
+            for name in ('X-UltraCache-VCL-Public-Selection-Epoch',
+                         'X-UltraCache-VCL-Public-Selection-Native-Policy',
+                         'X-UltraCache-VCL-Public-Selection-WordPress-Policy',
+                         'X-UltraCache-VCL-Guest-Publication-Policy'):
+                self.assertEqual(after[name],before[name],name)
+            for index,(path,headers) in enumerate((('/warm',{'Accept':'text/html'}),('/other',other_headers))):
+                status,fields,_=get(path,extra=headers)
+                self.assertEqual((status,cache(fields)),(200,'HIT'))
+                self.assertEqual(dict(fields)['X-Varnish'].split()[-1],objects[index])
+            self.assertEqual(len(guest.calls),calls)
+
+    def test_real_browser_returning_cookie_context_with_guest_and_warm_negotiation(self):
+        app=BrowserApplication()
+        cookies='; '.join(('shared_metric=A','public_variant=common','ultracache_esi_optin=1',
+                           'wp_woocommerce_session_fixture='+('s'*64),
+                           'woocommerce_items_in_cart=1','woocommerce_cart_hash='+'c'*32))
+        with proxy('ultracache',app,
+                policies=choices(('shared_metric','shared'),('public_variant','variant')),
+                site_settings={'cms_installations':[{'cms':'wordpress','base':'/'}]},
+                daemon_parameters=('http_max_hdr=64',)) as get:
+            self.assertEqual(control(get,enabled=True,names='',extra={
+                'X-UltraCache-Public-Selection-Guest-Version':'1',
+                'X-UltraCache-Public-Selection-Guest-Policy':GUEST_POLICY})[0],200)
+            for visitor,expected in (('A','MISS'),('B','HIT')):
+                raw=cookies.replace('shared_metric=A','shared_metric='+visitor)
+                # The captured Edge navigation has these fields; Pragma and
+                # Referer are absent, and its encoding list is normalized natively.
+                headers={name:value for name,value in BROWSER.items() if name not in ('Pragma','Referer')}
+                headers.update({'Accept-Encoding':'gzip, deflate, br, zstd',
+                                'X-UC-Live-Test':'owned-header-budget'})
+                status,fields,body=get('/browser-cart',raw,
+                    extra=headers)
+                if status != 200:
+                    trace=subprocess.run(['varnishlog','-n',str(get.instance),'-d','-g','request',
+                        '-i','Error,VCL_Error,RespReason,BerespReason,LostHeader'],capture_output=True,text=True)
+                    self.fail('HTTP '+str(status)+'\n'+trace.stdout[-4000:])
+                self.assertEqual((status,cache(fields)),(200,expected))
+                self.assertIn('private:guest',body)
+            self.assertEqual([phase for _,phase,_ in app.calls],['public-select','prepare'])
+            self.assertEqual([cookie for _,_,cookie in app.calls],
+                             [cookies,cookies.replace('shared_metric=A','shared_metric=B')])
+            for received in app.requests:
+                self.assertTrue(received.get('X-UltraCache-Delivery-Authorization'))
+                for name in ('X-ESI-Original-Cookie','X-UltraCache-ESI-Opt-In',
+                             'X-SCP-Pass','X-SCP-Warm-Projection-Supported'):
+                    self.assertIsNone(received.get(name),name)
+                self.assertIn('wp_woocommerce_session_fixture='+'s'*64,received.get('Cookie',''))
+
     def test_browser_cold_and_warm_private_batches_fit_native_64_header_limit(self):
         app=BrowserApplication()
         with proxy('ultracache',app,policies=choices(('shared_metric','shared'),('public_variant','variant')),

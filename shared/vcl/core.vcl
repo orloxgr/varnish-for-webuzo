@@ -242,6 +242,11 @@ sub scp_backend_fetch {
         unset bereq.http.X-SCP-Selection-Names;
         unset bereq.http.X-SCP-Selection-Scope;
         unset bereq.http.X-SCP-Selection-Actions;
+        # These are request-owned delivery/routing carriers, not origin inputs.
+        # The top request retains them for ESI and the final cache-status label.
+        unset bereq.http.X-ESI-Original-Cookie;
+        unset bereq.http.X-UltraCache-ESI-Opt-In;
+        unset bereq.http.X-SCP-Pass;
         call scp_selection_origin;
         unset bereq.http.X-SCP-Selection-Native-Policy;
         call scp_ultracache_backend_fetch;
