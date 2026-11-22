@@ -576,6 +576,9 @@ class NativeCookieRules(unittest.TestCase):
                      cookie_policies=choices('variant' if index%2==0 else 'shared','local_option',identity='custom:'+str(index)))
             sites[row['id']]=row
         source=engine.policy.render(sites,'e'*64,'f'*64)
+        module=os.environ.get('SCP_TEST_COOKIE_MODULE')
+        if module:
+            source=source.replace('import cookie_handoff;', 'import cookie_handoff from "'+module+'";')
         self.assertEqual(source.count('sub scp_bundled_cookie_rules {'),1)
         self.assertEqual(source.count('if (cookie_handoff.detach({"'),2)
         for scheme in ('http','https'):

@@ -351,8 +351,13 @@ def _pattern(match):
 
 
 def _tidy(header):
-    return ('set req.http.' + header + ' = regsuball(req.http.' + header + ', "^[;[:blank:]]+|[;[:blank:]]+$", "");\n'
-            'set req.http.' + header + ' = regsuball(req.http.' + header + ', ";[[:blank:]]*", "; ");\n'
+    # VCL regsuball allocates another full working copy even when replacing
+    # an already canonical delimiter with itself. Cookie policy runs again on
+    # continuation restarts; avoid those copies without changing normalization.
+    return ('if (req.http.' + header + ' ~ "^[;[:blank:]]|[;[:blank:]]$") {\n'
+            'set req.http.' + header + ' = regsuball(req.http.' + header + ', "^[;[:blank:]]+|[;[:blank:]]+$", "");\n}\n'
+            'if (req.http.' + header + ' ~ ";(?! [^[:blank:]])") {\n'
+            'set req.http.' + header + ' = regsuball(req.http.' + header + ', ";[[:blank:]]*", "; ");\n}\n'
             'if (req.http.' + header + ' == "") { unset req.http.' + header + '; }')
 
 
@@ -376,7 +381,12 @@ def defaults_vcl():
 def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False):
     if not rules and not chain_defaults:
         return ''
-    code = ['set req.http.X-SCP-Admin-Applied = "1";', 'set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Keep;'] if initialize else []
+    # Both saved legacy choices and bundled defaults are concrete by this point.
+    # Variant already is the ordered kept list; a second Keep accumulator used
+    # to duplicate that entire value on every append and continuation restart.
+    if any(rule['action'] not in ('shared', 'variant', 'private') for rule in rules):
+        raise CookieChoiceError('Cookie compilation requires concrete actions')
+    code = ['set req.http.X-SCP-Admin-Applied = "1";', 'set req.http.X-SCP-Admin-Remaining = req.http.Cookie;', 'unset req.http.X-SCP-Admin-Variant;'] if initialize else []
     # Public responses also need downstream variation when an absent cookie
     # would turn the same URL into a private request. Otherwise an outer cache
     # can answer before the request reaches our private guard.
@@ -425,22 +435,28 @@ def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False)
                          'set req.http.X-SCP-Cookie-Name = regsub(req.http.X-SCP-Admin-Remaining, {"^.*?' + pattern + '.*$"}, "\\2");',
                          'set req.http.X-SCP-Cookie-Role = "private";',
                          'set req.http.X-SCP-Reason = "cookie-policy-private";', 'return (pass);'])
-        if rule['action'] in ('variant', 'automatic'):
+        if rule['action'] == 'variant':
             # Check optional whitespace inside the lookahead. Putting it before
             # a negative lookahead lets PCRE backtrack and drop wanted pairs.
             inverse = '(^|;)(?![[:blank:]]*(?:' + name + ')=)[^;]*'
             code.extend(['set req.http.X-SCP-Admin-Matched = regsuball(req.http.X-SCP-Admin-Remaining, {"' + inverse + '"}, "");',
-                         _tidy('X-SCP-Admin-Matched'),
-                         'set req.http.X-SCP-Admin-Keep = req.http.X-SCP-Admin-Keep + "; " + req.http.X-SCP-Admin-Matched;'])
-            if rule['action'] == 'variant':
-                code.append('set req.http.X-SCP-Admin-Variant = req.http.X-SCP-Admin-Variant + "; " + req.http.X-SCP-Admin-Matched;')
-                code.extend(['if (req.http.X-SCP-Admin-Rule == ' + json.dumps(rule['id']) + ') {',
-                             'set req.http.X-SCP-Cookie-Name = regsuball(req.http.X-SCP-Admin-Matched, "=[^;]*", "");',
-                             'set req.http.X-SCP-Cookie-Name = regsuball(req.http.X-SCP-Cookie-Name, ";[[:blank:]]*", ", ");', '}'])
+                         _tidy('X-SCP-Admin-Matched')])
+            code.extend(['if (req.http.X-SCP-Admin-Variant) {',
+                         'set req.http.X-SCP-Admin-Variant = req.http.X-SCP-Admin-Variant + "; " + req.http.X-SCP-Admin-Matched;',
+                         '} else { set req.http.X-SCP-Admin-Variant = req.http.X-SCP-Admin-Matched; }'])
+            code.extend(['if (req.http.X-SCP-Admin-Rule == ' + json.dumps(rule['id']) + ') {',
+                         'set req.http.X-SCP-Cookie-Name = regsuball(req.http.X-SCP-Admin-Matched, "=[^;]*", "");',
+                         'set req.http.X-SCP-Cookie-Name = regsuball(req.http.X-SCP-Cookie-Name, ";[[:blank:]]*", ", ");', '}'])
         code.extend(['set req.http.X-SCP-Admin-Remaining = regsuball(req.http.X-SCP-Admin-Remaining, {"' + pattern + '[^;]*"}, "");',
                      _tidy('X-SCP-Admin-Remaining'), '}'])
     if chain_defaults:code.append('call scp_bundled_cookie_rules;')
     if finish:
-        code.extend(['call scp_protocol_cookie_remainder;', 'set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Keep + "; " + req.http.X-SCP-Admin-Remaining;',
-                     _tidy('X-SCP-Admin-Filtered'), _tidy('X-SCP-Admin-Variant')])
+        code.extend(['call scp_protocol_cookie_remainder;',
+                     'if (req.http.X-SCP-Admin-Remaining == "") { unset req.http.X-SCP-Admin-Remaining; }',
+                     _tidy('X-SCP-Admin-Variant'),
+                     'if (req.http.X-SCP-Admin-Variant && req.http.X-SCP-Admin-Remaining) {',
+                     'set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Variant + "; " + req.http.X-SCP-Admin-Remaining;',
+                     '} else if (req.http.X-SCP-Admin-Variant) { set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Variant;',
+                     '} else { set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Remaining; }',
+                     _tidy('X-SCP-Admin-Filtered')])
     return '\n'.join(code)

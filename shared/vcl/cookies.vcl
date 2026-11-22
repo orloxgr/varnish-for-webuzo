@@ -20,7 +20,23 @@ sub scp_cookie_variation {
     # Only resolved Shared choices omit values; there is no second name list.
     unset req.http.X-SCP-Vary-Cookie;
     unset req.http.X-SCP-Vary-ESI-Cookie;
-    call scp_admin_cookie_rules;
+    if (req.http.X-SCP-Admin-Reuse == "1") {
+        # Selection may replace Admin-Variant with an origin-approved key.
+        # Restore the original classification before the current selection.
+        if (req.http.X-SCP-Admin-Request-Variant) {
+            set req.http.X-SCP-Admin-Variant = req.http.X-SCP-Admin-Request-Variant;
+        } else { unset req.http.X-SCP-Admin-Variant; }
+    } else {
+        call scp_admin_cookie_rules;
+        if (req.http.X-SCP-Profile == "ultracache" &&
+            req.http.Cookie && req.http.X-SCP-Admin-Applied == "1") {
+            set req.http.X-SCP-Admin-Input = req.http.Cookie;
+            if (req.http.X-SCP-Admin-Variant) {
+                set req.http.X-SCP-Admin-Request-Variant = req.http.X-SCP-Admin-Variant;
+            }
+        }
+    }
+    unset req.http.X-SCP-Admin-Reuse;
     if (req.http.Cookie) {
         if (req.http.X-SCP-Admin-Filtered) {
             set req.http.X-SCP-Vary-Cookie = req.http.X-SCP-Admin-Filtered;
@@ -29,8 +45,16 @@ sub scp_cookie_variation {
         } else {
             set req.http.X-SCP-Vary-Cookie = req.http.Cookie;
         }
-        set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
-        set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, ";[[:blank:]]*", "; ");
+        # The compiled result is already canonical. Do not allocate two more
+        # full copies for the same normalization, including on restarts.
+        if (req.http.X-SCP-Admin-Applied != "1") {
+            if (req.http.X-SCP-Vary-Cookie ~ "^[;[:blank:]]|[;[:blank:]]$") {
+                set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
+            }
+            if (req.http.X-SCP-Vary-Cookie ~ ";(?! [^[:blank:]])") {
+                set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, ";[[:blank:]]*", "; ");
+            }
+        }
         if (req.http.Cookie != "" && req.http.X-SCP-Vary-Cookie == "") { unset req.http.X-SCP-Vary-Cookie; }
         # Composition does not reclassify cart/session names or omit a saved
         # Variant. The origin-approved parent uses the same resolved remainder.

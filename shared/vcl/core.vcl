@@ -1,6 +1,15 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    # A continuation restarts this same, already classified top request.
+    # Only native phase/site/host/URL ownership plus an unchanged raw Cookie
+    # permits reuse. Client headers, ESI children and ordinary restarts cannot.
+    unset req.http.X-SCP-Admin-Reuse;
+    if (req.http.X-SCP-Admin-Applied == "1" && req.http.Cookie &&
+        req.http.X-SCP-Admin-Input == req.http.Cookie &&
+        cookie_handoff.delivery_resume_authorized(req.http.X-SCP-Site)) {
+        set req.http.X-SCP-Admin-Reuse = "1";
+    }
     cookie_handoff.reset();
     cookie_handoff.guest_ingress();
     unset req.http.X-SCP-Warm-Projection-Supported;
@@ -70,15 +79,21 @@ sub scp_init {
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
     unset req.http.X-SCP-Admin-Remaining;
-    unset req.http.X-SCP-Admin-Applied;
     unset req.http.X-SCP-Admin-Keep;
     unset req.http.X-SCP-Admin-Matched;
-    unset req.http.X-SCP-Admin-Filtered;
-    unset req.http.X-SCP-Admin-Variant;
-    unset req.http.X-SCP-Admin-Has-Variant;
-    unset req.http.X-SCP-Admin-Rule;
-    unset req.http.X-SCP-Admin-Scope;
-    unset req.http.X-SCP-Admin-Action;
+    if (req.http.X-SCP-Admin-Reuse != "1") {
+        unset req.http.X-SCP-Admin-Applied;
+        unset req.http.X-SCP-Admin-Filtered;
+        unset req.http.X-SCP-Admin-Variant;
+        unset req.http.X-SCP-Admin-Has-Variant;
+        unset req.http.X-SCP-Admin-Rule;
+        unset req.http.X-SCP-Admin-Scope;
+        unset req.http.X-SCP-Admin-Action;
+        unset req.http.X-SCP-Admin-Input;
+        unset req.http.X-SCP-Admin-Request-Variant;
+        unset req.http.X-SCP-Cookie-Name;
+        unset req.http.X-SCP-Cookie-Role;
+    }
     unset req.http.X-SCP-Profile;
     unset req.http.X-SCP-CMS;
     unset req.http.X-SCP-CMS-Path;
@@ -103,8 +118,6 @@ sub scp_init {
     unset req.http.X-SCP-Fbp-Domain;
     unset req.http.X-SCP-Fbp-Index;
     unset req.http.X-SCP-Fbp-New;
-    unset req.http.X-SCP-Cookie-Name;
-    unset req.http.X-SCP-Cookie-Role;
     unset req.http.X-UltraCache-Cookie-Policy;
     unset req.http.X-UltraCache-Cookie-Delivery;
     unset req.http.X-SCP-Accept-Check;
@@ -213,6 +226,9 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Private-Check;
     unset bereq.http.X-SCP-Admin-Remaining;
     unset bereq.http.X-SCP-Admin-Applied;
+    unset bereq.http.X-SCP-Admin-Reuse;
+    unset bereq.http.X-SCP-Admin-Input;
+    unset bereq.http.X-SCP-Admin-Request-Variant;
     unset bereq.http.X-SCP-Admin-Keep;
     unset bereq.http.X-SCP-Admin-Matched;
     unset bereq.http.X-SCP-Admin-Filtered;
