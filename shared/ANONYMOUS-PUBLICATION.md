@@ -1,0 +1,232 @@
+# Complete anonymous publication - proposed protocol 1
+
+Tracking: UltraCache issue #1006. This is a source-design proposal, not an
+implemented capability, released behavior or permission to bypass the existing
+private delivery protocol. Both producer and native owner must agree before
+changing runtime or ABI. Basic is outside this extension.
+
+## Required result and scope
+
+After ordinary Warm, two independent new anonymous visitors get complete HTML,
+empty-cart markup and usable guest nonces from Varnish, with no origin request,
+prepare or origin-backed ESI during HTML delivery. A public-parent HIT followed
+by a WordPress prepare does not meet this result.
+
+Protocol 1 is deliberately the agreed first-visit scope: the original top-level
+request has **zero Cookie fields and zero Authorization fields**. Present-empty,
+duplicate or subsequently stripped fields do not count as absent. Capture that
+fact at initial ingress, before any cookie-policy/protocol normalization, and
+retain it as native-owned state. Browser-supplied guest/work markers cannot set
+it. Only an ordinary GET document, already admitted by existing host, route,
+method and privacy rules, may select this projection.
+
+A request with any Cookie/Authorization field keeps the existing path, including
+its saved Shared/Variant/Private actions. This is a representation selection,
+not a new cookie classification, forced Private choice or second cookie list.
+There is no new panel setting. An application advertises support through its
+existing connection/capability lifecycle only when it can produce this guest
+representation under its actual public context. This version does not infer an
+unresolved provider context from absent cookies or silently choose a currency.
+
+## Existing owners and negotiation
+
+Reuse the existing authenticated capabilities operation, application scope
+registry, adapter site/host boundary and native registry-lifetime epoch. Keep
+ordinary public-selection and prepare schemas/behavior unchanged unless this
+extension is negotiated. The new declarations are exact single fields:
+
+Producer capabilities registration, together with the existing enabled/scope,
+WordPress policy and resolver-name fields:
+
+```
+X-UltraCache-Public-Selection-Guest-Version: 1
+X-UltraCache-Public-Selection-Guest-Policy: <64 lowercase hex>
+```
+
+The guest policy is a producer-owned digest of the actual guest publication
+format, applicable renderer/nonce dependencies and cookie-issuer disposition,
+in addition to its effective application policy. It contains no visitor values.
+A declaration update without these fields removes previous guest support while
+retaining ordinary cooperation. A read-only capabilities query never changes
+registration. Enabled 0 removes both for the exact application scope. Existing
+longest-scope matching applies; a child scope cannot inherit parent guest proof.
+
+A supporting native replies, and advertises on ordinary origin operations:
+
+```
+X-UltraCache-VCL-Guest-Publication-Version: 1
+```
+
+An exact authenticated capabilities query additionally returns the accepted
+producer guest policy, only when that exact scope is registered:
+
+```
+X-UltraCache-VCL-Guest-Publication-Policy: <64 lowercase hex>
+```
+
+A producer must not emit the new outcome to an old native consumer. Native must
+not interpret a marker on an ordinary origin response as authenticated guest
+registration. Duplicate/invalid negotiation fields are rejected, not merged.
+
+## Lookup and owned cold fill
+
+At initial lookup, native selects a distinct `guest-v1` object namespace only
+when the absent-header fact, active scope declaration and ordinary request rules
+agree. Add the accepted guest policy, both effective policy identities and native
+registry epoch to that namespace. Keep host, canonical URL, scheme, representation,
+functional query and ordinary Variant/Vary dimensions. Do not rewrite the URL or
+Cookie. All other requests use the existing namespace and continuation.
+
+Guest lookup occurs without PHP. On a cold guest MISS use the existing original-
+route public-selection entry and its original request ID/URL/credential/scope/
+policy binding. Add these native-owned request fields:
+
+```
+X-UltraCache-Delivery-Guest-Publication-Version: 1
+X-UltraCache-Delivery-Guest-Publication-Policy: <accepted producer guest policy>
+```
+
+The existing origin epoch hint carries the current registry epoch. The producer
+checks both negotiated fields, literal absent Cookie/Authorization and the full
+existing authenticated original-route entry before doing guest publication work.
+A browser copy of either field cannot authorize this operation. No new shared
+credential or user-provided key is introduced.
+
+If an owned guest cold selection returns the existing selectedPublic or
+privateDocument outcome instead, preserve its actual validated current-request
+behavior; do not put a private-capable parent into the guest-complete cache.
+A guest outcome on a non-guest selection, ordinary prepare/recovery, or stateful
+request is a protocol error. A failed guest fill must not turn an unresolved
+private count into zero or serve the other representation's body.
+
+## Exact producer envelope
+
+Reuse HTTP 200, `application/vnd.ultracache.delivery+json`, private/no-store outer
+transport and the existing public-selection version marker. Add exactly one:
+
+```
+X-UltraCache-Delivery-Guest-Publication-Version: 1
+```
+
+Use a separate negotiated outcome, **guestPublic**, never relabel an existing
+selectedPublic or privateDocument result. Envelope keys are exactly:
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "<exact native-owned decimal ID>",
+  "originalUrl": "<exact original relative URI>",
+  "guestPublic": {
+    "policyDigest": "<native policy: 64 lowercase hex>",
+    "wordpressPolicyDigest": "<registered WP policy: 64 lowercase hex>",
+    "guestPolicyDigest": "<accepted guest policy: 64 lowercase hex>",
+    "registryEpoch": "<current native registry epoch: 64 lowercase hex>",
+    "scope": "/shop/",
+    "manifest": "<producer-signed guest publication token>",
+    "sourceManifest": "<signed source publication token>",
+    "sourceGeneration": "<source publication body SHA-256>",
+    "resolvedOccurrences": 13,
+    "publicParent": {
+      "generation": "<complete guest body SHA-256>",
+      "bodyBase64": "<complete UTF-8 HTML bytes, base64>",
+      "freshRemaining": 1234
+    },
+    "headers": ["Content-Type: text/html; charset=UTF-8"],
+    "cookieDelivery": "none"
+  }
+}
+```
+
+`cookieDelivery` is the exact enum `none` or `deferred`. Numbers are nonnegative
+integers, not strings/floats/bools; source occurrences may be zero. Scope equals
+the exact selected registration. Unknown/duplicate keys and contradictory outer
+markers are rejected. The signed guest token binds source token/generation,
+original application URL/context, guest policy, complete guest body digest,
+resolved occurrence count, issuer disposition and actual validity. It is opaque
+to native; it must not be usable as an ordinary private-prepare token.
+
+The producer owns the transformation: resolve all source occurrences, including
+repeated contexts, nonce attributes and public fragments, into complete guest
+bytes during normal publication/Warm or that owned cold selection. Keep using
+the existing captured publication and collector; no second local HTML cache,
+SQL table or native visitor/body database. `resolvedOccurrences` records the
+actual original source coverage; it is not a fabricated private count of zero.
+The source publication and its stateful fragment/token bindings remain intact.
+
+Native verifies exact owned request/URL/scope/epoch/policy bindings; body digest;
+strict public-header grammar; and that this complete representation has no
+remaining ESI includes, prepare/cookie-only work marker or visitor Set-Cookie.
+Neither outer Set-Cookie nor Set-Cookie2 is accepted for guestPublic: real cookie
+work belongs to the separate owning browser request. Public headers may include
+normal HTML content type, public tags, applicable Vary/CSP and validators, never
+credentials, request IDs, hop-by-hop fields or derived length/encoding/date/age.
+Do not advertise ESI parsing for this complete body. Native trusts the authenticated
+producer's source-to-guest publication claim just as it trusts a declared public
+application response; it cannot independently prove WP nonce semantics or verify
+an opaque producer HMAC. Tests must establish that producer claim in practice.
+
+Freshness is no greater than the actual remaining source publication lifetime
+and the real validity of embedded nonce material. No new fixed TTL, grace-based
+nonce extension or full-lifetime reset. The native body snapshot director stores
+only the complete guest object and its ordinary metadata under the guest key.
+It does not retain an owning visitor continuation as public state. Existing
+site/URL/tag/publication invalidation covers guest and stateful namespaces.
+
+On guest HIT, return this object directly. Do not call delivery_deliver to start
+prepare, create an empty fake prepared batch, or report per-visitor private
+`verified` from a cached field. Expose a distinct nonsecret observation
+`X-UltraCache-Guest-Publication: 1` created from validated native state; retain
+ordinary HIT reporting. Existing prepared Delivery-Outcome keeps its meaning.
+
+## Nonces and independent cookie creation
+
+Guest nonce output must be actual WordPress output valid for the declared guest
+identity and action. A pattern marked private does not prove different anonymous
+bytes. Custom nonce_user_logged_out identity, session-dependent token or other
+real state retains its owning private path. The producer qualifies the actual
+supported dependencies and verifies nonce use, not merely equality of two samples.
+Native neither invents WP nonces nor removes an ordinary private slot's binding.
+
+Cookie issuance cannot reuse an ordinary prepare URL directly: that protocol
+requires native-owned request identity and a site credential, neither of which
+belongs in browser HTML. Never relax that authentication.
+
+For deferred cookie work the producer inserts its own same-origin browser code
+and a **distinct signed public guest-issuer entry ticket** in the complete HTML.
+That ticket is not a native credential, ordinary prepare token or authorization
+to render private fragments. It binds original route/application scope, guest
+policy/source publication, only the actual observed permitted issuer work and
+an expiry no later than the publication's existing validity. It grants only the
+anonymous side effects already available from visiting that page.
+
+The browser performs one separate same-origin credentialed POST outside the HTML
+critical path. Use the original route plus the reserved operation query key
+`ultracache_guest_cookie_delivery`, whose value is the signed entry ticket. The
+producer validates the ticket and restores its exact original route context;
+this key cannot route an arbitrary URL. Native's existing non-GET rules pass the
+request privately; its response is never cached. The producer may factor and
+reuse the current original-route issuer capture/lifecycle internally, but this
+entry executes only issuer work, not the private fragment prepare. It returns
+204 with original repeated Set-Cookie fields and no-store on success. Existing
+cookies, consent, renewal/deletion and provider errors remain application-owned.
+No cached cookie values, native identifier generation, issuer-name special cases
+or site secret are exposed. The producer must enforce its normal same-origin
+browser endpoint checks and reject non-POST operations.
+
+A truly empty guest cart need not acquire a WooCommerce session just to display
+empty markup. Real state-changing actions establish state through their existing
+application lifecycle. If cookieDelivery is none, there is no background issuer
+request. A deferred operation is not a new daemon, queue or persistent worker.
+
+## Acceptance before implementation is declared complete
+
+Normal Warm then two independent fresh jars: complete document HTTP 200/HIT,
+correct empty cart and usable real guest nonces, zero WordPress bootstraps and
+zero origin/ESI backend links during HTML delivery, in ORIG/WebP/AVIF. Count cookie
+issuer requests separately and prove HTML does not wait for them. Then exercise
+actual cart/session/login and custom guest identity, proving existing private
+ownership and no cross-user bytes. Include absent versus present-empty headers,
+forged guest markers, exact subfolder/host scope, policy overrides, duplicates,
+malformed bindings/digests, genuine nonce rollover, ordinary local clear/Warm,
+publication replacement and same-build registry restart/autoregistration. Public
+cache must contain no issuer fields, visitor values or request-owned fragments.

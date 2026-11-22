@@ -560,3 +560,11 @@ All native C/VCC/header/VCL/module-builder sources remain unchanged from the
 qualified diagnostic routing follow-up. Final coordinated WordPress browser and
 nonce-lifetime checks are still in progress. Work-branch publication and local
 candidate packaging do not constitute final main/tag/release acceptance.
+
+
+## Complete anonymous publication proposal
+
+The separately negotiated [anonymous publication proposal](ANONYMOUS-PUBLICATION.md)
+records the proposed first-visit complete guest outcome. It is not implemented
+or advertised by the existing public-selection version. Existing ordinary
+selection, private preparation and cookie-only delivery remain unchanged.
