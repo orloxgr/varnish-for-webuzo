@@ -1,5 +1,14 @@
 # Varnish for Webuzo
 
+Version **0.12.9** releases completed backend-only cookie, routing and Warm
+carriers before adding authenticated UltraCache transport headers. This fixes a
+returning-browser header-count boundary without dropping application fields or
+changing Varnish parameters, cookie choices, lifetimes or saved panel settings.
+The authenticated capabilities response now explicitly advertises the existing
+publication-reselection protocol. Same-module overlapping VCL activation retains
+the registry and cached objects. See [backend header budget](shared/BACKEND-HEADER-BUDGET.md)
+and [publication reselection](shared/PUBLICATION-RESELECT.md).
+
 Version **0.12.8** adds complete anonymous HTML publication to the UltraCache
 profile. After the normal warm-up, a new visitor with no Cookie or Authorization
 header can receive the complete page, empty-cart markup and usable guest nonces

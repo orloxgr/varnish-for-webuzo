@@ -14,7 +14,9 @@ its capability hint has been emitted. No actual Cookie, application field,
 credential or representation input is removed by this cleanup.
 
 The regression includes a negotiated guest/Warm registration with the captured
-Edge navigation header shape and a returning WooCommerce-shaped cookie context.
+Edge navigation header shape, one diagnostic marker and a returning
+WooCommerce-shaped cookie context. The live unmarked navigation succeeded; the
+additional marker exposed this existing header-count boundary.
 It reproduces credential LostHeader/503 on the preceding source at the normal
 64-entry header limit and verifies cold selection followed by a parent HIT on the
 cleanup. An overlapping load/use/discard of the unchanged native module retains
