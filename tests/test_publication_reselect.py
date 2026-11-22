@@ -1,5 +1,7 @@
 """A verified early conflict retires only its old parent before one new selection."""
 import base64
+import concurrent.futures
+import threading
 import hashlib
 import json
 import shutil
@@ -16,12 +18,13 @@ class Publications(Application):
     def __init__(self):
         super().__init__(private=True)
         self.generations={};self.observed=[];self.providers=[];self.corrupt=None
-        self.reason='publication-binding-mismatch';self.reject_selection=False
+        self.reason='publication-binding-mismatch';self.reject_selection=False;self.conflict_barrier=None
     def publication(self,path,host='example.test'):
         body=BODY.replace('parent[',self.generations.get(host+path,self.generations.get(path,'A'))+'[')
         token='mock.'+hashlib.sha256((path+'|'+body).encode()).hexdigest()
         return body,token
     def conflict(self,path,headers):
+        if self.conflict_barrier:self.conflict_barrier.wait(timeout=8)
         assert headers.get('X-UltraCache-VCL-Publication-Reselect-Version')=='1'
         fields=[('Cache-Control','private, no-store'),('Surrogate-Control','no-store'),
           ('X-UltraCache-Delivery-Conflict-Version','1'),
@@ -112,6 +115,23 @@ class PublicationReselect(unittest.TestCase):
                 self.assertEqual(status,503)
                 self.assertEqual([p for _,p,_,_ in app.observed[start:]],['prepare'])
                 self.assertEqual(len(app.providers),providers)
+    def test_concurrent_conflicts_keep_each_owner_and_rotate_associations(self):
+        app=Publications()
+        with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
+            self.primed(get,app);app.conflict_barrier=threading.Barrier(2)
+            start=len(app.providers)
+            def visit(visitor):
+                return visitor,get('/race','shared_metric='+visitor,{'Accept':'text/html','X-Test-Visitor':visitor})
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                results=list(pool.map(visit,('B','C')))
+            for owner,(status,fields,body) in results:
+                self.assertEqual(status,200);self.assertIn('B[',body)
+                self.assertIn('private:'+owner,body)
+                self.assertNotIn('private:'+('C' if owner=='B' else 'B'),body)
+                self.assertEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
+            self.assertEqual(len(app.providers)-start,2)
+            self.assertEqual(sum(phase=='prepare' for _,phase,_,_ in app.observed),2)
+
     def test_current_registry_and_restart_budget_are_required(self):
         for disabled,budget in ((True,4),(False,2)):
             app=Publications()
