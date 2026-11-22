@@ -119,6 +119,13 @@ sub scp_representation_recv {
         }
         unset req.http.X-SCP-Normalize-Value;
     }
+    # An unrestricted document request accepts the same original HTML bucket.
+    # Response normalization still requires an actual public HTML publication;
+    # JSON preferences, q=0, parameters and non-document fetches retain raw Vary.
+    if ((!req.http.Accept || req.http.Accept ~ "(?i)^[[:blank:]]*[*]/[*][[:blank:]]*(;[[:blank:]]*q[[:blank:]]*=[[:blank:]]*1([.]0*)?[[:blank:]]*)?$") &&
+        (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$")) {
+        set req.http.X-SCP-HTML-Accept = "html";
+    }
     if (req.http.Accept ~ "(?i)^[[:blank:]]*text/html[[:blank:]]*(;[[:blank:]]*q[[:blank:]]*=[[:blank:]]*1([.]0*)?[[:blank:]]*)?(,|$)") {
         # Match the origin's explicit codec support and q=0 rules. Unusual
         # media parameters retain raw Vary matching rather than being guessed.

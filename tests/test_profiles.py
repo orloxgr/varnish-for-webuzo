@@ -1,6 +1,7 @@
 """Exercise both product VCL profiles with native Varnish HTTP origins."""
 import copy
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -27,6 +28,9 @@ def program(profile='basic',config=None,legacy_cookie_delivery=None,site_setting
     source=policy.render({first['id']:first,second['id']:second},'e'*64,'f'*64,config)
     for scheme in ('http','https'):
         source=source.replace('.path = "/run/varnish-for-webuzo-origin-'+scheme+'.sock";','.host = "127.0.0.1"; .port = "${s1_port}";')
+    module=os.environ.get('SCP_TEST_COOKIE_MODULE')
+    if module:
+        source=source.replace('import cookie_handoff;', 'import cookie_handoff from "'+module+'";')
     # The disposable varnishtest listener is TCP. Product purges use a protected
     # Unix socket; exercise its authenticated branch with the isolated client.
     return source.replace('local.socket != "public"','client.ip != "127.0.0.1"').replace('local.socket == "public"','client.ip == "127.0.0.1"')

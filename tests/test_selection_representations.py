@@ -26,6 +26,8 @@ class ImagePublications(Application):
                 return 409,'publication-binding-mismatch',[('Cache-Control','private, no-store')]
             return envelope(headers,headers.get('X-Test-Visitor','guest')),[('Cache-Control','private, no-store'),('X-UltraCache-Delivery-Outcome','verified')]
         raw,fields=super().__call__(path,headers)
+        if headers.get('X-UltraCache-Delivery-Phase')!='public-select':
+            return raw,fields
         output=json.loads(raw);selected=output['selectedPublic'];selected['manifest']=manifest
         selected['headers']=[line for line in selected['headers'] if not line.startswith(('Vary:','X-UltraCache-Delivery-Prepare:'))]
         selected['headers'] += ['Vary: '+('Accept, Cookie' if self.image_vary else 'Cookie'),
@@ -37,6 +39,33 @@ class ImagePublications(Application):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required')
 class SelectionRepresentations(unittest.TestCase):
+    def test_wildcard_document_reuses_warmed_original_publication(self):
+        app=ImagePublications()
+        with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
+            self.assertEqual(control(get,enabled=True,names='')[0],200)
+            status,fields,body=get('/wildcard-document',extra={'Accept':'text/html','X-Test-Visitor':'A'})
+            self.assertEqual((status,cache(fields)),(200,'MISS'))
+            for accept in ('*/*',' */* ; q=1.0 '):
+                status,fields,body=get('/wildcard-document',extra={'Accept':accept,'X-Test-Visitor':'B'})
+                self.assertEqual((status,cache(fields)),(200,'HIT'))
+                self.assertEqual(dict(fields).get('X-UltraCache-Variant'),'orig')
+                self.assertEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
+                self.assertIn('private:B',body)
+                self.assertNotIn('private:A',body)
+            self.assertEqual(sum(phase=='public-select' for _,phase,_ in app.calls),1)
+
+    def test_other_negotiations_and_non_document_fetches_keep_their_own_variant(self):
+        for accept,destination in (('*/*;q=0',None),('application/json,*/*',None),
+                ('*/*','image'),('text/plain,*/*',None)):
+            app=ImagePublications()
+            with self.subTest(accept=accept,destination=destination),proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
+                self.assertEqual(control(get,enabled=True,names='')[0],200)
+                self.assertEqual(cache(get('/exact-negotiation',extra={'Accept':'text/html'})[1]),'MISS')
+                headers={'Accept':accept}
+                if destination is not None:headers['Sec-Fetch-Dest']=destination
+                status,fields,body=get('/exact-negotiation',extra=headers)
+                self.assertEqual((status,cache(fields)),(200,'PASS' if destination=='image' else 'MISS'))
+
     def test_three_equal_body_publications_keep_their_own_locator_and_reuse_each_bucket(self):
         self.exercise(ImagePublications())
     def test_fresh_selected_snapshot_without_inner_hit_uses_its_actual_representation(self):

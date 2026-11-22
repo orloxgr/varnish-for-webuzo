@@ -1,5 +1,13 @@
 # Varnish for Webuzo
 
+Version **0.12.6** lets an unrestricted `Accept: */*` document reuse the warmed
+original HTML representation. The origin's Accept header, other negotiated
+representations and existing public-response/privacy checks are preserved.
+See [wildcard document representations](shared/WILDCARD-DOCUMENT-REPRESENTATIONS.md).
+For the separate footer-cookie publication correction, use UltraCache
+**3.13.13-dev.1322 or newer** and renew older publications through its normal
+cache clear and warm-up after upgrading both components.
+
 Version **0.12.5** applies CMS cookie choices through the ordinary scoped
 resolver and reports the current request's prepared private fragment outcome
 separately from parent cache HIT. The outcome works with WordPress Debug off;
