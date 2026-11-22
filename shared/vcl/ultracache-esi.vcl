@@ -330,6 +330,12 @@ sub scp_ultracache_deliver {
             resp.http.X-UltraCache-Delivery-Prepare,
             std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0), false);
     }
+    if (req.http.X-SCP-Delivery-State == "3") {
+        if (!std.ban(cookie_handoff.delivery_retire())) {
+            return (synth(503, "Publication retirement failed"));
+        }
+        return (restart);
+    }
     if (req.http.X-SCP-Delivery-State == "1") { return (restart); }
     if (req.http.X-SCP-Delivery-State == "2") { return (synth(200, "Private document")); }
     if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }

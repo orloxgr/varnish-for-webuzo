@@ -157,45 +157,63 @@ VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {
     return out;
 }
 VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
-    VCL_STRING site, VCL_STRING policy, VCL_STRING rules, VCL_BOOL cold) {
-    struct continuation *d;
+    VCL_STRING site, VCL_STRING policy, VCL_STRING rules, VCL_BOOL cold, VCL_BOOL reselect) {
+    struct continuation *d = priv->priv;
     struct handoff *entry;
     struct public_declaration *declaration;
     const char *host = NULL, *method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     char *names = NULL, *wordpress_policy = NULL, *scope = NULL, *actions;
     int has_variant, found;
     unsigned i;
-    if (priv->priv || ctx->req->esi_level || ctx->req->restarts || !method || strcmp(method,"GET") ||
+    if ((reselect ? (!d || d->phase != D_RESELECT_READY || !d->reselect_attempted || d->failed ||
+            d->selection_entry || ctx->req->restarts != d->restart+2) : (d || ctx->req->restarts)) ||
+        ctx->req->esi_level || !method || strcmp(method,"GET") ||
         !site || !*site || !public_policy(policy) ||
         !http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
+    if (reselect && (!d->site || strcmp(d->site,site) || !d->host || strcmp(d->host,host) ||
+        !d->url || strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b))) return -1;
     pthread_mutex_lock(&lock); declaration = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
     found = declaration != NULL;
     if (found) { names = strdup(declaration->names); wordpress_policy = strdup(declaration->wordpress_policy); scope = strdup(declaration->scope); }
     pthread_mutex_unlock(&lock);
-    if (!found) return 0;
+    if (!found) return reselect ? -1 : 0;
     if (!names || !wordpress_policy || !scope) { free(names); free(wordpress_policy); free(scope); return -1; }
     actions = public_actions(rules,names,&has_variant); free(names);
     if (!actions) { free(wordpress_policy); free(scope); return -1; }
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
      * prepares on an actual cold MISS, leaving plain warm HITs alone. */
-    if ((!has_variant && !cold) || (has_variant && cold)) {
+    if (!reselect && ((!has_variant && !cold) || (has_variant && cold))) {
         free(actions); free(wordpress_policy); free(scope); return 0;
     }
     if (ctx->req->restarts+1 > ctx->req->max_restarts) { free(actions); free(wordpress_policy); free(scope); return -1; }
-    d = calloc(1,sizeof(*d));
+    if (!reselect) d = calloc(1,sizeof(*d));
     if (!d) { free(actions); free(wordpress_policy); free(scope); return -1; }
     priv->priv = d; priv->methods = &delivery_methods;
+    if (reselect) {
+        close_owner(&d->association);
+        free(d->target); d->target = NULL;
+        free(d->manifest); d->manifest = NULL;
+        free(d->body); d->body = NULL; d->length = d->capacity = 0;
+        clear_fields(d->public_headers); d->public_headers = NULL;
+        free(d->retire_expression); d->retire_expression = NULL;
+        d->sent = d->complete = d->failed = d->conflict_verified = 0;
+        d->recovery_ready = d->recovery_sent = d->recovery_received = d->recovery_restart = 0;
+        d->snapshot_ready = d->snapshot_mode = d->cookie_delivery = d->debug_fallback = d->outcome = 0;
+        d->public_deadline = d->prepare_response_time = 0;
+        d->parent = NULL; d->occurrences = 0;
+        cold = !has_variant;
+    }
     d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;
     d->wordpress_policy = wordpress_policy; d->selection_actions = actions;
     d->selection_scope = scope;
     d->selection_policy = strdup(policy); d->selection_rules = strdup(rules ? rules : "");
-    d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site);
+    if (!reselect) { d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site); }
     if (!d->selection_policy || !d->selection_rules || !d->url || !delivery_relative(d->url) || !d->site ||
-        !delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
+        (!reselect && (!delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
         !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
-        !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)) return -1;
+        !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)))) return -1;
     if (cold && !delivery_copy_header(ctx->http_req,h_lookup_variant,&d->lookup_variant)) return -1;
-    for (i = 0; i < 6; ++i)
+    if (!reselect) for (i = 0; i < 6; ++i)
         if (!delivery_copy_header(ctx->http_req,conditional_headers[i],&d->conditional[i])) return -1;
     entry = calloc(1,sizeof(*entry));
     if (!entry) return -1;

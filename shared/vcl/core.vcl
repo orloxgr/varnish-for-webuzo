@@ -9,6 +9,10 @@ sub scp_init {
     unset req.http.X-SCP-Public-Fragment;
     unset req.http.X-SCP-Fragment-HTTP-Failure;
     unset req.http.X-UltraCache-ESI-Error-Contained;
+    unset req.http.X-UltraCache-VCL-Publication-Reselect-Version;
+    unset req.http.X-UltraCache-Delivery-Conflict-Version;
+    unset req.http.X-UltraCache-Delivery-Conflict;
+    unset req.http.X-UltraCache-Delivery-Manifest-SHA256;
     unset req.http.X-UltraCache-Delivery-Outcome;
     unset req.http.X-UltraCache-VCL-Delivery-Outcome-Version;
     unset req.http.X-UltraCache-VCL-Cookie-Delivery-Version;
@@ -139,6 +143,10 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Public-Fragment;
     unset bereq.http.X-SCP-Fragment-HTTP-Failure;
     unset bereq.http.X-UltraCache-ESI-Error-Contained;
+    unset bereq.http.X-UltraCache-VCL-Publication-Reselect-Version;
+    unset bereq.http.X-UltraCache-Delivery-Conflict-Version;
+    unset bereq.http.X-UltraCache-Delivery-Conflict;
+    unset bereq.http.X-UltraCache-Delivery-Manifest-SHA256;
     unset bereq.http.X-UltraCache-Delivery-Outcome;
     unset bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version;
     unset bereq.http.X-UltraCache-VCL-Cookie-Delivery-Version;
@@ -226,6 +234,7 @@ sub scp_backend_response {
             !beresp.http.Set-Cookie && beresp.status == 200) {
             set beresp.http.X-SCP-Delivery-Public-Snapshot = "1";
         }
+        if (cookie_handoff.delivery_conflict_response()) {}
         if (cookie_handoff.delivery_recovery_response()) {}
     }
     unset beresp.http.X-UltraCache-Delivery-Parent-Source;
@@ -264,6 +273,10 @@ sub scp_backend_response {
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
     # The prepare capture consumes its own outcome before this cleanup. An
     # ordinary origin response cannot store a delivery verdict in the parent.
+    unset beresp.http.X-UltraCache-VCL-Publication-Reselect-Version;
+    unset beresp.http.X-UltraCache-Delivery-Conflict-Version;
+    unset beresp.http.X-UltraCache-Delivery-Conflict;
+    unset beresp.http.X-UltraCache-Delivery-Manifest-SHA256;
     unset beresp.http.X-UltraCache-Delivery-Outcome;
     unset beresp.http.X-UltraCache-VCL-Delivery-Outcome-Version;
     unset beresp.http.X-UltraCache-VCL-Cookie-Delivery-Version;
@@ -273,6 +286,10 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    unset resp.http.X-UltraCache-VCL-Publication-Reselect-Version;
+    unset resp.http.X-UltraCache-Delivery-Conflict-Version;
+    unset resp.http.X-UltraCache-Delivery-Conflict;
+    unset resp.http.X-UltraCache-Delivery-Manifest-SHA256;
     unset resp.http.X-UltraCache-Delivery-Outcome;
     unset resp.http.X-UltraCache-VCL-Delivery-Outcome-Version;
     unset resp.http.X-UltraCache-VCL-Cookie-Delivery-Version;

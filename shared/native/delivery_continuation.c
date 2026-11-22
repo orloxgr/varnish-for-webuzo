@@ -9,7 +9,7 @@
 
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
-    D_RAW_PASS, D_RAW_DELIVERED, D_FAILED };
+    D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY, D_FAILED };
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
@@ -17,6 +17,7 @@ struct continuation {
     unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
+    unsigned reselect_attempted, conflict_verified;
     unsigned cold_entry;
     unsigned cookie_delivery;
     unsigned debug_fallback;
@@ -28,6 +29,7 @@ struct continuation {
      * Never swap engine pointers or call uninstalled private HSH APIs. */
     const struct objcore *parent;
     char *url, *host, *site, *target, *manifest, *cookie, *encoding;
+    char *retire_expression;
     char *selection_rules, *selection_policy, *wordpress_policy, *selection_actions, *selection_scope;
     char *candidate, *variant, *lookup_variant;
     char *conditional[6];
@@ -65,6 +67,10 @@ static const hdr_t h_wordpress_policy = HDR("X-UltraCache-Delivery-WordPress-Pol
 static const hdr_t h_selection_actions = HDR("X-UltraCache-Delivery-Public-Selection-Actions");
 static const hdr_t h_selection_scope = HDR("X-UltraCache-Delivery-Public-Selection-Scope");
 static const char selection_content_type[] = "application/vnd.ultracache.delivery+json";
+static const hdr_t h_reselect_version = HDR("X-UltraCache-VCL-Publication-Reselect-Version");
+static const hdr_t h_conflict_version = HDR("X-UltraCache-Delivery-Conflict-Version");
+static const hdr_t h_conflict = HDR("X-UltraCache-Delivery-Conflict");
+static const hdr_t h_manifest_digest = HDR("X-UltraCache-Delivery-Manifest-SHA256");
 static const hdr_t h_set_cookie2 = HDR("Set-Cookie2");
 static const hdr_t h_contained_error = HDR("X-UltraCache-ESI-Error-Contained");
 static const hdr_t h_delivery_outcome = HDR("X-UltraCache-Delivery-Outcome");
@@ -94,6 +100,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     /* The table lock excludes an aborting backend filter before freeing d. */
     close_owner(&d->association);
     (void)ctx;
+    free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
     free(d->selection_actions); free(d->selection_scope); free(d->candidate); free(d->variant); free(d->lookup_variant);
@@ -277,6 +284,92 @@ static const struct vfp delivery_filter = {
     .name = "uc_delivery_capture", .init = delivery_filter_init, .pull = delivery_filter_pull,
 };
 
+/* Quote exact ban operands for the supported std.ban interface. */
+static char *delivery_ban_operand(const char *value) {
+    const unsigned char *p;
+    size_t n = 0;
+    char *out, *at;
+    if (!value) return NULL;
+    for (p = (const unsigned char *)value; *p; ++p) {
+        if (*p < 32 || *p == 127 || n > SIZE_MAX-2) return NULL;
+        n += (*p == '"' || *p == '\\') ? 2 : 1;
+    }
+    if (n > SIZE_MAX-3 || !(out = malloc(n+3))) return NULL;
+    at = out; *at++ = '"';
+    for (p = (const unsigned char *)value; *p; ++p) {
+        if (*p == '"' || *p == '\\') *at++ = '\\';
+        *at++ = (char)*p;
+    }
+    *at++ = '"'; *at = 0; return out;
+}
+static char *delivery_retirement(VRT_CTX, const struct continuation *d) {
+    const char *site = NULL, *host = NULL, *url = NULL, *header = NULL;
+    char *qs = NULL, *qh = NULL, *qu = NULL, *qt = NULL, *result = NULL;
+    const char *expression;
+    if (http_CountHdr(ctx->http_resp,HDR("X-HVH-Site")) == 1 &&
+        http_GetHdr(ctx->http_resp,HDR("X-HVH-Site"),&site)) header = "X-HVH-Site";
+    else if (http_CountHdr(ctx->http_resp,HDR("X-WV-Site")) == 1 &&
+        http_GetHdr(ctx->http_resp,HDR("X-WV-Site"),&site)) header = "X-WV-Site";
+    if (!header || !site || !d->site || strcmp(site,d->site) ||
+        !http_GetHdr(ctx->http_resp,HDR("X-Cache-Object-Host"),&host) || strcmp(host,d->host) ||
+        !http_GetHdr(ctx->http_resp,HDR("X-Cache-Object-URL"),&url)) return NULL;
+    qs = delivery_ban_operand(site); qh = delivery_ban_operand(host);
+    qu = delivery_ban_operand(url); qt = delivery_ban_operand(d->target);
+    if (qs && qh && qu && qt) {
+        expression = WS_Printf(ctx->ws,"obj.http.%s == %s && obj.http.X-Cache-Object-Host == %s && obj.http.X-Cache-Object-URL == %s && obj.http.X-UltraCache-Delivery-Prepare == %s",header,qs,qh,qu,qt);
+        if (expression) result = strdup(expression);
+    }
+    free(qs); free(qh); free(qu); free(qt); return result;
+}
+static int delivery_header_equals(const struct http *hp, hdr_t name, const char *expected) {
+    const char *value;
+    return expected && http_CountHdr(hp,name) == 1 && http_GetHdr(hp,name,&value) && !strcmp(value,expected);
+}
+/* Only the negotiated pre-bootstrap conflict can authorize another entry. */
+static int delivery_conflict(VRT_CTX, const struct continuation *d) {
+    const char *reason;
+    char digest[65];
+    return !d->selection_entry && !d->reselect_attempted && d->sent == 1 && !d->failed &&
+        d->retire_expression && d->manifest && !d->complete && !d->length && !d->fragments &&
+        !d->public_parent && !d->document && !d->association.owner->fields &&
+        http_GetStatus(ctx->http_beresp) == 409 &&
+        !http_CountHdr(ctx->http_beresp,H_Set_Cookie) && !http_CountHdr(ctx->http_beresp,h_set_cookie2) &&
+        delivery_header_equals(ctx->http_beresp,h_conflict_version,"1") &&
+        http_CountHdr(ctx->http_beresp,h_conflict) == 1 && http_GetHdr(ctx->http_beresp,h_conflict,&reason) &&
+        (!strcmp(reason,"publication-binding-mismatch") || !strcmp(reason,"public-publication-unavailable")) &&
+        delivery_header_equals(ctx->http_beresp,h_request,d->request_id) &&
+        delivery_header_equals(ctx->http_beresp,h_original,d->url) &&
+        delivery_header_equals(ctx->http_beresp,H_Content_Length,"0") &&
+        !http_CountHdr(ctx->http_beresp,H_Content_Encoding) &&
+        !http_CountHdr(ctx->http_beresp,H_Transfer_Encoding) &&
+        ctx->bo->htc && ctx->bo->htc->body_status == BS_NONE &&
+        delivery_selection_digest((const unsigned char *)d->manifest,strlen(d->manifest),digest) &&
+        delivery_header_equals(ctx->http_beresp,h_manifest_digest,digest);
+}
+VCL_BOOL vmod_delivery_conflict_response(VRT_CTX, struct vmod_priv *priv) {
+    struct task *task = priv->priv;
+    struct handoff *entry;
+    struct continuation *d;
+    int valid = 0;
+    if (!task || !task->key) return 0;
+    pthread_mutex_lock(&lock);
+    entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
+    if (d && d->phase == D_PREPARE) {
+        valid = d->conflict_verified = delivery_conflict(ctx,d);
+    }
+    pthread_mutex_unlock(&lock);
+    return valid;
+}
+VCL_STRING vmod_delivery_retire(VRT_CTX, struct vmod_priv *priv) {
+    const struct continuation *d = priv->priv;
+    return d && d->phase == D_RESELECT_QUEUED && d->reselect_attempted && d->retire_expression
+        ? WS_Copy(ctx->ws,d->retire_expression,-1) : NULL;
+}
+VCL_BOOL vmod_delivery_reselect_pending(VRT_CTX, struct vmod_priv *priv) {
+    const struct continuation *d = priv->priv;
+    return !ctx->req->esi_level && d && d->phase == D_RESELECT_READY && d->reselect_attempted && !d->failed;
+}
+
 VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
     const char *url;
@@ -298,6 +391,13 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
             return WS_Overflowed(ctx->ws) ? -1 : 3;
         }
         return 0; /* ordinary public child remains on its existing path */
+    }
+    if (d->phase == D_RESELECT_QUEUED && d->reselect_attempted &&
+        ctx->req->restarts == d->restart+2) {
+        if (!delivery_restore(ctx,d)) return -1;
+        http_Unset(ctx->http_req,h_key);
+        d->phase = D_RESELECT_READY;
+        return 0; /* Re-run ordinary route, authorization and cookie policy. */
     }
     if ((d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
         (d->phase == D_RECOVERY_QUEUED && ctx->req->restarts == d->recovery_restart)) {
@@ -343,7 +443,8 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
     url = ctx->http_req->hd[HTTP_HDR_URL].b;
     method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     pthread_mutex_lock(&lock);
-    phase = (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
+    phase = (d->phase == D_RESELECT_QUEUED && d->reselect_attempted && ctx->req->restarts == d->restart+2) ||
+        (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
         (d->phase == D_RETURN && ctx->req->restarts == d->restart+(d->selection_entry ? 1 : 2)) ||
         (d->phase == D_RECOVERY_QUEUED && ctx->req->restarts == d->recovery_restart);
     valid = phase && !d->failed && method && !strcmp(method,"GET") &&
@@ -392,6 +493,9 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             else http_Unset(ctx->http_bereq,h_cookie_delivery);
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->url);
+            if (d->phase == D_PREPARE && !d->selection_entry && !d->reselect_attempted)
+                http_ForceHeader(ctx->http_bereq,h_reselect_version,"1");
+            else http_Unset(ctx->http_bereq,h_reselect_version);
             if (d->manifest) http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
             else http_Unset(ctx->http_bereq,h_manifest);
             if (d->selection_entry && d->phase == D_PREPARE) {
@@ -475,6 +579,18 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
             pthread_mutex_unlock(&lock); return 0;
         }
     } else valid = 1;
+    if (d->conflict_verified) {
+        d->phase = D_CONFLICT;
+        /* The native HTTP parser has completed the explicit no-body framing;
+         * VFP pull is not invoked for Content-Length: 0. */
+        d->complete = 1;
+        filter = VRT_priv_task(ctx,&filter_task_token);
+        if (filter) filter->priv = &task->key;
+        else d->failed = 1;
+        pthread_mutex_unlock(&lock);
+        if (!filter) VRT_fail(ctx,"UltraCache conflict capture association unavailable");
+        return 1;
+    }
     valid = valid && http_GetStatus(ctx->http_beresp) == 200 &&
         (!http_GetHdr(ctx->http_beresp,H_Content_Encoding,&encoding) || !strcmp(encoding,"identity"));
     pthread_mutex_unlock(&lock);
@@ -566,6 +682,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         for (i = 0; i < 6; ++i)
             if (!delivery_copy_header(ctx->http_req,conditional_headers[i],&d->conditional[i])) return -1;
         if (!delivery_snapshot_headers(ctx,d)) return -1;
+        d->retire_expression = delivery_retirement(ctx,d);
         entry = calloc(1,sizeof(*entry));
         if (!entry) return -1;
         pthread_mutex_lock(&lock);
@@ -587,6 +704,15 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         }
         d->phase = D_RAW_DELIVERED;
         return 0; /* Native streaming delivery, never a synthetic full-body copy. */
+    }
+    if (d->phase == D_CONFLICT) {
+        if (d->failed || !d->complete || d->length || d->reselect_attempted ||
+            http_GetStatus(ctx->http_resp) != 409 || ctx->req->restarts != d->restart+1 ||
+            ctx->req->restarts+2 > ctx->req->max_restarts || !delivery_restore(ctx,d) ||
+            !delivery_original_owner(ctx,d)) { d->phase = D_FAILED; return -1; }
+        d->reselect_attempted = 1;
+        d->phase = D_RESELECT_QUEUED;
+        return 3; /* Retire exact A, then enter current-policy selection once. */
     }
     if (d->phase == D_PREPARE) {
         int valid;

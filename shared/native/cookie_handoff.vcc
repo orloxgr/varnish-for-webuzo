@@ -155,7 +155,7 @@ $Restrict vcl_recv vcl_miss vcl_synth
 Project exact names through the active generated ordered matcher. Existing
 unmatched-name behavior is Shared; no additional cookie decision list.
 
-$Function INT selection_begin(PRIV_TOP, STRING site, STRING policy, STRING rules, BOOL cold = 0)
+$Function INT selection_begin(PRIV_TOP, STRING site, STRING policy, STRING rules, BOOL cold = 0, BOOL reselect = 0)
 $Restrict vcl_recv vcl_miss
 
 After normal route/auth/cookie decisions: 1 owned original-route preparation,
@@ -191,3 +191,18 @@ $Restrict vcl_backend_response
 
 True only for an owned public-select fetch returning a genuine non-protocol
 response. Deliver that private PASS normally, without capturing its body.
+
+$Function STRING delivery_retire(PRIV_TOP)
+$Restrict vcl_deliver
+
+Exact site/host/URL/old-publication ban expression after a verified early conflict.
+
+$Function BOOL delivery_reselect_pending(PRIV_TOP)
+$Restrict vcl_recv
+
+Same owner may re-enter current policy selection only after its single early conflict.
+
+$Function BOOL delivery_conflict_response(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Validate early conflict proof before removing its ephemeral request bindings.

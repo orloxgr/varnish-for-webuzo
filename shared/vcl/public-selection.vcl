@@ -64,6 +64,13 @@ sub scp_selection_capabilities {
 # All ordinary auth/route/cookie decisions have already run. A browser's
 # Cache-Control/Pragma revalidation headers do not disable this lookup.
 sub scp_selection_recv {
+    if (cookie_handoff.delivery_reselect_pending()) {
+        set req.http.X-SCP-Selection-Operation = "reselect";
+        call scp_selection_context;
+        unset req.http.X-SCP-Selection-Operation;
+        if (req.http.X-SCP-Selection-State == "1") { return (pass); }
+        return (synth(503, "Publication reselection unavailable"));
+    }
     # These dedicated UltraCache diagnostics publish their own public canary,
     # before the application's normal template/publication lifecycle. Keep the
     # actual native cache and invalidation path: only omit application selection.
