@@ -65,13 +65,14 @@ class GuestPublication(unittest.TestCase):
                 self.fail(str(app.guest_requests)+subprocess.check_output(['varnishlog','-n',str(get.instance),'-d','-g','request'],text=True)[-16000:])
             self.assertEqual((first[0],cache(first[1]),first[2]),(200,'MISS',GUEST_BODY))
             self.assertEqual(dict(first[1]).get('X-UltraCache-Guest-Publication'),'1')
-            self.assertNotEqual(dict(first[1]).get('X-UltraCache-Delivery-Outcome'),'verified')
+            self.assertNotIn('X-UltraCache-Delivery-Outcome',dict(first[1]))
             self.assertEqual([p for _,p,_ in app.calls],['public-select'])
             get.stop_origin()
             for jar in ('fresh-A','fresh-B'):
                 status,fields,body=get('/guest',extra={'X-Test-Visitor':jar})
                 self.assertEqual((status,cache(fields),body),(200,'HIT',GUEST_BODY))
                 self.assertEqual(dict(fields).get('X-UltraCache-Guest-Publication'),'1')
+                self.assertNotIn('X-UltraCache-Delivery-Outcome',dict(fields))
                 self.assertEqual(cookies(fields),[])
                 self.assertFalse(any(name.startswith('X-SCP-Guest-') for name,_ in fields))
                 log=subprocess.check_output(['varnishlog','-n',str(get.instance),'-d','-g','request',
@@ -133,6 +134,7 @@ class GuestPublication(unittest.TestCase):
             for owner in ('A','B'):
                 status,fields,body=get('/guest','shared_metric='+owner,{'X-Test-Visitor':owner})
                 self.assertEqual(status,200);self.assertIn('private:'+owner,body)
+                self.assertEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
                 self.assertNotIn('X-UltraCache-Guest-Publication',dict(fields))
             status,fields,body=get('/guest')
             self.assertEqual((status,cache(fields),body),(200,'HIT',GUEST_BODY))

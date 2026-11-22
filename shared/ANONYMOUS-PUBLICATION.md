@@ -185,7 +185,10 @@ On guest HIT, return this object directly. Do not call delivery_deliver to start
 prepare, create an empty fake prepared batch, or report per-visitor private
 `verified` from a cached field. Expose a distinct nonsecret observation
 `X-UltraCache-Guest-Publication: 1` created from validated native state; retain
-ordinary HIT reporting. Existing prepared Delivery-Outcome keeps its meaning.
+ordinary HIT reporting. A validated complete guest response omits the irrelevant
+private Delivery-Outcome entirely; it does not report unverified as though an
+expected private operation failed. Existing prepared private Delivery-Outcome
+keeps its meaning, and a forged guest marker cannot suppress that verdict.
 
 ## Nonces and independent cookie creation
 

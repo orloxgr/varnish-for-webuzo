@@ -370,7 +370,7 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-VCL-Public-Selection-Actions;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     else { unset resp.http.X-UltraCache-Cookie-Delivery; }
-    if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0) {
+    if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0 && !cookie_handoff.guest_result()) {
         set resp.http.X-UltraCache-Delivery-Outcome = cookie_handoff.delivery_outcome();
     }
     unset resp.http.X-UltraCache-Guest-Publication;
