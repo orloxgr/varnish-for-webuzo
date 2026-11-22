@@ -1,5 +1,16 @@
 # Varnish for Webuzo
 
+Version **0.12.7** corrects stale publication conflicts and application
+registration after a Varnish restart in the UltraCache profile. An authenticated
+early conflict can select the current public publication once within the same
+visitor request, before application providers run. It retires only the exact
+stale parent and preserves visitor ownership and once-only provider work. The
+registration epoch follows the actual registry lifetime, so the normal application
+warm-up can restore registration after a same-build restart. Basic and cache
+lifetimes are unchanged. See [publication conflict reselection](shared/PUBLICATION-RESELECT.md).
+Use the coordinated WordPress companion **UltraCache 3.13.13-dev.1323 or newer**,
+then run its normal cache clear and warm-up after upgrading both components.
+
 Version **0.12.6** lets an unrestricted `Accept: */*` document reuse the warmed
 original HTML representation. The origin's Accept header, other negotiated
 representations and existing public-response/privacy checks are preserved.
