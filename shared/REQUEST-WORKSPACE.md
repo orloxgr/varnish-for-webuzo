@@ -18,8 +18,9 @@ phase/restart/site/host/URL ownership proof and exact equality with the classifi
 raw Cookie. Initial client headers, ordinary restarts, changed cookies and ESI
 children cannot supply that proof. Selection may replace the public Variant key;
 the original classification is restored before the next current selection.
-The temporary reuse fields never reach the origin. Basic does not allocate a
-continuation snapshot.
+Completed classification scratch releases its header slots before continuation
+ingress. The temporary reuse fields never reach the origin. Basic does not
+allocate a continuation snapshot.
 
 No native module, registry policy, cache namespace, Varnish parameter or lifetime
 changes. Existing requests stay with their original VCL; overlapping activation
@@ -37,5 +38,5 @@ owned restart. There must be no LostHeader, workspace or VCL error records.
 
 This is bounded native regression evidence, not a claim that arbitrary cookie
 sizes or arbitrarily many explicit Variant rules fit a finite engine workspace.
-Larger synthetic all-Variant payloads can still exhaust the engine workspace;
+Larger synthetic Variant-heavy payloads can still exhaust the engine workspace;
 the addon does not introduce a new cookie limit or change the engine's limits.

@@ -1,6 +1,11 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    # Completed classification scratch must release its header slots before
+    # adding the continuation reuse marker, including a full browser request.
+    unset req.http.X-SCP-Admin-Remaining;
+    unset req.http.X-SCP-Admin-Keep;
+    unset req.http.X-SCP-Admin-Matched;
     # A continuation restarts this same, already classified top request.
     # Only native phase/site/host/URL ownership plus an unchanged raw Cookie
     # permits reuse. Client headers, ESI children and ordinary restarts cannot.
@@ -78,9 +83,6 @@ sub scp_init {
     unset req.http.X-UltraCache-VCL-Public-Selection-Actions;
     unset req.http.X-UltraCache-Cookie-Settings;
     unset req.http.X-UltraCache-Cookie-Vary;
-    unset req.http.X-SCP-Admin-Remaining;
-    unset req.http.X-SCP-Admin-Keep;
-    unset req.http.X-SCP-Admin-Matched;
     if (req.http.X-SCP-Admin-Reuse != "1") {
         unset req.http.X-SCP-Admin-Applied;
         unset req.http.X-SCP-Admin-Filtered;

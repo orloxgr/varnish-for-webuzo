@@ -458,5 +458,7 @@ def _compile_rules(rules, *, initialize=True, finish=True, chain_defaults=False)
                      'set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Variant + "; " + req.http.X-SCP-Admin-Remaining;',
                      '} else if (req.http.X-SCP-Admin-Variant) { set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Variant;',
                      '} else { set req.http.X-SCP-Admin-Filtered = req.http.X-SCP-Admin-Remaining; }',
-                     _tidy('X-SCP-Admin-Filtered')])
+                     _tidy('X-SCP-Admin-Filtered'),
+                     'unset req.http.X-SCP-Admin-Remaining;',
+                     'unset req.http.X-SCP-Admin-Matched;'])
     return '\n'.join(code)
