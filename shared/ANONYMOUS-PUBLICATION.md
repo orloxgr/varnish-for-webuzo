@@ -1,9 +1,10 @@
-# Complete anonymous publication - protocol 1 (source candidate)
+# Complete anonymous publication - protocol 1
 
 Tracking: UltraCache issue #1006. Protocol 1 is agreed by the producer and native
-owners and implemented in an isolated native source candidate. It is not a
-released capability or completed real-application qualification. Existing
-private delivery validation remains intact. Basic is outside this extension.
+owners and implemented through the native application's existing connection and
+publication lifecycle. Each panel adapter records its own qualification and
+release status. Existing private delivery validation remains intact. Basic is
+outside this extension.
 
 ## Required result and scope
 

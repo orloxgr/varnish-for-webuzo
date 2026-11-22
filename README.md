@@ -1,5 +1,23 @@
 # Varnish for Webuzo
 
+Version **0.12.8** adds complete anonymous HTML publication to the UltraCache
+profile. After the normal warm-up, a new visitor with no Cookie or Authorization
+header can receive the complete page, empty-cart markup and usable guest nonces
+from Varnish without an application request or origin-backed ESI during HTML
+delivery. Any required real cookies are issued separately by the application
+after page load, independently for each browser.
+
+Normal warm-up also primes the existing private-capable public parent through
+an authenticated, request-bound projection. Acquiring a cookie therefore does
+not leave that representation cold. Requests carrying cookies keep their saved
+Shared, Variant and Private choices and existing private-fragment delivery.
+Basic, cache lifetimes and panel settings are unchanged.
+
+Use the coordinated **UltraCache 3.13.13-dev.1324 or newer**. Upgrade both
+components, then use UltraCache's normal cache clear and warm-up to replace old
+publications and fill both representations. See the [anonymous publication
+contract](shared/ANONYMOUS-PUBLICATION.md) and [qualification and update notes](docs/ANONYMOUS-VALIDATION.md).
+
 Version **0.12.7** corrects stale publication conflicts and application
 registration after a Varnish restart in the UltraCache profile. An authenticated
 early conflict can select the current public publication once within the same
