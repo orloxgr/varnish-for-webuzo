@@ -59,6 +59,7 @@ sub scp_selection_capabilities {
         }
         set resp.http.X-UltraCache-VCL-Capabilities = resp.http.X-UltraCache-VCL-Capabilities + ",public-selection";
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
+        set resp.http.X-UltraCache-VCL-Publication-Reselect-Version = "1";
         set resp.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
         unset resp.http.X-UltraCache-VCL-Guest-Publication-Policy;
         set resp.http.X-UltraCache-VCL-Guest-Publication-Policy = cookie_handoff.selection_guest_policy(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);

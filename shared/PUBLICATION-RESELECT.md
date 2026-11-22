@@ -8,7 +8,27 @@ selection; it does not relax publication validation or replay consumed work.
 
 ## Negotiated early response
 
-Only an owned ordinary prepare advertises
+The existing authenticated UltraCache capabilities response advertises
+`X-UltraCache-VCL-Publication-Reselect-Version: 1`. This declares the existing
+same-owner conflict and exact-publication retirement behavior below; it adds no
+new invalidation operation or VMOD ABI. Basic, unauthorized control requests and
+ordinary application responses do not advertise this capability. A cooperating
+producer must bind its saved observation to each current registered endpoint,
+scope, policy and registry epoch rather than infer support from another feature.
+An older transport can also demonstrate support through an actual authenticated
+ordinary prepare carrying this same field. Record that observation only after
+the producer validates the real manifest and uniquely associates the request's
+native policy and registry epoch with a current registered endpoint. Ambiguous
+associations or changed registrations do not grant this capability.
+
+Collector completion may rely on this behavior instead of invalidating all URL
+representations only when every configured delivery endpoint has the current
+capability and no durable complete-guest object can refer to an unfinished
+collector publication. An unfinished selected source must carry zero remaining
+freshness and must not authorize a complete-guest object. Existing content purge,
+policy changes and real expiry retain their ordinary invalidation semantics.
+
+An owned ordinary prepare also advertises
 `X-UltraCache-VCL-Publication-Reselect-Version: 1`. A compatible producer may
 return HTTP 409 before bootstrap/provider work with the following single fields:
 
