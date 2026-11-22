@@ -3,6 +3,10 @@
 sub scp_init {
     cookie_handoff.reset();
     cookie_handoff.guest_ingress();
+    unset req.http.X-SCP-Warm-Projection-Supported;
+    unset req.http.X-UltraCache-Warm-Projection;
+    unset req.http.X-UltraCache-Warm-Projection-Authorization;
+    unset req.http.X-UltraCache-VCL-Warm-Projection-Version;
     unset req.http.X-SCP-Guest-Issuer;
     unset req.http.X-SCP-Guest-Issuer-Canonical;
     unset req.http.X-SCP-Guest-Issuer-Query;
@@ -250,6 +254,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Selection-Scope;
     unset bereq.http.X-SCP-Selection-Actions;
     unset bereq.http.X-SCP-Adaptive-Nonce;
+    unset bereq.http.X-SCP-Warm-Projection-Supported;
 }
 sub scp_backend_response {
     unset beresp.http.X-UltraCache-Guest-Issuer-Version;
@@ -331,6 +336,12 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    unset resp.http.X-SCP-Warm-Projection-Supported;
+    unset resp.http.X-UltraCache-Warm-Projection;
+    unset resp.http.X-UltraCache-Warm-Projection-Authorization;
+    if (cookie_handoff.guest_warm_parent_result()) {
+        set resp.http.X-UltraCache-Warm-Projection = "parent-v1";
+    }
     unset resp.http.X-UltraCache-Guest-Issuer-Version;
     unset resp.http.X-UltraCache-Guest-Issuer-Canonical-URL;
     unset resp.http.X-UltraCache-Guest-Issuer-Authorization;

@@ -11,11 +11,14 @@
 static const char guest_top_token;
 struct guest_request {
     unsigned captured, eligible, disabled;
+    unsigned warm_requested, warm_single, warm_checked, warm_valid;
+    char *warm_projection, *warm_authorization;
     char *key, *policy, *wordpress_policy, *epoch, *scope;
 };
 static void guest_fini(VRT_CTX, void *value) {
     struct guest_request *g = value;
     (void)ctx;
+    free(g->warm_projection); free(g->warm_authorization);
     free(g->key); free(g->policy); free(g->wordpress_policy); free(g->epoch); free(g->scope); free(g);
 }
 static const struct vmod_priv_methods guest_methods = {
@@ -37,6 +40,16 @@ VCL_VOID vmod_guest_ingress(VRT_CTX) {
     g->captured = 1;
     g->eligible = !http_CountHdr(ctx->http_req,H_Cookie) && !http_CountHdr(ctx->http_req,H_Authorization);
     p->priv = g; p->methods = &guest_methods;
+    {
+        const hdr_t projection = HDR("X-UltraCache-Warm-Projection");
+        const hdr_t authorization = HDR("X-UltraCache-Warm-Projection-Authorization");
+        const char *value;
+        unsigned fields = http_CountHdr(ctx->http_req,projection), proofs = http_CountHdr(ctx->http_req,authorization);
+        g->warm_requested = fields || proofs;
+        g->warm_single = fields == 1 && proofs == 1;
+        if (http_GetHdr(ctx->http_req,projection,&value)) g->warm_projection = strdup(value);
+        if (http_GetHdr(ctx->http_req,authorization,&value)) g->warm_authorization = strdup(value);
+    }
 }
 static void guest_disable(VRT_CTX) {
     struct guest_request *g = guest_context(ctx);
@@ -47,6 +60,13 @@ VCL_STRING vmod_guest_key(VRT_CTX) {
     if (ctx->req->esi_level) return NULL;
     g = guest_context(ctx);
     return g && !g->disabled && g->key ? WS_Copy(ctx->ws,g->key,-1) : NULL;
+}
+
+VCL_BOOL vmod_guest_warm_parent_result(VRT_CTX) {
+    struct guest_request *g;
+    if (ctx->req->esi_level) return 0;
+    g = guest_context(ctx);
+    return g && g->warm_valid && g->disabled && !g->key;
 }
 
 VCL_STRING vmod_guest_issuer_authorization(VRT_CTX, VCL_STRING credential, VCL_STRING canonical) {

@@ -54,6 +54,9 @@ sub scp_selection_negotiate {
 sub scp_selection_capabilities {
     if (req.http.X-SCP-Profile == "ultracache" && resp.status == 200 &&
         req.http.X-UltraCache-Operation == "capabilities") {
+        if (req.http.X-SCP-Warm-Projection-Supported == "1") {
+            set resp.http.X-UltraCache-VCL-Warm-Projection-Version = "1";
+        }
         set resp.http.X-UltraCache-VCL-Capabilities = resp.http.X-UltraCache-VCL-Capabilities + ",public-selection";
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
         set resp.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
@@ -121,6 +124,9 @@ sub scp_selection_recv {
 }
 
 sub scp_selection_origin {
+    if (bereq.http.X-SCP-Warm-Projection-Supported == "1") {
+        set bereq.http.X-UltraCache-VCL-Warm-Projection-Version = "1";
+    }
     # Hints cannot authorize an operation. Registration needs a successful
     # authenticated capabilities request, not these request fields.
     set bereq.http.X-UltraCache-VCL-Public-Selection-Version = "1";

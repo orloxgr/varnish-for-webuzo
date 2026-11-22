@@ -60,7 +60,9 @@ import cookie_handoff;
                 ') { set bereq.http.X-UltraCache-Delivery-Authorization = '+quoted(site['token'])+'; }')
         rules=cms_routes.compile_recv(site.get('cms_installations'))
         if rules:cms_rules.append('if (req.http.X-WV-Site == '+quoted(site['id'])+') {\n'+rules+'\n}')
-    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules),'\n'.join(delivery_authorization),public_selection.compile_rules(response_groups,'X-WV-Site')),'''
+    credentials={site['id']:site['token'] for site in sites.values()
+                 if site.get('enabled') and not site.get('error') and profiles.selected(site)=='ultracache'}
+    text += [profiles.program('\n'.join(admin_rules),'\n'.join(response_rules),'\n'.join(cms_rules),'\n'.join(delivery_authorization),public_selection.compile_rules(response_groups,'X-WV-Site',credentials)),'''
 sub vcl_recv {
  call scp_init;
  set sess.idle_send_timeout = '''+timeouts.seconds(allowances['read'])+''';

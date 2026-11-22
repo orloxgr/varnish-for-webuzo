@@ -218,6 +218,18 @@ $Restrict vcl_recv vcl_miss
 
 Select registered complete guest namespace for the native-owned first-visit predicate.
 
+$Function BOOL guest_warm_parent(STRING site, STRING policy, STRING credential)
+$Restrict vcl_recv vcl_miss
+
+Validate a request-bound ordinary refill proof before selecting the existing
+private-capable parent namespace. No cookies, registry or origin fields change.
+
+$Function BOOL guest_warm_parent_result()
+$Restrict vcl_deliver
+
+Current top-level delivery selected the parent with an authenticated Warm proof.
+This observation is request-owned, never cached parent metadata.
+
 $Function STRING guest_key()
 $Restrict vcl_recv vcl_hash vcl_hit vcl_deliver
 

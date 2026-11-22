@@ -190,6 +190,72 @@ private Delivery-Outcome entirely; it does not report unverified as though an
 expected private operation failed. Existing prepared private Delivery-Outcome
 keeps its meaning, and a forged guest marker cannot suppress that verdict.
 
+## Ordinary Warm primes both public projections
+
+A complete guest object does not replace the existing private-capable public
+parent. Once a visitor acquires a cookie, the original request predicate selects
+that existing parent namespace. Ordinary application Warm must therefore refill
+both through its current refill pipeline, for each applicable representation.
+It must not create a dummy cookie/session, toggle scope registration, or wait
+for the first real stateful visitor to fill the second object.
+
+Supporting native advertises `X-UltraCache-VCL-Warm-Projection-Version: 1` on the
+existing capabilities reply and ordinary origin hints. A negotiated application
+keeps its ordinary absent-cookie guest refill and adds a parent refill to the
+same normal stage. The latter is an ordinary GET on the actual public route,
+with the actual representation Accept header, and exactly one of each:
+
+```
+X-UltraCache-Warm-Projection: parent-v1
+X-UltraCache-Warm-Projection-Authorization: v1:<lowercase HMAC-SHA256>
+```
+
+The key is the existing scoped connection secret. Message bytes, LF separators
+and no trailing LF:
+
+```
+ultracache-warm-projection-v1
+parent-v1
+GET
+<native ingress Host: adapter lowercase/port normalization>
+<exact raw relative request URI, including original query bytes>
+<effective forwarded scheme: http or https>
+<actual Accept header, or empty string if absent>
+<exact longest matching registered application scope>
+<current native policy digest>
+<accepted WordPress policy digest>
+<accepted guest policy digest>
+<current native registry epoch>
+```
+
+The native ingress fact must still be literal absent Cookie and Authorization.
+Capture selector/proof as native-owned request state before scrubbing both HTTP
+fields. Verify against the native adapter-owned site key and current actual
+registration before guest selection. Use a constant-time digest comparison.
+Duplicate, invalid or mismatched requested selectors cannot choose the parent.
+Neither raw key nor request proof is forwarded to the application or stored in
+the cache. The proof selects only the existing parent representation for this
+owning refill request; all route, cookie-policy and private-delivery rules still
+apply. It never changes the scope declaration, guest eligibility of other
+requests, native epoch, source publication or cookie policy. It adds no origin
+work to guest HITs, no session, persistent registry, queue, user control or timer.
+
+An adapter supplies the credential map to the shared `compile_rules` call from
+the same actual site configuration used by its existing delivery authorization.
+It does not derive a credential from incoming fields. Unsupported old native
+continues its existing refill behavior; do not send an unauthenticated marker as
+a substitute for negotiated support. Acceptance includes ordinary Warm followed
+by both complete guest HIT and first real stateful parent HIT, with the actual
+visitor's independently verified private fragments, plus normal purge/clear and
+Warm restoring both objects.
+
+Only the final owning authenticated refill response exposes
+`X-UltraCache-Warm-Projection: parent-v1`, from native-owned request state after
+scrubbing client/origin copies. It has no Guest-Publication marker. This is never
+cached object metadata and is absent on ordinary guest or stateful deliveries.
+The producer checks this observation plus successful HTTP/cache outcome; a
+module ignoring the selector cannot be counted as a successful parent refill.
+
 ## Nonces and independent cookie creation
 
 Guest nonce output must be actual WordPress output valid for the declared guest

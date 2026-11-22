@@ -175,6 +175,44 @@ VCL_STRING vmod_selection_guest_policy(VRT_CTX, VCL_STRING site, VCL_STRING host
     if (p && *p->guest_policy) out = WS_Copy(ctx->ws,p->guest_policy,-1);
     pthread_mutex_unlock(&lock); return out;
 }
+/* An existing authenticated refill can prime the ordinary parent as well as
+ * the complete guest object. The proof only selects this request's namespace;
+ * it grants no route/cookie/privacy bypass and never reaches the application. */
+VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRING credential) {
+    struct guest_request *g = guest_context(ctx);
+    struct public_declaration *p;
+    const char *host = NULL, *accept = "", *scheme = NULL, *message = NULL;
+    const char *url = ctx->http_req->hd[HTTP_HDR_URL].b;
+    char digest[65];
+    unsigned i, difference = 0;
+    if (!g || !g->warm_requested || ctx->req->esi_level) return 1;
+    if (g->warm_checked) return g->warm_valid;
+    g->warm_checked = 1;
+    if (!g->eligible || !g->warm_single || !g->warm_projection || strcmp(g->warm_projection,"parent-v1") ||
+        !g->warm_authorization || strlen(g->warm_authorization) != 67 || strncmp(g->warm_authorization,"v1:",3) ||
+        !site || !*site || !public_policy(policy) || !credential || !*credential || ctx->req->restarts ||
+        strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") || !delivery_relative(url) ||
+        http_CountHdr(ctx->http_req,H_Host) != 1 || !http_GetHdr(ctx->http_req,H_Host,&host) ||
+        http_CountHdr(ctx->http_req,HDR("Accept")) > 1 ||
+        http_CountHdr(ctx->http_req,HDR("X-Forwarded-Proto")) != 1 ||
+        !http_GetHdr(ctx->http_req,HDR("X-Forwarded-Proto"),&scheme) ||
+        (strcmp(scheme,"http") && strcmp(scheme,"https"))) return 0;
+    http_GetHdr(ctx->http_req,HDR("Accept"),&accept);
+    pthread_mutex_lock(&lock);
+    p = public_declaration_for_url(site,host,url);
+    if (p && *p->guest_policy && public_policy(public_registry_epoch))
+        message = WS_Printf(ctx->ws,"ultracache-warm-projection-v1\nparent-v1\nGET\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s",
+            host,url,scheme,accept ? accept : "",p->scope,policy,p->wordpress_policy,p->guest_policy,public_registry_epoch);
+    pthread_mutex_unlock(&lock);
+    if (!message || !delivery_hmac_sha256((const unsigned char *)credential,strlen(credential),
+        (const unsigned char *)message,strlen(message),digest)) return 0;
+    for (i = 0; i < 64; ++i) difference |= (unsigned char)digest[i] ^ (unsigned char)g->warm_authorization[i+3];
+    if (difference) return 0;
+    g->warm_valid = 1;
+    guest_disable(ctx);
+    return 1;
+}
+
 VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy) {
     struct guest_request *g = guest_context(ctx);
     struct public_declaration *p;
