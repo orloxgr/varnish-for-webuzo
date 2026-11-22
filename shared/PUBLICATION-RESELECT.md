@@ -1,9 +1,9 @@
-# Publication conflict reselection (candidate)
+# Publication conflict reselection
 
 A native cached parent A can briefly outlive the application publication it
 names. A local cache clear, replacement or provider-triggered publication change
 can therefore make the next old prepare token fail before WordPress providers
-run. This candidate adds one explicit same-owner transition into current public
+run. This protocol adds one explicit same-owner transition into current public
 selection; it does not relax publication validation or replay consumed work.
 
 ## Negotiated early response
@@ -65,6 +65,44 @@ an empty registry but advertised the exact same build-only epoch. This made a
 persisted application registration appear current. No WordPress special case or
 relaxation of registry authorization is used to recover from that condition.
 
-This is an unpublished source candidate. Actual producer integration and native
-regression results must be qualified before release. No production changes are
-part of this source change.
+## Coordinated qualification - 22 November 2026
+
+Coordinated versions: Varnish for Webuzo **0.12.7**, Varnish for Hestia **0.23.6**,
+and UltraCache **3.13.13-dev.1323**. The application correction was qualified from
+producer runtime `e42727f6` with acceptance tests `469ea3c7`. The native runtime
+was qualified from Webuzo `37d493a` and Hestia `2f2df56`; release metadata and
+this qualification record do not change those runtime bytes.
+
+Both adapters passed 33 native methods with zero skips, including seven
+publication-conflict methods, 18 malformed-proof subcases, concurrent visitor
+ownership, restart/overlap registry lifetime and existing delivery, cookie-only,
+representation and header-budget regressions. Hestia also passed source-identity,
+seven compatibility methods and a C-only reload check. Webuzo passed 59 additional
+profile and preset methods.
+
+Actual WordPress integration passed on both adapters:
+
+- Same-build restart creates an empty registry with a new epoch; the ordinary
+  application Warm restores registration without manual declaration or Redetect.
+  The first anonymous visit then returns HTTP 200/HIT in ORIG, WebP and AVIF.
+- All five publication lifecycle scenarios, 11 cookie lifecycle visits, real
+  WordPress nonce verification and two independent cart owners passed in all
+  three representations. Recovery executes one application bootstrap without
+  replaying private-provider work. Plain warmed HTML remains a HIT with zero
+  WordPress bootstraps.
+- A genuinely missing local publication can pass through a cold collector
+  transition while its body/pointer changes. Its captured response receives no
+  new freshness. The observed sequence converged MISS/PASS/MISS/HIT, all HTTP 200
+  with verified delivery. This differs from the completed-Warm first-HIT test.
+
+The normal Webuzo ZIP upload and activation also passed on the disposable panel:
+all installed archive files matched, the active VCL matched its startup file,
+the module build receipt matched the installed source and local engine SDK,
+and hosting settings were preserved. The full root Cookie Policies response
+remained valid JSON with 2,305 unique rows and both independent profile actions.
+No production deployment was performed during qualification.
+
+After upgrading both the native adapter and WordPress companion, use the normal
+UltraCache cache clear and warm-up. This correction introduces no new timer,
+TTL extension, persistent store or background worker. The exact actor that
+invalidated the original production publication has not been established.
