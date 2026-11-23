@@ -15,6 +15,7 @@
  * Backend access is synchronized with delivery and abort finalization. */
 struct fields { struct fields *next; char *line; };
 struct continuation;
+struct mutation_execution;
 struct handoff {
     struct handoff *next;
     uint64_t key;
@@ -24,7 +25,9 @@ struct handoff {
 struct task {
     struct handoff *owner; uint64_t key;
     char *control_body; size_t control_length;
+    struct mutation_execution *mutation;
 };
+static void mutation_task_fini(VRT_CTX, struct task *);
 #define BUCKETS 1024
 static struct handoff *buckets[BUCKETS];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -51,7 +54,7 @@ static void close_owner(struct task *task) {
 
 static void task_fini(VRT_CTX, void *value) {
     struct task *task = value;
-    (void)ctx;
+    mutation_task_fini(ctx,task);
     close_owner(task); free(task->control_body); free(task);
 }
 
@@ -73,6 +76,7 @@ VCL_VOID vmod_reset(VRT_CTX, struct vmod_priv *priv) {
     (void)ctx;
     if (priv->priv) {
         struct task *task = priv->priv;
+        mutation_task_fini(ctx,task);
         close_owner(task); free(task->control_body); free(task); priv->priv = NULL;
     }
 }
@@ -90,7 +94,7 @@ static void discard_key(uint64_t key) {
 VCL_VOID vmod_discard(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
     (void)ctx;
-    if (task) discard_key(task->key);
+    if (task) { mutation_task_fini(ctx,task); discard_key(task->key); }
 }
 
 VCL_STRING vmod_open(VRT_CTX, struct vmod_priv *priv) {
@@ -126,6 +130,7 @@ VCL_VOID vmod_bind(VRT_CTX, struct vmod_priv *priv, VCL_STRING key) {
     char *end;
     (void)ctx;
     if (!task) { VRT_fail(ctx, "Cookie handoff allocation failed"); return; }
+    mutation_task_fini(ctx,task);
     // A retry retains its backend task after the internal header was stripped.
     // Clear any response from its previous attempt before starting another.
     discard_key(task->key);

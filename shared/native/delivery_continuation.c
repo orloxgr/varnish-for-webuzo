@@ -991,3 +991,4 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 
 #include "public_selection_registry.c"
 #include "reuse_authority.c"
+#include "mutation_backend.c"

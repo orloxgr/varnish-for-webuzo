@@ -120,9 +120,9 @@ codec alone is not a replay ledger.
 
 ## Integration gates still open
 
-Backend task ownership and pre-dispatch fencing, trusted identity-input to tag
-mapping, unknown-execution markers, deferred ACK-GC while an execution may still
-return its receipt, and real application/native HTTP actors are separate work.
+Trusted identity-input to tag mapping, targeted pre-dispatch fencing, actual
+producer/native cross-layer actors, unknown-execution drain/recovery and final
+admission are separate work.
 Invalid/missing expected receipt or backend/client loss must revoke the owned
 authority without cancelling the application write or changing its response.
 No time-based implicit CLEAN or synchronous-success claim on failed transport.
@@ -142,3 +142,64 @@ unique sorted pairs, NONE/SCOPE/DIRTY constraints, large receipt handling and
 input corruption. Native authority ACK-GC has separate real-daemon tests. These
 results do not claim real provider drain, owned backend integration or the
 complete zero-PHP cached-delivery path.
+
+## Isolated native backend ownership stage
+
+`mutation_backend.c` extends the existing backend `PRIV_TASK` and registry
+lifetime. **Production VCL does not call these functions** and no mutation
+capability is advertised. Only the isolated `test_mutation_backend.py` VCL
+transform invokes them. Participating scope registration and the matching-source
+experimental native build are both required.
+
+`mutation_backend_start` strips incoming context/receipt fields and resolves the
+accepted immutable site, host, longest registered application boundary and
+native/WP/reuse policies. It allocates two independent random request IDs and
+signs the actual backend method/URI. The site credential comes from generated
+adapter-owned VCL and is removed before the origin request. The new header is
+heap-owned by that existing backend task, with native header-capacity checks;
+no workspace-allocation failure or cache RPC error turns into an application
+exception. Temporary key/header buffers are released/cleared by the owner.
+
+Until authenticated personal identity maps are installed, this isolated actor
+explicitly has **unknown provenance**, so it unbinds only its own scope before
+dispatch. It does not pretend to be the final known-owner path. Healthy known
+owners will use targeted tag fences, not this emergency scope path. No anonymous
+or known-empty map is inferred from absent input selectors.
+
+`mutation_backend_response` verifies only the privately retained current request
+proof, checks the registry context again, applies DIRTY pairs idempotently under
+the existing lock, and strips both transport fields before cache/browser headers.
+It never closes a writer, publishes a generation or changes application status,
+body, Set-Cookie, streaming or checkout behavior. Completed transaction receipts
+do not reopen the writer. The native ACK operation now returns 409
+`receipt-outstanding` while any owned backend in that scope could still return
+a receipt: its completed idempotency record remains intact even if the original
+begin RPC outcome was unknown. This defers metadata GC, not current content
+generation or business writes.
+
+Missing/invalid expected receipt, stale context, backend error or unresolved
+backend-task finalization retains an own-scope unknown-execution marker. A native
+task ending does not prove PHP/provider writes ended. Control responses with such
+metadata include:
+
+```json
+{"unsettledExecutions":[{"requestId":"<64hex>","challenge":"<64hex>",
+  "live":false,"awaitingReceipt":false,"unknown":true}]}
+```
+
+If creating the owned context itself failed, `lostExecutionContext:true` is
+reported instead. Existing scopes without executions retain the prior JSON
+shape. `private-authority-recover` rejects `execution-unsettled` while these
+markers exist, including when a caller merely sends `Private-Drained: 1`.
+The authenticated actual-drain operation/wire for removing these markers is
+**not yet implemented**, so this stage cannot be enabled in production. There
+is no expiry, implicit cleanup-to-CLEAN or guessed process-death shortcut.
+
+Five actual native HTTP actors passed: signed POST preserving a 201/body and
+two real Set-Cookie fields; cross-request receipt replay preserving the actual
+202/body/cookie; missing receipt isolating `/shop/` from clean `/blog/`; ACK-GC
+deferral while a completed transaction's receipt is delayed; and backend loss
+retaining an unknown execution with recovery refused. The full qualification
+also reran existing authority, portable input/identity/receipt and explicit
+engine-receipt tests. No real SQL/provider drain or cached-body admission is
+inferred from these mock-producer HTTP actors.

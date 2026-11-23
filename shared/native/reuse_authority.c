@@ -4,6 +4,19 @@
  * Root/application owns durable intents and actual persistence/drain proof.
  */
 #include "vsb.h"
+#include "delivery_mutation_wire.h"
+
+struct reuse_scope;
+struct mutation_execution {
+    struct mutation_execution *next;
+    struct reuse_scope *scope;
+    char request_id[65], challenge[65], proof[65], epoch[65], incarnation[65];
+    char native_policy[65], wordpress_policy[65], reuse_policy[65];
+    unsigned char key[32];
+    char *header;
+    unsigned live, awaiting_receipt, unknown;
+};
+static void mutation_execution_free(struct mutation_execution *);
 
 struct reuse_transaction {
     struct reuse_transaction *next;
@@ -22,6 +35,8 @@ struct reuse_scope {
     char incarnation[65], revision[65];
     char native_policy[65], wordpress_policy[65], policy[65];
     unsigned enabled, ready;
+    unsigned lost_execution_context;
+    struct mutation_execution *executions;
     struct reuse_tag **tags;
     size_t tag_capacity, tag_count;
 };
@@ -44,6 +59,10 @@ static void reuse_registry_free(void) {
         struct reuse_scope *scope = reuse_scopes;
         size_t i;
         reuse_scopes = scope->next;
+        while (scope->executions) {
+            struct mutation_execution *next = scope->executions->next;
+            mutation_execution_free(scope->executions); scope->executions = next;
+        }
         for (i = 0; i < scope->tag_capacity; ++i) {
             struct reuse_tag *tag = scope->tags[i];
             while (tag) { struct reuse_tag *next = tag->next; reuse_tag_free(tag); tag = next; }
@@ -210,6 +229,20 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
         reuse_json_field(json,"nativePolicy",scope->native_policy);
         reuse_json_field(json,"wordpressPolicy",scope->wordpress_policy);
         reuse_json_field(json,"reusePolicy",scope->policy);
+        if (scope->executions) {
+            const struct mutation_execution *execution;
+            VSB_cat(json,",\"unsettledExecutions\":[");
+            for (execution = scope->executions; execution; execution = execution->next) {
+                if (execution != scope->executions) VSB_putc(json,',');
+                VSB_cat(json,"{\"requestId\":"); reuse_json(json,execution->request_id);
+                reuse_json_field(json,"challenge",execution->challenge);
+                VSB_printf(json,",\"live\":%s,\"awaitingReceipt\":%s,\"unknown\":%s}",
+                    execution->live ? "true" : "false",execution->awaiting_receipt ? "true" : "false",
+                    execution->unknown ? "true" : "false");
+            }
+            VSB_putc(json,']');
+        }
+        if (scope->lost_execution_context) VSB_cat(json,",\"lostExecutionContext\":true");
     }
     if (tag) {
         size_t active = reuse_active(tag);
@@ -289,6 +322,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     if (!strcmp(operation,"private-authority-recover")) {
         if (!expected_scope || strcmp(expected_scope,scope->revision)) { status = 409; reason = "scope-revision-changed"; goto reply; }
         if (reuse_scope_active(scope)) { status = 409; reason = "mutation-active"; goto reply; }
+        if (scope->executions || scope->lost_execution_context) { status = 409; reason = "execution-unsettled"; goto reply; }
         /* Explicit authenticated producer recovery, after durable intent/drain
          * proof. Neither ordinary context nor a rendered fill calls this. */
         if (!delivery_header_equals(ctx->http_req,HDR("X-UltraCache-Private-Drained"),"1")) goto reply;
@@ -346,7 +380,10 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         }
         if (!strcmp(operation,"private-mutation-ack")) {
             struct reuse_transaction **position = &tag->transactions;
+            const struct mutation_execution *execution;
             if (transaction->active) { status = 409; reason = "mutation-active"; goto reply; }
+            for (execution = scope->executions; execution; execution = execution->next)
+                if (execution->live && execution->awaiting_receipt) { status = 409; reason = "receipt-outstanding"; goto reply; }
             /* Invalidate even a completed-begin retry frame observed after a
              * later publication, before forgetting its idempotency record.
              * Content generation/clean state stay intact: this is CAS fencing. */
