@@ -22,6 +22,16 @@ def all_origin_hooks(source):
     return actor_hooks(source).replace('bereq.url ~ "/__owned_mutation"','bereq.method == "GET" || bereq.method == "POST"',1)
 
 
+def canonical_origin_hooks(source):
+    """Owned Lab vhost only: native canonical host vs actual origin home port."""
+    source=all_origin_hooks(source)
+    needle='call scp_backend_fetch; }'
+    if source.count(needle)!=1:raise AssertionError('Expected one owned backend dispatch')
+    source=source.replace(needle,'call scp_backend_fetch; set bereq.http.host = "127.0.0.1:38751"; }',1)
+    return source.replace('set beresp.http.X-Cache-Object-Host = bereq.http.host;',
+        'set beresp.http.X-Cache-Object-Host = regsub(bereq.http.host, ":[0-9]+$", "");',1)
+
+
 def signed_context(test,headers,path,method):
     value=headers.get('X-UltraCache-Mutation-Context')
     test.assertTrue(value)
@@ -125,6 +135,37 @@ class NativeDeliveryReuseContext(unittest.TestCase):
             self.assertEqual(get('/cold-context','cmp_group=A')[0],200)
             self.assertEqual(len(seen),1)
             self.assertEqual(seen[0]['scopeState'],'unbound')
+
+    def test_separate_canonical_lab_vhost_preserves_origin_home_without_changing_native_identity(self):
+        holder={};seen=[]
+        def origin(path,headers):
+            self.assertEqual(headers['Host'],'127.0.0.1:38751')
+            self.assertEqual(headers['X-Forwarded-Proto'],'http')
+            signed=signed_context(self,headers,path,'GET') if headers.get('X-UltraCache-Mutation-Context') else None
+            if signed:self.assertEqual(signed['canonicalHost'],'127.0.0.1')
+            if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                context=self.context(holder['get'],signed,delivery_id=headers['X-UltraCache-Delivery-Request'],original=path)
+                self.assertEqual(context['canonicalHost'],'127.0.0.1')
+                self.assertEqual(context['contextState'],'parent-bound')
+                seen.append(context)
+                return envelope(headers,'canonical-owner'),[('Cache-Control','private, no-store'),
+                    ('X-UltraCache-Mutation-Receipt',receipt(signed,'none',()))]
+            fields=[('X-UltraCache-Mutation-Receipt',receipt(signed,'none',()))] if signed else []
+            return (BODY,META+fields) if path==PARENT else ('ordinary child',[('Cache-Control','private, no-store'),*fields])
+        settings={'domain':'127.0.0.1','names':['127.0.0.1']}
+        with proxy('ultracache',origin,transform=canonical_origin_hooks,site_settings=settings) as original:
+            def get(path,cookie=None,extra=None):
+                headers={'Host':'127.0.0.1:38751','X-Forwarded-Proto':'http'};headers.update(extra or {})
+                return original(path,cookie,headers)
+            get.endpoint=original.endpoint
+            get.request_headers=dict(original.request_headers,Host='127.0.0.1:38751',**{'X-Forwarded-Proto':'http'})
+            holder['get']=get
+            self.assertEqual(get(PARENT)[0],200)
+            self.register(get)
+            status,_,body=get(PARENT,'_fbp=canonical')
+            self.assertEqual(status,200)
+            self.assertIn('private:canonical-owner',body)
+            self.assertEqual(len(seen),1)
 
 
 if __name__=='__main__':unittest.main()
