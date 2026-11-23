@@ -1,5 +1,18 @@
 # Varnish for Webuzo
 
+Version **0.13.0** reuses prewarmed complete guest pages across Shared cookies
+when the application's declared provider inputs still match the guest context.
+Stateful visitors can reuse qualified private fragments through native cache
+objects, preserving their actual provider identity and current publication.
+Covered work in progress retains its completion requirements; actual changes,
+invalidations and natural expiry use the application path.
+
+The reviewed cookie catalogue **2026.11.23.1** exposes
+`ultracache_esi_optin` as a normal Shared default in both profiles, with the
+existing Shared / Variant / Private controls. Saved choices remain authoritative.
+Diagnostic stage records use the existing masked native Debug channel and
+remain off by default. The raw Warm/source-capture fix is included.
+
 Version **0.12.11** routes existing UltraCache raw Warm/source-capture GETs to
 its application before guest cache lookup. A hot guest object can no longer
 replace the fresh render and dependency registry required by normal Warm.
