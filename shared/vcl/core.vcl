@@ -1,6 +1,10 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    unset req.http.X-UltraCache-Delivery-Public-Source-Version;
+    unset req.http.X-UltraCache-Delivery-Public-Source-Role;
+    unset req.http.X-UltraCache-Delivery-Public-Source-Outcome;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Public-Source-Version;
     # Only the authenticated native dispatch may create this backend phase.
     if (req.http.X-UltraCache-Delivery-Phase == "execution-drain") {
         return (synth(400,"Invalid execution drain ingress"));
@@ -68,6 +72,7 @@ sub scp_init {
     if (req.method != "PURGE" || req.url != "/__ultracache-vcl-contract-v2") {
         unset req.http.X-UltraCache-Delivery-Execution-Drain-Context;
         unset req.http.X-UltraCache-Public-Selection-Execution-Drain-Version;
+        unset req.http.X-UltraCache-Public-Selection-Public-Source-Version;
         # These selectors also belong to the separately authenticated native
         # control protocol; ordinary/browser application requests cannot set them.
         unset req.http.X-UltraCache-Delivery-Reuse-Recipe;
@@ -203,6 +208,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Private-Coverage-Policy;
     unset bereq.http.X-UltraCache-Private-Coverage-Version;
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
+    if (cookie_handoff.delivery_public_source_backend()) {}
     call scp_delivery_authorization;
     set bereq.http.X-SCP-Execution-Drain = cookie_handoff.execution_drain_backend(bereq.http.X-UltraCache-Delivery-Authorization);
     if (bereq.http.X-SCP-Execution-Drain == "-1") { return (abandon); }
@@ -465,6 +471,7 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-VCL-Public-Selection-Actions;
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     else { unset resp.http.X-UltraCache-Cookie-Delivery; }
+    call scp_public_source_diagnostic;
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0 && !cookie_handoff.guest_result()) {
         set resp.http.X-UltraCache-Delivery-Outcome = cookie_handoff.delivery_outcome();
     }

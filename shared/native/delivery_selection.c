@@ -232,7 +232,27 @@ static int selection_fragments(struct reader *r, struct delivery_fragment **out,
         if (!take(r,',')) return 0;
     }
 }
-static int selected_public(struct reader *r, const char *policy, const char *wordpress_policy, struct delivery_public_selection **output) {
+static int selection_source_role(struct reader *r) {
+    unsigned seen = 0;
+    if (!take(r,'{')) return 0;
+    for (;;) {
+        struct text name,value;
+        unsigned bit;
+        uint64_t n;
+        if (!string(r,&name) || !take(r,':')) return 0;
+        if (equal(name,"version")) bit = 1;
+        else if (equal(name,"role")) bit = 2;
+        else return 0;
+        if (seen & bit) return 0;
+        seen |= bit;
+        if (bit == 1) { if (!number(r,&n) || n != 1) return 0; }
+        else if (!string(r,&value) || !equal(value,"parent-v1")) return 0;
+        if (take(r,'}')) return seen == 3;
+        if (!take(r,',')) return 0;
+    }
+}
+static int selected_public(struct reader *r, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **output, int source_only) {
     struct delivery_public_selection *s = calloc(1,sizeof(*s));
     unsigned seen = 0;
     uint64_t total = 0;
@@ -243,18 +263,22 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         unsigned bit;
         if (!string(r,&key) || !take(r,':')) goto invalid;
         if (equal(key,"policyDigest")) bit = 1;
-        else if (equal(key,"cookieUpdates")) bit = 2;
+        else if (!source_only && equal(key,"cookieUpdates")) bit = 2;
         else if (equal(key,"manifest")) bit = 4;
         else if (equal(key,"occurrences")) bit = 8;
         else if (equal(key,"publicParent")) bit = 16;
         else if (equal(key,"headers")) bit = 32;
-        else if (equal(key,"renderedFragments")) bit = 64;
+        else if (!source_only && equal(key,"renderedFragments")) bit = 64;
         else if (equal(key,"wordpressPolicyDigest")) bit = 128;
         else if (equal(key,"cookieDelivery")) bit = 256;
+        else if (source_only && equal(key,"publicSource")) bit = 512;
         else goto invalid;
         if (seen&bit) goto invalid;
         seen |= bit;
-        if (bit == 1) {
+        if (bit == 512) {
+            if (!selection_source_role(r)) goto invalid;
+            s->source_only = 1;
+        } else if (bit == 1) {
             if (!string(r,&text) || !selection_hex(text) || !equal(text,policy)) goto invalid;
             memcpy(s->policy,text.data,64);
         } else if (bit == 128) {
@@ -276,15 +300,16 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if (seen != (s->cookie_delivery ? 511u : 255u) || total != s->occurrences || !selection_header_binding(s) ||
+    if (seen != ((source_only ? 701u : 255u)+(s->cookie_delivery ? 256u : 0u)) ||
+        (!source_only && total != s->occurrences) || !selection_header_binding(s) ||
         !delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) goto invalid;
     *output = s; return 1;
 invalid:
     delivery_selection_free(s); return 0;
 }
-int delivery_selection_parse(const char *body, size_t length,
+static int selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
-    struct delivery_public_selection **selection, struct delivery_private_document **document) {
+    struct delivery_public_selection **selection, struct delivery_private_document **document, int source_only) {
     struct reader r;
     unsigned seen = 0;
     int ok = 0;
@@ -305,14 +330,14 @@ int delivery_selection_parse(const char *body, size_t length,
         else if (equal(key,"requestId")) bit = 2;
         else if (equal(key,"originalUrl")) bit = 4;
         else if (equal(key,"selectedPublic")) bit = 8;
-        else if (equal(key,"privateDocument")) bit = 16;
+        else if (!source_only && equal(key,"privateDocument")) bit = 16;
         else goto done;
         if (seen&bit) goto done;
         seen |= bit;
         if (bit == 1) { if (!number(&r,&schema) || schema != 1) goto done; }
         else if (bit == 2 || bit == 4) {
             if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) goto done;
-        } else if (bit == 8) { if (!selected_public(&r,policy,wordpress_policy,selection)) goto done; }
+        } else if (bit == 8) { if (!selected_public(&r,policy,wordpress_policy,selection,source_only)) goto done; }
         else if (!private_document_type(&r,document,0)) goto done;
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
@@ -323,6 +348,17 @@ done:
     free(r.buffer);
     if (!ok) { delivery_selection_free(*selection); *selection = NULL; delivery_private_document_free(*document); *document = NULL; }
     return ok;
+}
+int delivery_selection_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection, struct delivery_private_document **document) {
+    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,0);
+}
+int delivery_public_source_parse(const char *body, size_t length,
+    const char *request_id, const char *source_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection) {
+    struct delivery_private_document *document = NULL;
+    return selection_parse(body,length,request_id,source_url,policy,wordpress_policy,selection,&document,1);
 }
 /* Complete guest outcome is negotiated separately. Existing batch grammar is
  * intentionally unchanged: no private occurrence or issuer marker is erased. */

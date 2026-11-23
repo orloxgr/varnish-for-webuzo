@@ -120,7 +120,8 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     if (task->key) {
         struct handoff *entry = delivery_entry(task->key);
         struct continuation *delivery = entry ? entry->delivery : NULL;
-        if (delivery && delivery->phase == D_PREPARE && delivery->site && !strcmp(delivery->site,site) &&
+        if (delivery && delivery->phase == D_PREPARE && delivery->source_stage != SOURCE_CAPTURE &&
+            delivery->site && !strcmp(delivery->site,site) &&
             delivery->host && !strcmp(delivery->host,host)) {
             execution->delivery_key = task->key;
             memcpy(delivery->reuse_origin_request,execution->request_id,65);

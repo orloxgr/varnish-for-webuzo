@@ -45,12 +45,16 @@ struct delivery_public_selection {
     struct delivery_header *headers;
     struct delivery_public_parent *parent;
     struct delivery_fragment *fragments;
+    unsigned source_only; /* explicit public parent role, never private completion */
 };
 /* Separate entry/outcome: never weakens delivery_envelope_parse's v1 binding. */
 int delivery_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection,
     struct delivery_private_document **document);
+int delivery_public_source_parse(const char *body, size_t length,
+    const char *request_id, const char *source_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection);
 int delivery_guest_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     const char *guest_policy, const char *epoch, const char *scope,

@@ -384,6 +384,7 @@ sub vcl_backend_error {
     }
 }
 sub vcl_synth {
+    call scp_public_source_diagnostic;
     unset resp.http.X-UltraCache-Delivery-Outcome;
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level > 0 &&
         req.http.X-SCP-Fragment-HTTP-Failure ~ "^[1-5][0-9][0-9]$") {
