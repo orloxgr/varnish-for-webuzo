@@ -37,6 +37,9 @@ def exact_authority_origin_hooks(source):
     normal='set req.http.host = std.tolower(regsub(req.http.host, ":[0-9]+$", ""));'
     if source.count(normal)!=1:raise AssertionError('Expected one production host normalization')
     source=source.replace(normal,'set req.http.host = std.tolower(req.http.host);',1)
+    target='set req.http.X-WV-Ban-Host = regsub(regsub(req.http.X-WV-Ban-Host, ":[0-9]+$", ""), "[.]$", "");'
+    if source.count(target)!=1:raise AssertionError('Expected one production invalidation host binding')
+    source=source.replace(target,'set req.http.X-WV-Ban-Host = regsub(req.http.X-WV-Ban-Host, "[.]$", "");',1)
     if 'req.http.host == "127.0.0.1"' not in source:raise AssertionError('Expected explicit owned Lab site')
     return source.replace('req.http.host == "127.0.0.1"','req.http.host == "127.0.0.1:38751"')
 
@@ -198,6 +201,15 @@ class NativeDeliveryReuseContext(unittest.TestCase):
             holder['get']=get;get(PARENT);self.register(get)
             status,_,body=get(PARENT,'_fbp=actual-authority')
             self.assertEqual(status,200);self.assertIn('private:actual-authority',body);self.assertEqual(len(seen),1)
+            # The same strict test-only authority applies to the real warmup
+            # invalidation transport. Another target port/host remains denied.
+            for host,expected in (('127.0.0.1:38751',200),('127.0.0.1:38752',403),('other.test',403)):
+                for operation,selector in (('exact-ban','obj.http.X-Cache-Object-URL ~ "^/warm$"'),
+                    ('html-ban','obj.http.Content-Type ~ "^text/html"')):
+                    reply=control(get,operation,extra={'X-UltraCache-Object-Expression':
+                        'obj.http.X-Cache-Object-Host == "'+host+'" && '+selector})
+                    self.assertEqual(reply[0],expected,(operation,host,reply))
+            self.assertEqual(control(get,'exact-purge',path='/warm')[0],200)
 
 
 if __name__=='__main__':unittest.main()
