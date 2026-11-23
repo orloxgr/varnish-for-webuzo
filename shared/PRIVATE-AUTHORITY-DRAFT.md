@@ -180,3 +180,145 @@ These are transport/CAS/lifecycle tests with synthetic tags and mock
 producer attestations. SQL persistence/drain, owned response receipts, targeted
 pre-dispatch identity fences and complete cached-delivery admission remain
 separate integration gates.
+
+
+## Proposed scope-wide writer fencing for unknown owners (not implemented)
+
+This extension is a design, not a currently supported operation/capability.
+The pinned mixed-delivery fixture `2b85cc2` is unchanged. Positive delivery
+qualification does not cover unsigned writers or control-channel outages.
+
+### Existing signed HTTP coverage and the separate CLI gap
+
+When the actual `mutation_backend_start` hook participates in the currently
+registered application scope, it unbinds that scope under the registry lock
+BEFORE backend dispatch. It retains the real execution/challenge and, where
+available, prearms validated personal tags. Missing identity, response loss,
+invalid receipt or failure of a later PHP control call cannot restore readiness.
+Native task/response completion does not prove application drain. Recovery
+requires the independently attested exact execution drain and durable producer
+state. This coverage requires the actual hook on the real dispatch path; a
+client-supplied signed-looking header is not a substitute. It covers this
+native consumer/scope, not other consumers or bypassing application entry points.
+
+An unsigned CLI/cron/direct provider execution has no such native dispatch
+owner. `before('',0)` local uncertainty does not revoke an existing native tag.
+A database journal row alone is not visible to a zero-PHP native HIT. An unknown
+owner must therefore fence the REAL registered scope, without inventing an
+owner, cookie tag, empty identity or CLEAN state.
+
+### Existing control owner, typed scope transactions
+
+Use the same authenticated `PURGE /__ultracache-vcl-contract-v2`, scope registry,
+lock, epoch/incarnation checks, producer durable journal and transaction/lease
+lifecycle. Add a scope-owned transaction list to the existing `reuse_scope`;
+reuse transaction machinery instead of creating a second authority/datastore.
+Proposed literal operations:
+
+* `private-scope-mutation-begin`: exact registered scope, epoch/incarnation,
+  `X-UltraCache-Private-Scope-Revision`, and producer random64
+  `X-UltraCache-Private-Transaction`. No `Private-Tag` is accepted. On a NEW
+  transaction, CAS the observed scope revision, retain its active lease and
+  unbind/rotate the scope revision BEFORE ACK. All old personal authority
+  bindings and admission records fail their current-scope checks immediately.
+  Allocate transaction/lease first, or leave the scope UNBOUND on failure;
+  allocation failure never returns a positive fence acknowledgement.
+* `private-scope-mutation-commit`: same exact epoch/incarnation, transaction
+  and native lease, plus explicit `Private-Drained: 1` attesting independently
+  established actual writer/provider drain. Close ONLY this scope writer,
+  rotate scope revision and leave it UNBOUND. Do not require the begin-time
+  scope revision: another overlapping scope writer may legitimately rotate it.
+  No owner generation, READY state or reusable body is granted.
+* `private-scope-mutation-ack`: same completed transaction/native lease, only
+  after its native commit acknowledgement is durably recorded by the existing
+  producer journal. Refuse active records. Rotate the scope CAS revision BEFORE
+  collecting the completed idempotency record. This fences delayed begin
+  frames, including ones observed before collection. Producer journal terminal
+  state forbids reobserving/reopening an already-ACKed old transaction ID.
+
+Begin retries for a retained active/completed transaction return that record
+without reopening it. Duplicate completed commit does not revoke a newer state.
+Each writer has its own lease; one writer cannot retire another. All three
+operations reject tag headers, stale epoch/incarnation, foreign scope and wrong
+lease. Same-site sibling/nested application scopes remain distinct. Scope-only
+context includes the typed outstanding scope writers so recovery cannot confuse
+them with personal tags or native backend executions.
+
+Existing `private-authority-recover` must additionally reject every retained
+scope writer until its explicit drain/commit/durable ACK lifecycle completes,
+as well as existing active tag writers, unknown/live native executions and lost
+execution context. Recovery still CASes the current scope revision and is an
+authenticated producer attestation AFTER independent committed reads and checks
+of all actual in-flight/durable intents. It never resurrects old tag generations;
+subsequent fresh provider reads/publish must bind the new scope revision.
+Registration, policy changes and disable/re-enable retain outstanding scope
+writers. Native restart creates a new UNBOUND epoch: old leases cannot be
+transplanted; terminal old-epoch drain and producer reconciliation are required.
+No timeout, TTL or status string retires uncertainty.
+
+### Producer ordering, including partial failures
+
+Before the FIRST unknown raw/business SQL write, the producer must commit an
+ownerless but real scope intent in its EXISTING independent durable journal.
+Then obtain and durably record the native scope-begin ACK/lease before a covered
+unsigned write starts. The journal keeps the original native connection/scope,
+epoch/incarnation and transaction identity; it does not fabricate a provider
+owner. Actual SQL failure still goes through writer drain/rollback settlement.
+Application/provider work can outlive a response/shutdown hook, so neither is
+sufficient evidence of drain. A lost begin ACK is uncertainty: retry the same
+transaction and reconcile the actual native record, never invent a lease or ACK.
+A lost commit/ACK leaves retained state for explicit reconciliation.
+
+For a participating signed HTTP execution, its already-installed native scope
+fence protects delivery even when a later producer control notification fails.
+The durable journal must still precede business writes so unrelated recovery
+cannot ignore that writer. Unsigned writers need the explicit scope transaction;
+calling recover after the fact cannot retroactively protect earlier HITs.
+
+### True control outage while business writes continue
+
+If a write continues while NO mutation/fence signal reaches this native owner,
+the owner cannot distinguish changed SQL from unchanged SQL on a native-only
+HIT. A pending SQL outbox, request-local uncertainty, diagnostic status or short
+TTL provides eventual detection at best, not immediate coherence. The negative
+actors demonstrating CLEAN/old generation after changed SQL remain valid until
+this ordering/communication gap is closed.
+
+The required contract is therefore one of these explicit, real arrangements:
+
+* Every write has an already-ACKed scope/native-execution fence before its first
+  visible database mutation, and READY recovery waits for actual drain.
+* If the WordPress HTTP client alone fails while native is reachable, an
+  independently functioning synchronous transport may install the SAME existing
+  authority-owner scope fence and return its genuine ACK. This is another
+  transport to the same authority, not a second cache/journal or a fake success.
+* If writes must continue through a true loss of every control transport, a
+  native-visible coherence mechanism must be on the write/commit path and gate
+  admission before changed data becomes visible. An asynchronous changefeed or
+  eventual retry alone leaves a stale interval. Such a mechanism has not been
+  implemented or qualified here.
+
+No cache notification error silently cancels the business operation in this
+design. If neither prior fence nor actual independent coherence channel exists
+and the business write continues, that execution is explicitly NOT qualified
+for coherent private reuse. Do not enable general reuse on a claimed coverage
+contract that permits that uncovered path. Report the concrete gap; do not hide
+it behind a guessed owner/tag, renewed generation, TTL, lease expiry or status.
+
+Scope suspension gates the composed private-reuse authority. It is not a claim
+that unrelated public/guest HTML has been purged. Writes affecting public
+publication/content require the existing real publication invalidation contract
+as well, or a separately specified scope gate for those namespaces.
+
+### Required native and real-producer qualification before implementation acceptance
+
+Exercise unknown unsigned write after a real composed HIT; overlapping writers;
+begin/commit/ACK loss and retry; delayed begin across ACK collection; wrong
+lease/epoch/scope; allocation failure; policy replacement/restart; outstanding
+signed backend plus unsigned writer; and an attempted concurrent recovery while
+any real writer still runs. No old admission may resume after recovery without
+fresh provider generation/publication checks. Repeat the actual Hestia negative
+raw-write and HTTP-client-failure actors. A true total-control-outage/business-
+write-continues actor must remain NOT qualified until a real coherence channel
+is demonstrated. These are explicit tests for this extension, not evidence
+provided by the existing mixed-recipe HIT checkpoint.
