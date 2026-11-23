@@ -8,10 +8,72 @@ import shutil
 import unittest
 from test_cookie_delivery import proxy,cookies
 from test_delivery_continuation import PARENT,BODY,META,envelope
+from test_guest_publication import Guests,register,GUEST_BODY
 
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skipped is not acceptance')
 class RequestNoStore(unittest.TestCase):
+    def test_raw_warm_bypasses_hot_guest_and_keeps_origin_authentication_and_cookies(self):
+        token='v2:1795448000:'+('a'*64)
+        invalid='v2:1795448000:'+('b'*64)
+        raw={'X-UltraCache-Warm':'1','X-UltraCache-Internal-Request':'1',
+            'X-UltraCache-Warm-Source':'raw-v1','X-UltraCache-Warm-Registry':'1',
+            'X-UltraCache-Runtime-Token':token}
+        original_cookie='PHPSESSID=provider; esi_session=transport; ultracache_esi_optin=1; _ga=visitor'
+        for aggressive in (False,True):
+            app=Guests();requests=[]
+            def origin(path,headers):
+                if headers.get('X-UltraCache-Warm-Source')=='raw-v1':
+                    requests.append((path,dict(headers)))
+                    if headers.get('X-UltraCache-Runtime-Token')!=token:
+                        return 403,'runtime credential refused',[('Cache-Control','private, no-store')]
+                    return 'current raw source',[('Cache-Control','public, max-age=600'),
+                        ('X-UltraCache-Warm-Body-Contract','raw-v1'),('X-UltraCache-Warm-Registry','current-registry')]
+                return app(path,headers)
+            with self.subTest(aggressive=aggressive),proxy('ultracache',origin,
+                    site_settings={'aggressive':aggressive,'aggressive_ttl':600}) as get:
+                self.assertEqual(register(get)[0],200)
+                self.assertEqual(get('/warm')[2],GUEST_BODY)
+                self.assertEqual(dict(get('/warm')[1])['X-Cache'],'HIT')
+                for cookie in (None,original_cookie):
+                    status,headers,body=get('/warm',cookie,extra=raw)
+                    self.assertEqual((status,body),(200,'current raw source'))
+                    self.assertEqual(dict(headers)['X-Cache'],'PASS')
+                    self.assertEqual(dict(headers)['X-UltraCache-Warm-Registry'],'current-registry')
+                    self.assertNotIn('X-UltraCache-Guest-Publication',dict(headers))
+                status,headers,body=get('/warm',extra={**raw,'X-UltraCache-Runtime-Token':invalid})
+                self.assertEqual((status,body),(403,'runtime credential refused'))
+                self.assertEqual(dict(headers)['X-Cache'],'PASS')
+                self.assertEqual([fields.get('Cookie') for _,fields in requests],[None,original_cookie,None])
+                self.assertTrue(all(fields.get('X-UltraCache-Delivery-Phase') is None for _,fields in requests))
+                status,headers,body=get('/warm')
+                self.assertEqual((status,dict(headers)['X-Cache'],body),(200,'HIT',GUEST_BODY))
+                for field in raw:
+                    incomplete=dict(raw);del incomplete[field]
+                    # Registry capture is optional for existing raw CSS callers.
+                    if field=='X-UltraCache-Warm-Registry':
+                        status,headers,body=get('/warm',extra=incomplete)
+                        self.assertEqual((status,dict(headers)['X-Cache'],body),(200,'PASS','current raw source'))
+                        continue
+                    status,headers,body=get('/warm',extra=incomplete)
+                    self.assertEqual((status,dict(headers)['X-Cache'],body),(200,'HIT',GUEST_BODY))
+
+    def test_raw_warm_keeps_basic_cache_and_cannot_replace_a_regular_ultracache_object(self):
+        raw={'X-UltraCache-Warm':'1','X-UltraCache-Internal-Request':'1',
+            'X-UltraCache-Warm-Source':'raw-v1','X-UltraCache-Runtime-Token':'v2:1795448000:'+('a'*64)}
+        for profile in ('basic','ultracache'):
+            calls=[]
+            def origin(path,headers):
+                calls.append(path)
+                return 'current origin '+str(len(calls)),[('Cache-Control','public, max-age=600')]
+            with self.subTest(profile=profile),proxy(profile,origin) as get:
+                self.assertEqual(get('/raw')[2],'current origin 1')
+                status,headers,body=get('/raw',extra=raw)
+                self.assertEqual((status,dict(headers)['X-Cache'],body),
+                    (200,'HIT','current origin 1') if profile=='basic' else (200,'PASS','current origin 2'))
+                status,headers,body=get('/raw')
+                self.assertEqual((status,dict(headers)['X-Cache'],body),(200,'HIT','current origin 1'))
+
     def test_signed_raw_source_reaches_current_origin_without_using_browser_directives(self):
         for aggressive in (False,True):
             calls=[];retired=False

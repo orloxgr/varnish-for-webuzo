@@ -1,5 +1,11 @@
 # Varnish for Webuzo
 
+Version **0.12.11** routes existing UltraCache raw Warm/source-capture GETs to
+its application before guest cache lookup. A hot guest object can no longer
+replace the fresh render and dependency registry required by normal Warm.
+Application runtime authentication remains authoritative; raw responses do not
+replace cached guest HTML. Basic and ordinary visitor cache lookup are unchanged.
+
 Version **0.12.10** reduces request-workspace copying in the cookie policy
 compiler and reuses its result only for a native-owned continuation with the
 same original Cookie. This addresses retained-browser cookie requests failing
