@@ -229,6 +229,15 @@ GET
 <current native registry epoch>
 ```
 
+The accepted authenticated capabilities/registration reply also returns
+`X-UltraCache-VCL-Public-Selection-Canonical-Host`, the exact adapter-normalized
+native ingress host. Store it as `selection.canonicalHost` and sign Warm using
+that accepted value. If an older adapter omits the receipt, retain the existing
+application hostname-only fallback. The receipt changes neither adapter host
+normalization nor proof verification; an exact-authority Lab vhost can therefore
+bind its real host and port without a test-only application override. Request,
+backend and ordinary response copies of this field are scrubbed.
+
 The native ingress fact must still be literal absent Cookie and Authorization.
 Capture selector/proof as native-owned request state before scrubbing both HTTP
 fields. Verify against the native adapter-owned site key and current actual

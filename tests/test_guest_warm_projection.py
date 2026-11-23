@@ -9,6 +9,7 @@ from test_guest_publication import Guests, GUEST_BODY, register
 from test_cold_public_selection import choices
 from test_public_selection_runtime import control
 from test_cms_cookie_choices import cache
+from test_reuse_delivery_context import exact_authority_origin_hooks
 
 PROJECTION = 'X-UltraCache-Warm-Projection'
 AUTHORIZATION = PROJECTION + '-Authorization'
@@ -38,12 +39,49 @@ class RecordedGuests(Guests):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skips are not acceptance')
 class GuestWarmProjection(unittest.TestCase):
+    def test_exact_authority_warm_binds_accepted_host_and_all_real_accept_formats(self):
+        app=RecordedGuests();app.formats=True
+        authority='127.0.0.1:38751'
+        accepts=('text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8')
+        with proxy('ultracache',app,transform=exact_authority_origin_hooks,
+            site_settings={'domain':'127.0.0.1','names':['127.0.0.1']}) as original:
+            def get(path,cookie=None,extra=None):
+                headers={'Host':authority,'X-Forwarded-Proto':'http'};headers.update(extra or {})
+                return original(path,cookie,headers)
+            get.endpoint=original.endpoint
+            get.request_headers=dict(original.request_headers,Host=authority,**{'X-Forwarded-Proto':'http'})
+            status,caps,_=register(get);self.assertEqual(status,200)
+            accepted_host=caps['X-UltraCache-VCL-Public-Selection-Canonical-Host']
+            self.assertEqual(accepted_host,authority)
+            for bucket,accept in zip(('orig','webp','avif'),accepts):
+                path='/actual-accept-'+bucket
+                first=get(path,extra={'Accept':accept})
+                self.assertEqual(first[0],200);self.assertEqual(first[2],GUEST_BODY+bucket)
+                self.assertEqual(dict(first[1]).get('X-UltraCache-Guest-Publication'),'1')
+                before=len(app.calls)
+                # A hostname-only proof does not bind the accepted authority.
+                rejected=get(path,extra=proof(path,caps,accept=accept,host='127.0.0.1',scheme='http'))
+                self.assertEqual(rejected[0],403);self.assertEqual(len(app.calls),before)
+                accepted=get(path,extra=proof(path,caps,accept=accept,host=accepted_host,scheme='http'))
+                self.assertEqual(accepted[0],200);self.assertEqual(dict(accepted[1]).get(PROJECTION),'parent-v1')
+                self.assertNotIn('X-UltraCache-Guest-Publication',dict(accepted[1]))
+                self.assertNotIn('X-UltraCache-VCL-Public-Selection-Canonical-Host',dict(accepted[1]))
+                before=len(app.calls)
+                for visitor in ('independent-A','independent-B'):
+                    guest=get(path,extra={'Accept':accept,'X-Test-Visitor':visitor})
+                    self.assertEqual((guest[0],cache(guest[1]),guest[2]),(200,'HIT',GUEST_BODY+bucket))
+                    self.assertEqual(dict(guest[1]).get('X-UltraCache-Guest-Publication'),'1')
+                self.assertEqual(len(app.calls),before)
+
     def test_warm_both_namespaces_then_first_stateful_html_is_hit(self):
         app=RecordedGuests()
         with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
             status,caps,_=register(get)
             self.assertEqual(status,200)
             self.assertEqual(caps['X-UltraCache-VCL-Warm-Projection-Version'],'1')
+            self.assertEqual(caps['X-UltraCache-VCL-Public-Selection-Canonical-Host'],'example.test')
             path='/both?unknown=one&utm_source=warm&unknown=two'
             self.assertEqual(get(path)[2],GUEST_BODY)
             status,fields,parent=get(path,extra=proof(path,caps))

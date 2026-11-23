@@ -134,7 +134,7 @@ lowercase_hex(HMAC-SHA256(reuseKey,
 ))
 ```
 
-Each personal `identityBinding` uses the separate existing cross-route domain:
+Each personal or explicit anonymous `identityBinding` uses the separate existing cross-route domain:
 
 ```text
 lowercase_hex(HMAC-SHA256(reuseKey,
@@ -155,10 +155,19 @@ arrive together in the authenticated, current, native-owned finalization.
 
 ## Personal provenance and authority coverage
 
-Only `identityState:"personal"` installs a map in this initial version. No
-UID0/no-session, absent-selector, missing-identity or Shared-action inference
-creates an anonymous/known-empty map. Existing separately qualified guest
-publication remains the no-cookie public HTML path.
+Only `identityState:"personal"` installs a revoke map. A complete recipe may
+also contain an explicitly authenticated `identityState:"anonymous"` fragment,
+such as an actual UID0 nonce. Its identity still has all six fields:
+`identityState`, complete `identityInputs`, seven-field `identityBinding`,
+`owner:null`, `tags:[]`, and the actual `validUntil`; `authority` is exactly `[]`.
+The full descriptor, URL, cache claim, body deadline and occurrence coverage
+remain required. Input MAC, HSH body, freshness and current scope checks apply
+unchanged. An absent selector by itself never proves anonymous semantics.
+
+This per-document anonymous fact installs no owner/tag/revoke map and grants no
+known-empty or cross-route actor coverage. Personal rows retain their nonempty
+owner/tag/CAS requirements. Existing separately qualified guest publication
+remains the no-cookie public HTML path.
 
 `owner` and `identity.tags` are raw64 opaque provider-validated owner identities;
 the owner itself must be in the unique nonempty tag set. `validUntil` is the
@@ -167,8 +176,9 @@ renderer-only inputs. Multiple validated owners consuming the same input frame
 must coexist; one provider cannot overwrite another owner's revoke provenance.
 There is no hardcoded native Woo/WordPress/YITH cookie list.
 
-`authority` contains one unique current native CLEAN `{tag,revision,generation}`
-ACK for **every** identity tag, with no missing/extra tag. The accepted scope
+For personal rows, `authority` contains one unique current native CLEAN
+`{tag,revision,generation}` ACK for **every** identity tag, with no missing/extra
+tag. Anonymous rows require both the identity-tag and authority sets empty. The accepted scope
 must currently be READY, with matching epoch/incarnation/scope revision and
 effective native/WP/reuse policies. Pending provider writers or matching native
 execution fences prevent publication/admission. A clean grant must follow the
@@ -461,7 +471,9 @@ capability responses still do not advertise general delivery reuse.
 `tests/test_reuse_full_runtime.py` qualifies this engine flow with an explicitly
 MOCK trusted producer: complete composed HIT has zero origin/prepare/finalizer
 calls; unrelated Shared input does not split it; a missing required private HSH
-object and tag revocation both require ordinary fill. This is not evidence of
+object and tag revocation both require ordinary fill. Both personal/personal
+and mixed personal-cart/anonymous-nonce recipes are exercised, with complete
+coverage and no fabricated anonymous revoke map. This is not evidence of
 actual WordPress identity, provider persistence/drain or cookie-work closure.
 Those proofs must come from the real producer before general acceptance.
 

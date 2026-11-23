@@ -155,4 +155,18 @@ class ReuseWire(unittest.TestCase):
             duplicate=wire[:end]+','+wire[start:end]+wire[end:]
             self.assertEqual(self.parse_metadata(duplicate),0,field)
 
+    def test_mixed_anonymous_nonce_retains_full_recipe_without_fabricated_owner_or_authority(self):
+        obj=self.metadata();nonce=obj['reuse']['admission']['fragments'][-1]
+        nonce['identity'].update(identityState='anonymous',owner=None,tags=[])
+        nonce['authority']=[]
+        self.assertEqual(self.parse_metadata(obj),1)
+        for bad_field,value in (('owner','0'*64),('tags',['1'*64]),('identityState','personal')):
+            bad=copy.deepcopy(obj);bad['reuse']['admission']['fragments'][-1]['identity'][bad_field]=value
+            self.assertEqual(self.parse_metadata(bad),0)
+        bad=copy.deepcopy(obj)
+        bad['reuse']['admission']['fragments'][-1]['authority']=[dict(tag='1'*64,revision='2'*64,generation='3'*64)]
+        self.assertEqual(self.parse_metadata(bad),0)
+        bad=copy.deepcopy(obj);bad['reuse']['admission']['fragments'].pop()
+        self.assertEqual(self.parse_metadata(bad),0,'Anonymous nonce is required, never silently omitted')
+
 if __name__=='__main__':unittest.main()

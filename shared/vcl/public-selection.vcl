@@ -59,6 +59,7 @@ sub scp_selection_capabilities {
         }
         set resp.http.X-UltraCache-VCL-Capabilities = resp.http.X-UltraCache-VCL-Capabilities + ",public-selection";
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
+        set resp.http.X-UltraCache-VCL-Public-Selection-Canonical-Host = req.http.host;
         set resp.http.X-UltraCache-VCL-Publication-Reselect-Version = "1";
         set resp.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
         unset resp.http.X-UltraCache-VCL-Guest-Publication-Policy;

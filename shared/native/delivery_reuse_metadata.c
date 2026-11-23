@@ -39,7 +39,7 @@ static int reuse_metadata_context(struct reader *r, struct delivery_reuse_record
     return seen == 4095;
 }
 static int reuse_metadata_identity(struct reader *r, const char *body, struct delivery_reuse_admitted_fragment *f) {
-    unsigned seen = 0;
+    unsigned seen = 0, owner_null = 0;
     if (!take(r,'{')) return 0;
     for (;;) {
         struct text key, value;
@@ -54,15 +54,19 @@ static int reuse_metadata_identity(struct reader *r, const char *body, struct de
         else return 0;
         if (seen & bit) return 0;
         seen |= bit;
-        if (bit == 1) { if (!string(r,&value) || !equal(value,"personal")) return 0; }
+        if (bit == 1) {
+            if (!string(r,&value)) return 0;
+            if (equal(value,"anonymous")) f->anonymous = 1;
+            else if (!equal(value,"personal")) return 0;
+        }
         else if (bit == 2) {
             size_t start;
             whitespace(r); start = r->offset;
             if (!reuse_skip_value(r) || delivery_reuse_inputs_parse(body+start,r->offset-start,&f->identity_inputs) != DELIVERY_REUSE_INPUT_OK) return 0;
         } else if (bit == 32) { if (!number(r,&f->identity_valid_until) || !f->identity_valid_until) return 0; }
         else if (bit == 16) {
-            if (!take(r,'[') || take(r,']')) return 0;
-            for (;;) {
+            if (!take(r,'[')) return 0;
+            if (!take(r,']')) for (;;) {
                 char **grown;
                 size_t i;
                 if (!string(r,&value) || !reuse_hex64(value) || f->identity_tag_count == SIZE_MAX/sizeof(*grown)) return 0;
@@ -76,20 +80,28 @@ static int reuse_metadata_identity(struct reader *r, const char *body, struct de
                 if (!take(r,',')) return 0;
             }
         } else {
-            if (!string(r,&value) || !reuse_hex64(value)) return 0;
-            memcpy(bit == 4 ? f->identity_binding : f->owner,value.data,64);
+            whitespace(r);
+            if (bit == 8 && r->length-r->offset >= 4 && !memcmp(r->buffer+r->offset,"null",4)) {
+                r->offset += 4; owner_null = 1;
+            } else {
+                if (!string(r,&value) || !reuse_hex64(value)) return 0;
+                memcpy(bit == 4 ? f->identity_binding : f->owner,value.data,64);
+            }
         }
         if (take(r,'}')) break;
         if (!take(r,',')) return 0;
     }
     if (seen == 63) {
         size_t i;
+        if (f->anonymous) return owner_null && !f->identity_tag_count;
+        if (owner_null) return 0;
         for (i = 0; i < f->identity_tag_count; ++i) if (!strcmp(f->identity_tags[i],f->owner)) return 1;
     }
     return 0;
 }
 static int reuse_metadata_authority(struct reader *r, struct delivery_reuse_admitted_fragment *f) {
-    if (!take(r,'[') || take(r,']')) return 0;
+    if (!take(r,'[')) return 0;
+    if (take(r,']')) return 1;
     for (;;) {
         struct delivery_reuse_authority *a = calloc(1,sizeof(*a)), *other;
         unsigned seen = 0;

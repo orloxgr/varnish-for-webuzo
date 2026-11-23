@@ -88,6 +88,7 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-WordPress-Policy;
     unset req.http.X-UltraCache-Delivery-Public-Selection-Actions;
     unset req.http.X-UltraCache-VCL-Public-Selection-Version;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Canonical-Host;
     unset req.http.X-UltraCache-VCL-Public-Selection-Scope;
     unset req.http.X-UltraCache-VCL-Public-Selection-Epoch;
     unset req.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
@@ -219,6 +220,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Delivery-WordPress-Policy;
     unset bereq.http.X-UltraCache-Delivery-Public-Selection-Actions;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Version;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Canonical-Host;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Scope;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Epoch;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
@@ -410,6 +412,7 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-Delivery-WordPress-Policy;
     unset resp.http.X-UltraCache-Delivery-Public-Selection-Actions;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Version;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Canonical-Host;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Scope;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Epoch;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Native-Policy;

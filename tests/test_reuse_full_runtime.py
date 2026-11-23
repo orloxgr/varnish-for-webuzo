@@ -23,12 +23,19 @@ KEY=hmac.digest(('b'*64).encode(),b'ultracache-delivery-reuse-key-v1','sha256')
 OWNER=authority.TAG
 BASE_FIELDS=('siteId','canonicalHost','scope','epoch','nativePolicy','wordpressPolicy','reusePolicy')
 
-def owner_frame(value):
-    return lp('ultracache-cookie-inputs-v1')+(1000).to_bytes(4,'big')+(1).to_bytes(4,'big')+lp('owner')+\
-        (0).to_bytes(4,'big')+(1).to_bytes(4,'big')+lp('owner')+(1).to_bytes(4,'big')+lp('owner')+lp(value)
-def identity_mac(context,value):
+def input_frame(inputs,value):
+    names=sorted(inputs['cookieNames']);prefixes=sorted(inputs['cookiePrefixes'])
+    # Absent declared WP selectors have no fabricated present group.
+    present='owner' in names
+    return (lp('ultracache-cookie-inputs-v1')+inputs['phpMaxInputVars'].to_bytes(4,'big')+
+        len(names).to_bytes(4,'big')+b''.join(lp(name) for name in names)+
+        len(prefixes).to_bytes(4,'big')+b''.join(lp(prefix) for prefix in prefixes)+
+        int(present).to_bytes(4,'big')+
+        (lp('owner')+(1).to_bytes(4,'big')+lp('owner')+lp(value) if present else b''))
+
+def identity_mac(context,value,inputs=None):
     return hmac.new(KEY,lp('ultracache-private-identity-binding-v1')+
-        b''.join(lp(context[n]) for n in BASE_FIELDS)+lp(owner_frame(value)),'sha256').hexdigest()
+        b''.join(lp(context[n]) for n in BASE_FIELDS)+lp(input_frame(inputs or declaration(['owner']),value)),'sha256').hexdigest()
 
 @unittest.skipUnless(shutil.which('varnishd') and os.environ.get('SCP_EXPERIMENTAL_REUSE_TEST')=='1',
     'Explicit matching-source native module required')
@@ -39,11 +46,20 @@ class NativeFullReuse(unittest.TestCase):
     recover=authority.NativeReuseAuthority.recover
     publish=authority.NativeReuseAuthority.publish
     def test_metadata_and_all_private_bodies_compose_without_any_origin_then_missing_body_refills(self):
+        self.run_full_actor()
+
+    def test_mixed_personal_cart_and_anonymous_nonce_compose_without_origin_or_fake_owner_map(self):
+        self.run_full_actor(anonymous_nonce=True)
+
+    def run_full_actor(self,anonymous_nonce=False):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
-        recipe=seal_recipe(dict(inputs=declaration(['owner']),fragments=[
+        nonce_inputs=declaration(['wordpress_logged_in_mock']) if anonymous_nonce else declaration(['owner'])
+        recipe=seal_recipe(dict(inputs=declaration(['owner','wordpress_logged_in_mock'] if anonymous_nonce else ['owner']),fragments=[
             dict(url=PRIVATE,provider='cart',occurrences=2),dict(url=ADAPTIVE,provider='nonce',occurrences=1)]))
-        def cache_key(url,owner):return hashlib.sha256((url+'|'+owner+'|'+str(generation[0])).encode()).hexdigest()
+        def cache_key(url,owner):
+            identity='uid0' if anonymous_nonce and url==ADAPTIVE else owner
+            return hashlib.sha256((url+'|'+identity+'|'+str(generation[0])).encode()).hexdigest()
         def origin(path,headers):
             phase=headers.get('X-UltraCache-Delivery-Phase');calls.append((path,phase))
             if phase=='prepare':
@@ -54,9 +70,11 @@ class NativeFullReuse(unittest.TestCase):
                     'X-UltraCache-Delivery-Reuse-Recipe':recipe['digest']})
                 owner=headers['Cookie'].split('owner=',1)[1].split(';',1)[0]
                 body=json.loads(envelope(headers,owner+'-generation'+str(generation[0])))
-                for f in body['renderedFragments']:f['cache']=dict(key=cache_key(f['url'],owner),ttl=120,tags='owner product:123')
+                for f in body['renderedFragments']:
+                    f['cache']=dict(key=cache_key(f['url'],owner),ttl=120,tags='owner product:123')
+                    if anonymous_nonce and f['url']==ADAPTIVE:f['html']='nonce:uid0-generation'+str(generation[0])
                 body['reuseCandidate']=dict(version=1,requestId=signed['requestId'],challenge=signed['challenge'],
-                    recipe=recipe,inputEvidence=identity_mac(context,owner))
+                    recipe=recipe,inputEvidence=identity_mac(context,owner,recipe['inputs']))
                 prepared[signed['requestId']]=(copy.deepcopy(body),owner)
                 return json.dumps(body),[('Cache-Control','private, no-store')]
             if phase=='reuse-finalize':
@@ -79,16 +97,19 @@ class NativeFullReuse(unittest.TestCase):
                 for descriptor in recipe['fragments']:
                     f=next(row for row in old['renderedFragments'] if row['url']==descriptor['url'])
                     dependency=owner_tag
-                    if descriptor['provider']=='nonce':
+                    if descriptor['provider']=='nonce' and not anonymous_nonce:
                         dependency=nonce_tag(owner)
                         nonce_context=self.call(holder['get'],'private-authority-context',tag=dependency)
                         dependency_ack=self.call(holder['get'],'private-generation-publish',nonce_context,tag=dependency,
                             extra={'X-UltraCache-Private-Generation':hashlib.sha256(str(generation[0]).encode()).hexdigest()})
                     else:dependency_ack=ack
+                    anonymous=anonymous_nonce and descriptor['provider']=='nonce'
+                    inputs=nonce_inputs if descriptor['provider']=='nonce' else declaration(['owner'])
                     rows.append(dict(descriptor=descriptor['descriptor'],url=descriptor['url'],cache=f['cache'],bodyValidUntil=deadline+10,
-                        identity=dict(identityState='personal',identityInputs=recipe['inputs'],identityBinding=identity_mac(c,owner),
-                            owner=dependency,tags=[dependency],validUntil=deadline+20),
-                        authority=[dict(tag=dependency,revision=dependency_ack['revision'],generation=dependency_ack['generation'])]))
+                        identity=dict(identityState='anonymous' if anonymous else 'personal',identityInputs=inputs,
+                            identityBinding=identity_mac(c,owner,inputs),owner=None if anonymous else dependency,
+                            tags=[] if anonymous else [dependency],validUntil=deadline+20),
+                        authority=[] if anonymous else [dict(tag=dependency,revision=dependency_ack['revision'],generation=dependency_ack['generation'])]))
                 record=dict(schemaVersion=1,requestId=context['deliveryRequestId'],originalUrl=path,
                     reuse=dict(version=1,context=c,recipe=recipe,admission=dict(binding=context['binding'],validUntil=deadline,
                         cookieWork=dict(state='none',validUntil=deadline+20),fragments=rows)))
@@ -133,8 +154,19 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual(calls,[],'The second independently bound owner also uses native-only composed HIT')
             status,_,again=get(PARENT,'owner=A')
             self.assertEqual(status,200);self.assertIn('private:A-generation2',again);self.assertNotIn('private:B-',again)
-            # Two provider owners share the same input binding. Both mappings
-            # coexist; a later cross-route backend prearms the nonce owner too.
+            if anonymous_nonce:
+                self.assertIn('nonce:uid0-generation2',other)
+                self.assertIn('nonce:uid0-generation2',again)
+                # This observation-only probe is not an anonymous owner map.
+                probe=self.call(get,'private-authority-context',tag=nonce_tag('A'))
+                personal=self.observe(get)
+                self.assertEqual(get('/__owned_mutation-map','owner=A; _fbp=unrelated')[0],200)
+                self.assertNotEqual(self.observe(get)['revision'],personal['revision'])
+                self.assertEqual(self.call(get,'private-authority-context',tag=nonce_tag('A'))['revision'],probe['revision'])
+                self.assertEqual(self.observe(get)['scopeState'],'unbound')
+                return
+            # Two PERSONAL provider owners share the same input binding. Both
+            # mappings coexist; a cross-route backend prearms the nonce too.
             old_nonce=self.call(get,'private-authority-context',tag=nonce_tag('A'))
             other_nonce=self.call(get,'private-authority-context',tag=nonce_tag('B'))
             self.assertEqual(get('/__owned_mutation-map','owner=A; _fbp=unrelated')[0],200)
