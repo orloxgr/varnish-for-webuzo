@@ -97,7 +97,8 @@ X-UltraCache-Private-Drained: 1
 
 Explicit authenticated producer assertion AFTER durable-intent and actual
 execution/drain proof. Native refuses active transactions and stale scope
-revision. It makes the scope ready while old tag generations remain UNBOUND;
+revision. It preserves the already-fenced current namespace revision and makes
+the scope ready while old tag generations remain UNBOUND;
 it does not resurrect cached authority. An already-ready matching recovery
 retry is idempotent. Real proof belongs to the producer; this header is not a
 native observation of SQL. Uncertain backend execution markers/receipt recovery
@@ -330,3 +331,33 @@ raw-write and HTTP-client-failure actors. A true total-control-outage/business-
 write-continues actor must remain NOT qualified until a real coherence channel
 is demonstrated. These are explicit tests for this extension, not evidence
 provided by the existing mixed-recipe HIT checkpoint.
+
+
+## Recovery preserves a successfully fenced namespace
+
+Real unbind and scope transactions rotate the scope revision before an accepted
+fence. Recovery only transitions that already-fenced namespace to READY, after
+its existing exact current-revision CAS, retained scope/tag writer checks,
+execution/hold/lost-context checks and explicit actual-drain attestation. It does
+not rotate it a second time. A fresh source body's original authority namespace
+therefore remains the same after recovery. Initially UNBOUND scopes already
+have a newly generated incarnation/revision and no old CLEAN authority.
+
+Old tag generations remain bound to their preceding scope revision, so READY
+cannot resurrect them; fresh independent provider read/publish is still needed.
+Scope begin/commit/ACK and policy invalidation retain their real rotations.
+ACK collection still rotates BEFORE forgetting the transaction ID, so a delayed
+old begin/recover/publish frame stays fenced across recovery. Overlapping writer
+rotations invalidate earlier source claims: neither metadata nor recovery may
+relabel an original body into a newer namespace.
+
+A failed native revision generation is handled explicitly. The scope remains
+UNBOUND with a pending revision fence, and replies expose no valid old
+`scopeRevision`. An authenticated control observation can retry generation of
+the replacement revision; while that fails, control returns503
+`scope-revision-unavailable`, and no READY/body namespace can be granted.
+Successful repair is only a new invalidation fence, not recovery or fresh tag
+publication. Subsequent recovery CASes/preserves that real replacement. This is
+actual identity-generation failure handling, with no timer, expiry-based cleanup
+or fabricated namespace. Qualification uses a separately built, explicitly
+altered fault source; the product has no test fault header/switch.

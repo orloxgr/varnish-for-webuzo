@@ -50,7 +50,7 @@ struct reuse_scope {
     char incarnation[65], revision[65];
     char native_policy[65], wordpress_policy[65], policy[65], coverage_policy[65];
     unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
-    unsigned enabled, ready;
+    unsigned enabled, ready, revision_pending;
     unsigned lost_execution_context;
     struct reuse_transaction *scope_mutations; /* real unknown-owner writers, never fake tags */
     struct mutation_execution *executions;
@@ -179,7 +179,7 @@ static size_t reuse_scope_holds(const struct reuse_scope *scope) {
     return count;
 }
 static int reuse_scope_ready(const struct reuse_scope *scope) {
-    return scope && scope->ready && !reuse_scope_holds(scope);
+    return scope && scope->ready && !scope->revision_pending && !reuse_scope_holds(scope);
 }
 static int reuse_tag_clean(const struct reuse_scope *scope, const struct reuse_tag *tag) {
     return reuse_scope_ready(scope) && tag->clean && !strcmp(tag->bound_scope_revision,scope->revision);
@@ -217,9 +217,19 @@ static struct reuse_transaction *reuse_transaction_begin(struct reuse_tag *tag, 
     memcpy(tag->revision,revision,65); tag->clean = 0; tag->generation[0] = 0;
     return transaction;
 }
+static int reuse_scope_revision_repair(struct reuse_scope *scope) {
+    char revision[65];
+    if (!scope->revision_pending) return 1;
+    if (!reuse_random_id(revision)) return 0;
+    memcpy(scope->revision,revision,65); scope->revision_pending = 0;
+    return 1;
+}
 static void reuse_scope_unbind(struct reuse_scope *scope) {
-    scope->ready = 0;
-    (void)reuse_random_id(scope->revision); /* failure remains UNBOUND */
+    scope->ready = 0; scope->revision_pending = 1;
+    /* Failure keeps authority suspended and the old namespace unavailable.
+     * A later authenticated observation may mint its actual replacement, but
+     * neither observation nor recovery may expose the old revision as fresh. */
+    (void)reuse_scope_revision_repair(scope);
 }
 
 VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope,
@@ -446,7 +456,7 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
     if (scope) {
         reuse_json_field(json,"siteId",scope->site); reuse_json_field(json,"canonicalHost",scope->host);
         reuse_json_field(json,"scope",scope->scope); reuse_json_field(json,"incarnation",scope->incarnation);
-        reuse_json_field(json,"scopeRevision",scope->revision);
+        reuse_json_field(json,"scopeRevision",scope->revision_pending ? "" : scope->revision);
         reuse_json_field(json,"scopeState",reuse_scope_ready(scope) ? "ready" : "unbound");
         if (reuse_scope_holds(scope)) VSB_printf(json,",\"temporaryHolds\":%ju",(uintmax_t)reuse_scope_holds(scope));
         reuse_json_field(json,"nativePolicy",scope->native_policy);
@@ -556,6 +566,9 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (!current || strcmp(current->wordpress_policy,scope->wordpress_policy)) {
             reuse_scope_unbind(scope); status = 409; reason = "wordpress-policy-changed"; goto reply;
         }
+    }
+    if (!reuse_scope_revision_repair(scope)) {
+        status = 503; reason = "scope-revision-unavailable"; goto reply;
     }
     if (!strcmp(operation,"delivery-reuse-context")) {
         const char *request_id = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Request-Id"));
@@ -675,7 +688,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
                 status = 503; reason = "authority-memory-or-identity"; goto reply;
             }
             transaction->next = scope->scope_mutations; scope->scope_mutations = transaction;
-            scope->ready = 0; memcpy(scope->revision,revision,65);
+            scope->ready = 0; scope->revision_pending = 0; memcpy(scope->revision,revision,65);
             status = 200; reason = "scope-mutation-recorded"; goto reply;
         }
         if (!transaction || !lease || strcmp(lease,transaction->lease)) {
@@ -685,7 +698,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
             if (!delivery_header_equals(ctx->http_req,HDR("X-UltraCache-Private-Drained"),"1")) goto reply;
             if (transaction->active) {
                 if (!reuse_random_id(revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
-                transaction->active = 0; scope->ready = 0; memcpy(scope->revision,revision,65);
+                transaction->active = 0; scope->ready = 0; scope->revision_pending = 0; memcpy(scope->revision,revision,65);
                 memcpy(transaction->completed_revision,revision,65);
             }
             status = 200; reason = "scope-mutation-committed"; goto reply;
@@ -696,7 +709,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
             /* The producer durably records the actual native commit ACK before
              * this request. Fence delayed begin frames before forgetting ID. */
             if (!reuse_random_id(revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
-            scope->ready = 0; memcpy(scope->revision,revision,65);
+            scope->ready = 0; scope->revision_pending = 0; memcpy(scope->revision,revision,65);
             while (*position && *position != transaction) position = &(*position)->next;
             *position = transaction->next; free(transaction); transaction = NULL;
             status = 200; reason = "scope-mutation-acknowledged"; goto reply;
@@ -710,10 +723,11 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         /* Explicit authenticated producer recovery, after durable intent/drain
          * proof. Neither ordinary context nor a rendered fill calls this. */
         if (!delivery_header_equals(ctx->http_req,HDR("X-UltraCache-Private-Drained"),"1")) goto reply;
-        if (!scope->ready) {
-            if (!reuse_random_id(scope->revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
-            scope->ready = 1;
-        }
+        /* Real invalidation already installed the current namespace revision.
+         * Preserve it for fresh source bodies observed before this recovery.
+         * Pending/failed fencing was repaired or refused before dispatch above.
+         * Old tag generations remain bound to the preceding invalidated ID. */
+        scope->ready = 1;
         status = 200; reason = "scope-recovered"; goto reply;
     }
     if (!public_policy(id)) goto reply;

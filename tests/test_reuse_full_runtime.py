@@ -59,7 +59,10 @@ class NativeFullReuse(unittest.TestCase):
     def test_covered_unchanged_interleaved_owners_and_all_formats_reuse_without_origin(self):
         self.run_full_actor(anonymous_nonce=True,covered=True)
 
-    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False):
+    def test_fresh_source_authority_namespace_survives_initial_and_postscope_recovery(self):
+        self.run_full_actor(anonymous_nonce=True,scope_fence=True,covered=True,namespace_keys=True)
+
+    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
@@ -68,7 +71,8 @@ class NativeFullReuse(unittest.TestCase):
             dict(url=PRIVATE,provider='cart',occurrences=2),dict(url=ADAPTIVE,provider='nonce',occurrences=1)]))
         def cache_key(url,owner):
             identity='uid0' if anonymous_nonce and url==ADAPTIVE else owner
-            return hashlib.sha256((url+'|'+identity+'|'+str(generation[0])).encode()).hexdigest()
+            namespace='|'+self.observe(holder['get'])['scopeRevision'] if namespace_keys else ''
+            return hashlib.sha256((url+'|'+identity+'|'+str(generation[0])+namespace).encode()).hexdigest()
         accepts=('text/html', 'text/html,image/webp', 'text/html,image/avif,image/webp')
         def read_context(headers,path):
             return coverage.context(self,headers,'GET',path) if covered else signed_context(self,headers,path,'GET')
@@ -87,13 +91,13 @@ class NativeFullReuse(unittest.TestCase):
                     if anonymous_nonce and f['url']==ADAPTIVE:f['html']='nonce:uid0-generation'+str(generation[0])
                 body['reuseCandidate']=dict(version=1,requestId=signed['requestId'],challenge=signed['challenge'],
                     recipe=recipe,inputEvidence=identity_mac(context,owner,recipe['inputs']))
-                prepared[signed['requestId']]=(copy.deepcopy(body),owner,signed)
+                prepared[signed['requestId']]=(copy.deepcopy(body),owner,signed,context['scopeRevision'])
                 return json.dumps(body),[('Cache-Control','private, no-store')]+([coverage.response_receipt(signed)] if covered else [])
             if phase=='reuse-finalize':
                 self.assertEqual(path,PARENT);self.assertIsNone(headers.get('Cookie'))
                 self.assertIsNone(headers.get('X-UltraCache-Mutation-Context'))
                 context=json.loads(base64.b64decode(headers['X-UltraCache-Delivery-Reuse-Context'],validate=True))
-                old,owner,original=prepared[context['requestId']]
+                old,owner,original,source_namespace=prepared[context['requestId']]
                 current=self.observe(holder['get'])
                 self.call(holder['get'],'private-execution-drained',current,tag=None,extra={
                     'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
@@ -105,6 +109,8 @@ class NativeFullReuse(unittest.TestCase):
                 observed=self.call(holder['get'],'private-authority-context',tag=owner_tag)
                 ack=self.call(holder['get'],'private-generation-publish',observed,tag=owner_tag,
                     extra={'X-UltraCache-Private-Generation':hashlib.sha256(str(generation[0]).encode()).hexdigest()})
+                if namespace_keys:self.assertEqual(ack['scopeRevision'],source_namespace,
+                    'Recovery must not silently rebase a fresh original body claim into another namespace')
                 c=dict(context['context'],scopeRevision=ack['scopeRevision'])
                 deadline=int(time.time())+100
                 rows=[]
@@ -171,6 +177,11 @@ class NativeFullReuse(unittest.TestCase):
                 calls.clear();self.assertEqual(get(PARENT,'owner=A')[0],200)
                 self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
                 calls.clear();self.assertEqual(get(PARENT,'owner=A')[0],200);self.assertEqual(calls,[])
+                if namespace_keys:
+                    first_keys={f['cache']['key'] for f in records[0]['reuse']['admission']['fragments']}
+                    current_keys={f['cache']['key'] for f in records[-1]['reuse']['admission']['fragments']}
+                    self.assertTrue(first_keys.isdisjoint(current_keys),
+                        'Actual scope invalidation must choose fresh HSH body keys even when session/body digest is unchanged')
             self.assertEqual(exchange(get,'PURGE',PRIVATE,cache_key(PRIVATE,'A'),'b'*64)[0],200)
             self.assertEqual(get(PARENT,'owner=A')[0],200)
             self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],
