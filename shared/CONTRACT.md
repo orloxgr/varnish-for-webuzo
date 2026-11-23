@@ -242,6 +242,18 @@ session tokens or credentials. There is no native provider-issuance diagnostic.
 
 ## Calls and trusted inputs
 
+Existing raw Warm GETs on the UltraCache profile use
+`X-UltraCache-Warm-Source: raw-v1`, `X-UltraCache-Internal-Request: 1`,
+`X-UltraCache-Warm: 1` and the existing
+`X-UltraCache-Runtime-Token: v2:<positive decimal issued-at>:<64 lowercase hex MAC>`.
+This complete shape routes PASS before public/guest lookup, preserving the
+original URL, cookies, registry-capture and authentication headers. It does not
+verify the MAC: the application retains runtime authentication and source
+capture validation. A correctly shaped invalid token reaches the origin for
+refusal; neither a successful raw response nor a refusal fills/replaces a cached
+guest publication. Browser revalidation or partial Warm names alone retain
+normal lookup. Basic profile behavior is unchanged.
+
 Private PHP-session source GETs use the existing raw collector transport. When
 `X-UltraCache-Warm-Source: raw-v1`, `X-UltraCache-Internal-Request: 1`,
 `X-UltraCache-Warm: 1`, `X-UltraCache-Session-Source-Kind: native|observed` and

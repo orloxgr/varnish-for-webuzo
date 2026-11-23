@@ -138,6 +138,18 @@ sub scp_init {
 # Normalize a COPY for hashing/invalidation. Never change req.url.
 sub scp_recv {
     std.collect(req.http.Cookie, "; ");
+    # Existing application raw-Warm transport must reach its source, including
+    # when a complete public guest publication is already hot. This shape is
+    # routing only: the origin still verifies the runtime credential. PASS
+    # cannot replace/fill the guest object, even after origin authentication
+    # refuses a correctly shaped but invalid credential.
+    if (req.http.X-SCP-Profile == "ultracache" && req.method == "GET" &&
+        req.http.X-UltraCache-Warm-Source == "raw-v1" &&
+        req.http.X-UltraCache-Internal-Request == "1" && req.http.X-UltraCache-Warm == "1" &&
+        req.http.X-UltraCache-Runtime-Token ~ "^v2:[1-9][0-9]*:[0-9a-f]{64}$") {
+        set req.http.X-SCP-Reason = "ultracache-raw-warm-source";
+        return (pass);
+    }
     # This shape routes a private collector request, never authenticates it.
     # The origin owns MAC/one-use validation. Preserve all original cookies,
     # including ESI markers, by passing before profile-specific transport.

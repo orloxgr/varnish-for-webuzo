@@ -181,9 +181,10 @@ if (bereq.http.X-ESI-Private-Request == "1" || bereq.http.X-SCP-Adaptive-Nonce =
 }
 # Protocol markers are removed only after cookie policy has run. A saved
 # Private/Variant choice on those names must not disappear before resolution.
-# The existing signed raw-source collector retains its original cookie wire.
+# Existing raw-source collectors retain their original cookie wire.
 if (bereq.http.X-ESI-Private-Request != "1" &&
-    bereq.http.X-SCP-Reason != "ultracache-private-session-source") {
+    bereq.http.X-SCP-Reason != "ultracache-private-session-source" &&
+    bereq.http.X-SCP-Reason != "ultracache-raw-warm-source") {
     set bereq.http.Cookie = regsuball(bereq.http.Cookie,
         "(^|;[[:blank:]]*)(esi_session|ultracache_esi_optin)=[^;]*", "");
     set bereq.http.Cookie = regsuball(bereq.http.Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
