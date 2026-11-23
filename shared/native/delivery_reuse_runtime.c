@@ -119,8 +119,8 @@ static int delivery_reuse_record_current(const struct continuation *d, const str
     fields[10] = d->reuse_representation; fields[11] = d->reuse_recipe;
     for (i = 0; i < 12; ++i) if (strcmp(record->context[i],fields[i])) return 0;
     page = (struct delivery_reuse_context){fields[0],fields[1],fields[2],fields[3],fields[6],fields[7],fields[8],fields[9],fields[10],fields[11]};
-    if (delivery_reuse_input_projection(record->recipe->inputs,(const unsigned char *)(d->cookie ? d->cookie : ""),
-        d->cookie ? strlen(d->cookie) : 0,&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
+    if (delivery_reuse_input_projection(record->recipe->inputs,(const unsigned char *)delivery_personal_cookie(d),
+        strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
     i = delivery_reuse_input_mac(scope->reuse_key,&page,frame,length,binding) && !strcmp(binding,record->binding);
     delivery_reuse_frame_free(frame,length);
     if (!i) return 0;
@@ -131,8 +131,8 @@ static int delivery_reuse_record_current(const struct continuation *d, const str
             !body->cache_tags || strcmp(body->cache_tags,f->cache_tags) ||
             (double)f->body_valid_until > d->prepare_response_time+(double)body->cache_ttl)) return 0;
         frame = NULL; length = 0;
-        if (delivery_reuse_input_projection(f->identity_inputs,(const unsigned char *)(d->cookie ? d->cookie : ""),
-            d->cookie ? strlen(d->cookie) : 0,&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
+        if (delivery_reuse_input_projection(f->identity_inputs,(const unsigned char *)delivery_personal_cookie(d),
+            strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
         i = delivery_reuse_identity_mac(scope->reuse_key,&page,frame,length,binding) && !strcmp(binding,f->identity_binding);
         delivery_reuse_frame_free(frame,length);
         if (!i) return 0;
@@ -196,8 +196,8 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
         discovery->recipe->occurrences != d->occurrences) goto unlock;
     page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
         scope->native_policy,scope->wordpress_policy,scope->policy,d->reuse_publication,d->reuse_representation,discovery->recipe->digest};
-    if (delivery_reuse_input_projection(discovery->recipe->inputs,(const unsigned char *)(d->cookie ? d->cookie : ""),
-        d->cookie ? strlen(d->cookie) : 0,&frame,&length) != DELIVERY_REUSE_INPUT_OK ||
+    if (delivery_reuse_input_projection(discovery->recipe->inputs,(const unsigned char *)delivery_personal_cookie(d),
+        strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK ||
         !delivery_reuse_input_mac(scope->reuse_key,&page,frame,length,d->reuse_binding) ||
         !delivery_reuse_metadata_key(&page,d->reuse_binding,d->reuse_metadata_key) || !(d->reuse_scope = strdup(scope->scope))) goto unlock;
     memcpy(d->reuse_epoch,public_registry_epoch,65); memcpy(d->reuse_incarnation,scope->incarnation,65);

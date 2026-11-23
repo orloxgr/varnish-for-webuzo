@@ -350,7 +350,7 @@ static void delivery_reuse_candidate_capture(VRT_CTX, struct continuation *d, co
     }
     for (fragment = d->fragments; fragment; fragment = fragment->next) ++actual;
     if (expected != actual || delivery_reuse_input_projection(candidate->recipe->inputs,
-        (const unsigned char *)(d->cookie ? d->cookie : ""),d->cookie ? strlen(d->cookie) : 0,
+        (const unsigned char *)delivery_personal_cookie(d),strlen(delivery_personal_cookie(d)),
         &frame,&frame_length) != DELIVERY_REUSE_INPUT_OK) goto done;
     pthread_mutex_lock(&lock);
     scope = delivery_reuse_current_scope(d);
@@ -382,7 +382,7 @@ static char *delivery_reuse_make_finalize(VRT_CTX, struct continuation *d) {
     if (ctx->req->esi_level || !d || d->phase != D_READY || d->failed || !d->reuse_candidate ||
         !delivery_reuse_capture_parent(ctx,d) ||
         delivery_reuse_input_projection(d->reuse_candidate->recipe->inputs,
-            (const unsigned char *)(d->cookie ? d->cookie : ""),d->cookie ? strlen(d->cookie) : 0,
+            (const unsigned char *)delivery_personal_cookie(d),strlen(delivery_personal_cookie(d)),
             &frame,&length) != DELIVERY_REUSE_INPUT_OK) goto done;
     /* Original evidence does not authorize another projection after issuance.
      * Unrelated Shared updates can differ while consumed inputs stay identical. */

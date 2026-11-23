@@ -35,6 +35,22 @@ struct delivery_header {
     struct delivery_header *next;
     char *line;
 };
+struct delivery_public_projection {
+    char *bucket, *locale, *language;
+    struct delivery_cookie_update *cookies; /* actual sorted Variant wire values */
+};
+void delivery_public_projection_free(struct delivery_public_projection *projection);
+int delivery_public_projection_parse(const char *body, size_t length,
+    struct delivery_public_projection **projection);
+int delivery_public_projection_header_parse(const char *header, size_t length,
+    struct delivery_public_projection **projection);
+char *delivery_public_projection_header(const struct delivery_public_projection *projection);
+int delivery_public_projection_equal(const struct delivery_public_projection *a,
+    const struct delivery_public_projection *b);
+char *delivery_public_projection_cookie(const struct delivery_public_projection *projection,
+    const char *rules);
+int delivery_public_projection_candidate(const struct delivery_public_projection *projection,
+    const char *original, const char *rules, char **candidate);
 struct delivery_public_selection {
     char policy[65], wordpress_policy[65];
     char *manifest, *target;
@@ -46,7 +62,15 @@ struct delivery_public_selection {
     struct delivery_public_parent *parent;
     struct delivery_fragment *fragments;
     unsigned source_only; /* explicit public parent role, never private completion */
+    struct delivery_public_projection *resolved;
 };
+enum delivery_projected_role {
+    DELIVERY_PROJECTED_PERSONAL, DELIVERY_PROJECTED_PARENT, DELIVERY_PROJECTED_RESOLVER
+};
+int delivery_projected_selection_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    enum delivery_projected_role role, struct delivery_public_selection **selection,
+    struct delivery_private_document **document, struct delivery_public_projection **resolved_only);
 /* Separate entry/outcome: never weakens delivery_envelope_parse's v1 binding. */
 int delivery_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,

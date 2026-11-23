@@ -60,7 +60,7 @@ def build():
                'delivery_envelope.c','delivery_envelope.h','delivery_selection.c',
                'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c',
                'delivery_reuse_inputs.c','delivery_reuse_inputs.h','reuse_authority.c',
-               'delivery_mutation_wire.c','delivery_mutation_wire.h','mutation_backend.c','execution_drain.c',
+               'delivery_mutation_wire.c','delivery_mutation_wire.h','delivery_public_projection_wire.c','mutation_backend.c','execution_drain.c',
                'delivery_reuse_wire.c','delivery_reuse_wire.h','delivery_reuse_metadata.c','delivery_reuse_runtime.c','private_identity_map.c')}
     inputs['abi'] = (include/'vmod_abi.h').read_bytes()
     # The virtual fetch uses the installed internal http_conn layout. Strict
@@ -88,7 +88,7 @@ def build():
             for name in ('delivery_envelope.c','delivery_envelope.h','delivery_selection.c',
                          'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c',
                          'delivery_reuse_inputs.c','delivery_reuse_inputs.h','reuse_authority.c',
-                         'delivery_mutation_wire.c','delivery_mutation_wire.h','mutation_backend.c','execution_drain.c',
+                         'delivery_mutation_wire.c','delivery_mutation_wire.h','delivery_public_projection_wire.c','mutation_backend.c','execution_drain.c',
                'delivery_reuse_wire.c','delivery_reuse_wire.h','delivery_reuse_metadata.c','delivery_reuse_runtime.c','private_identity_map.c'):
                 (folder/name).write_bytes(inputs[name])
             # vmodtool hashes directives, not their documentation. Put the

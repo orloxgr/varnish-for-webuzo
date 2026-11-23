@@ -96,7 +96,7 @@ enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY,
     D_FINALIZE_QUEUED, D_FINALIZE, D_FINALIZE_RETURN, D_SOURCE_PERSONAL_QUEUED, D_FAILED };
-enum public_source_stage { SOURCE_NONE, SOURCE_CAPTURE, SOURCE_PERSONAL, SOURCE_COMPLETE };
+enum public_source_stage { SOURCE_NONE, SOURCE_RESOLVER, SOURCE_CAPTURE, SOURCE_PERSONAL, SOURCE_COMPLETE };
 struct delivery_reuse_plan;
 static void delivery_reuse_release(VRT_CTX, struct delivery_reuse_plan *);
 struct continuation {
@@ -109,8 +109,12 @@ struct continuation {
     unsigned reselect_attempted, conflict_verified;
     unsigned cold_entry;
     enum public_source_stage source_stage;
+    enum public_source_stage source_next;
     unsigned source_declined;
+    unsigned source_projected, source_resolved_response, source_reselected, source_unstable;
     char *source_url, *source_cookie, *source_manifest;
+    char *resolver_cookie, *projection_header;
+    struct delivery_public_projection *projection;
     char source_generation[65];
     double source_deadline;
     unsigned guest_requested, guest_reply, guest_complete, guest_has_variant;
@@ -153,6 +157,9 @@ struct continuation {
     struct fields *public_headers;
     struct fields *document_headers;
 };
+static const char *delivery_personal_cookie(const struct continuation *d) {
+    return d->resolver_cookie ? d->resolver_cookie : d->cookie ? d->cookie : "";
+}
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static int public_selection_parse(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
@@ -227,6 +234,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     delivery_reuse_record_free(d->reuse_record);
     free(d->guest_policy); free(d->guest_epoch); free(d->guest_key); free(d->guest_canonical);
     free(d->source_url); free(d->source_cookie); free(d->source_manifest);
+    free(d->resolver_cookie); free(d->projection_header); delivery_public_projection_free(d->projection);
     free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
@@ -271,21 +279,65 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
     return 1;
 }
 
+static int delivery_source_resolver_update(struct continuation *d, struct delivery_public_projection *p) {
+    char *candidate = NULL, *wire = NULL, *header = NULL;
+    if (!delivery_public_projection_candidate(p,d->resolver_cookie ? d->resolver_cookie : d->cookie,
+            d->selection_rules,&candidate) ||
+        !(wire = delivery_public_projection_cookie(p,d->selection_rules)) ||
+        !(header = delivery_public_projection_header(p))) {
+        free(candidate); free(wire); free(header); return 0;
+    }
+    free(d->resolver_cookie); d->resolver_cookie = candidate;
+    free(d->source_cookie); d->source_cookie = wire;
+    free(d->projection_header); d->projection_header = header;
+    delivery_public_projection_free(d->projection); d->projection = p;
+    return 1;
+}
 static int delivery_parse(VRT_CTX, struct continuation *d) {
     char *legacy = NULL, *candidate = NULL;
     size_t legacy_length = 0, candidate_length = 0;
     int ok;
-    if (d->source_stage == SOURCE_CAPTURE) {
+    if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) {
         struct delivery_public_selection *source = NULL;
-        ok = d->source_declined ? d->length == 0 :
-            delivery_public_source_parse(d->body,d->length,d->request_id,d->source_url,
-                d->selection_policy,d->wordpress_policy,&source);
-        if (ok && !d->source_declined) {
+        struct delivery_public_projection *resolved = NULL;
+        struct delivery_private_document *document = NULL;
+        d->source_next = SOURCE_PERSONAL;
+        if (d->source_declined) ok = d->length == 0;
+        else if (d->source_projected) {
+            ok = delivery_projected_selection_parse(d->body,d->length,d->request_id,
+                d->source_stage == SOURCE_RESOLVER ? d->url : d->source_url,
+                d->selection_policy,d->wordpress_policy,
+                d->source_stage == SOURCE_RESOLVER ? DELIVERY_PROJECTED_RESOLVER : DELIVERY_PROJECTED_PARENT,
+                &source,&document,&resolved);
+            if (ok && resolved) {
+                char *wire = delivery_public_projection_cookie(resolved,d->selection_rules);
+                ok = wire && d->source_resolved_response;
+                free(wire);
+                if (ok && d->source_stage == SOURCE_RESOLVER) {
+                    ok = delivery_source_resolver_update(d,resolved);
+                    if (ok) { resolved = NULL; d->source_next = SOURCE_CAPTURE; }
+                } else if (ok && !d->source_reselected) {
+                    /* Only the actual visitor's resolver may issue its next
+                     * public cookies. A pure source tuple is never an issuer. */
+                    if (ctx->req->max_restarts > UINT_MAX-2) ok = 0;
+                    else {
+                        ctx->req->max_restarts += 2; /* two owned reselect phases */
+                        d->source_reselected = 1; d->source_next = SOURCE_RESOLVER;
+                    }
+                } else if (ok) {
+                    d->source_unstable = d->source_declined = 1;
+                }
+            } else if (ok) ok = source && !d->source_resolved_response &&
+                delivery_public_projection_equal(source->resolved,d->projection);
+        } else ok = delivery_public_source_parse(d->body,d->length,d->request_id,d->source_url,
+            d->selection_policy,d->wordpress_policy,&source);
+        if (ok && source && !d->source_declined) {
             d->source_manifest = strdup(source->manifest);
             memcpy(d->source_generation,source->parent->generation,65);
             d->source_deadline = d->prepare_response_time+(double)source->parent->fresh_remaining;
             ok = d->source_manifest != NULL;
         }
+        delivery_private_document_free(document); delivery_public_projection_free(resolved);
         delivery_selection_free(source);
         free(d->body); d->body = NULL; d->length = d->capacity = 0;
         return ok;
@@ -556,7 +608,8 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         http_Unset(ctx->http_req,H_Accept_Encoding);
         for (i = 0; i < 6; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
         d->restart = ctx->req->restarts; d->phase = D_PREPARE;
-        d->source_stage = SOURCE_PERSONAL; d->sent = d->complete = 0;
+        d->source_stage = d->source_next ? d->source_next : SOURCE_PERSONAL;
+        d->source_resolved_response = 0; d->sent = d->complete = 0;
         /* This no-resolver gate rejoins the original lookup namespace. A
          * changed actual tuple requires explicit resolver/reselection, not an
          * implicit manifest namespace that repeats source work on every HIT. */
@@ -686,12 +739,26 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             else http_Unset(ctx->http_bereq,h_cookie_delivery);
             http_ForceHeader(ctx->http_bereq,h_request,d->request_id);
             http_ForceHeader(ctx->http_bereq,h_original,d->source_stage == SOURCE_CAPTURE ? d->source_url : d->url);
-            if (d->source_stage == SOURCE_CAPTURE) {
+            if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) {
                 http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Version"),"1");
-                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Role"),"parent-v1");
+                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Role"),
+                    d->source_stage == SOURCE_RESOLVER ? "resolver-v1" : "parent-v1");
             } else {
                 http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Version"));
                 http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Role"));
+            }
+            if (d->source_projected && d->phase == D_PREPARE) {
+                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection-Version"),"1");
+                if (d->projection_header && !d->source_unstable && d->source_stage != SOURCE_RESOLVER)
+                    http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection"),d->projection_header);
+                else http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection"));
+                if (d->source_unstable)
+                    http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"),"unstable-public-projection");
+                else http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"));
+            } else {
+                http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection-Version"));
+                http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection"));
+                http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"));
             }
             if (d->phase == D_PREPARE && !d->selection_entry && !d->reselect_attempted)
                 http_ForceHeader(ctx->http_bereq,h_reselect_version,"1");
@@ -712,7 +779,9 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             }
             if (d->source_stage == SOURCE_CAPTURE && d->source_cookie && *d->source_cookie)
                 http_ForceHeader(ctx->http_bereq,H_Cookie,d->source_cookie);
-            else if (d->source_stage != SOURCE_CAPTURE && d->cookie) http_ForceHeader(ctx->http_bereq,H_Cookie,d->cookie);
+            else if (d->source_stage != SOURCE_CAPTURE &&
+                ((d->resolver_cookie && *d->resolver_cookie) || (!d->resolver_cookie && d->cookie)))
+                http_ForceHeader(ctx->http_bereq,H_Cookie,delivery_personal_cookie(d));
             else http_Unset(ctx->http_bereq,H_Cookie);
         }
     }
@@ -791,7 +860,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d;
     const char *encoding, *recovery, *selection_version = NULL, *content_type = NULL, *contained = NULL, *outcome = NULL;
     unsigned i;
-    int owned, valid, source_only;
+    int owned, valid, source_only, source_operation, declined;
     if (!task || !task->key) return 0;
     pthread_mutex_lock(&lock);
     entry = delivery_entry(task->key);
@@ -799,23 +868,16 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     owned = d && d->phase == D_PREPARE;
     if (!owned) { pthread_mutex_unlock(&lock); return 0; }
     source_only = d->source_stage == SOURCE_CAPTURE;
-    if (source_only && http_GetStatus(ctx->http_beresp) == 409 &&
+    source_operation = source_only || d->source_stage == SOURCE_RESOLVER;
+    declined = source_operation && http_GetStatus(ctx->http_beresp) == 409 &&
         delivery_header_equals(ctx->http_beresp,HDR("X-UltraCache-Delivery-Public-Source-Version"),"1") &&
         delivery_header_equals(ctx->http_beresp,HDR("X-UltraCache-Delivery-Public-Source-Outcome"),"unavailable") &&
         delivery_header_equals(ctx->http_beresp,H_Content_Length,"0") &&
-        !http_CountHdr(ctx->http_beresp,H_Transfer_Encoding) && ctx->bo->htc && ctx->bo->htc->body_status == BS_NONE) {
-        d->source_declined = d->complete = 1; d->prepare_response_time = ctx->now;
-        filter = VRT_priv_task(ctx,&filter_task_token);
-        if (filter) filter->priv = &task->key;
-        else d->failed = 1;
-        clear_fields(entry->fields); entry->fields = NULL;
-        pthread_mutex_unlock(&lock);
-        http_Unset(ctx->http_beresp,H_Set_Cookie); http_Unset(ctx->http_beresp,h_set_cookie2);
-        if (!filter) VRT_fail(ctx,"Public source refusal association unavailable");
-        return 1;
-    }
+        !http_CountHdr(ctx->http_beresp,H_Transfer_Encoding) && ctx->bo->htc && ctx->bo->htc->body_status == BS_NONE;
+    if (declined) d->source_declined = d->complete = 1;
     http_GetHdr(ctx->http_beresp,H_Content_Type,&content_type);
-    if (d->selection_entry) {
+    if (declined) valid = 1;
+    else if (d->selection_entry) {
         http_GetHdr(ctx->http_beresp,h_selection_version,&selection_version);
         int declared = http_CountHdr(ctx->http_beresp,h_guest_version) || http_GetHdr(ctx->http_beresp,h_selection_version,&selection_version) ||
             (content_type && !strncasecmp(content_type,selection_content_type,sizeof(selection_content_type)-1));
@@ -824,10 +886,31 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
             content_type && !strncasecmp(content_type,selection_content_type,sizeof(selection_content_type)-1) &&
             (!content_type[sizeof(selection_content_type)-1] || content_type[sizeof(selection_content_type)-1] == ';') :
             http_GetStatus(ctx->http_beresp) >= 200 && http_GetStatus(ctx->http_beresp) <= 599;
-        if (valid && !declared && source_only) valid = 0;
+        if (valid && !declared && source_operation) valid = 0;
         if (valid && !declared) {
             /* Keep status, MIME, repeated owner cookies and the actual body
              * on this private PASS. No body copy, JSON parse or second fetch. */
+            if (d->source_projected) {
+                struct fields **owned_tail = &entry->fields;
+                while (*owned_tail) owned_tail = &(*owned_tail)->next;
+                for (i = HTTP_HDR_FIRST; i < ctx->http_beresp->nhd; ++i) {
+                    struct fields *f;
+                    const char *line = ctx->http_beresp->hd[i].b;
+                    if (!line || (!http_IsHdr(&ctx->http_beresp->hd[i],H_Set_Cookie) &&
+                        !delivery_header_name(line,"Set-Cookie2"))) continue;
+                    f = calloc(1,sizeof(*f));
+                    if (f) f->line = strdup(line);
+                    if (!f || !f->line) {
+                        free(f); d->failed = 1;
+                        pthread_mutex_unlock(&lock);
+                        VRT_fail(ctx,"Real visitor cookie handoff unavailable"); return 0;
+                    }
+                    *owned_tail = f; owned_tail = &f->next;
+                }
+                /* Keep resolver→actual response cookie chronology without
+                 * copying the streaming private body or replaying sources. */
+                http_Unset(ctx->http_beresp,H_Set_Cookie); http_Unset(ctx->http_beresp,h_set_cookie2);
+            }
             d->phase = D_RAW_PASS;
             pthread_mutex_unlock(&lock); return 0;
         }
@@ -845,12 +928,19 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
         return 1;
     }
     d->guest_reply = http_CountHdr(ctx->http_beresp,h_guest_version) != 0;
-    if (source_only && d->guest_reply) valid = 0;
+    if (source_operation && d->guest_reply) valid = 0;
     if (d->guest_reply) valid = valid && d->selection_entry && d->guest_requested &&
         delivery_header_equals(ctx->http_beresp,h_guest_version,"1") &&
         !http_CountHdr(ctx->http_beresp,H_Set_Cookie) && !http_CountHdr(ctx->http_beresp,h_set_cookie2);
-    valid = valid && http_GetStatus(ctx->http_beresp) == 200 &&
+    valid = valid && (declined || http_GetStatus(ctx->http_beresp) == 200) &&
         (!http_GetHdr(ctx->http_beresp,H_Content_Encoding,&encoding) || !strcmp(encoding,"identity"));
+    if (valid && d->source_projected && source_operation && !declined) {
+        d->source_resolved_response = delivery_header_equals(ctx->http_beresp,
+            HDR("X-UltraCache-Delivery-Public-Source-Outcome"),"resolved");
+        valid = delivery_header_equals(ctx->http_beresp,HDR("X-UltraCache-Delivery-Public-Source-Version"),"1") &&
+            (d->source_resolved_response || (source_only && delivery_header_equals(ctx->http_beresp,
+                HDR("X-UltraCache-Delivery-Public-Source-Outcome"),"captured")));
+    }
     pthread_mutex_unlock(&lock);
     for (i = HTTP_HDR_FIRST; valid && i < ctx->http_beresp->nhd; ++i) {
         struct fields *f;
@@ -872,7 +962,13 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     if (!entry || !entry->delivery) valid = 0;
     else if (!valid) entry->delivery->failed = 1;
     else {
-        clear_fields(entry->fields); entry->fields = first; first = NULL;
+        if (!source_only && d->source_projected) {
+            struct fields **owned_tail = &entry->fields;
+            while (*owned_tail) owned_tail = &(*owned_tail)->next;
+            *owned_tail = first; first = NULL;
+        } else if (!source_only) {
+            clear_fields(entry->fields); entry->fields = first; first = NULL;
+        }
         entry->delivery->debug_fallback = http_CountHdr(ctx->http_beresp,h_contained_error) == 1 &&
             http_GetHdr(ctx->http_beresp,h_contained_error,&contained) && !strcmp(contained,"1");
         entry->delivery->outcome = 0;
@@ -963,7 +1059,8 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         return 1;
     }
     if (d->phase == D_RAW_PASS) {
-        if (d->failed || !delivery_restore(ctx,d) || !delivery_original_owner(ctx,d)) {
+        if (d->failed || !delivery_restore(ctx,d) || !delivery_original_owner(ctx,d) ||
+            (d->source_projected && !delivery_append_cookies(ctx,d))) {
             d->phase = D_FAILED; return -1;
         }
         d->phase = D_RAW_DELIVERED;
@@ -983,11 +1080,12 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         pthread_mutex_lock(&lock);
         valid = d->complete && !d->failed;
         pthread_mutex_unlock(&lock);
-        if (!valid || http_GetStatus(ctx->http_resp) != (d->source_stage == SOURCE_CAPTURE && d->source_declined ? 409 : 200) ||
+        if (!valid || http_GetStatus(ctx->http_resp) !=
+                ((d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) && d->source_declined ? 409 : 200) ||
             !delivery_parse(ctx,d) || !delivery_restore(ctx,d)) {
             d->phase = D_FAILED; return -1;
         }
-        if (d->source_stage == SOURCE_CAPTURE) {
+        if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) {
             if (ctx->req->restarts+1 > ctx->req->max_restarts) { d->phase = D_FAILED; return -1; }
             d->phase = D_SOURCE_PERSONAL_QUEUED;
             return 1; /* Only the next real personal prepare can complete delivery. */
@@ -1061,6 +1159,7 @@ VCL_STRING vmod_delivery_public_source_outcome(VRT_CTX, struct vmod_priv *priv) 
     const struct continuation *d = priv->priv;
     if (!d || ctx->req->esi_level || d->source_stage == SOURCE_NONE) return NULL;
     if (d->failed || d->phase == D_FAILED) return "protocol-error";
+    if (d->source_unstable) return "unstable-public-projection";
     if (d->source_declined) return "unavailable";
     return d->source_stage == SOURCE_COMPLETE ? "parent-v1" : NULL;
 }

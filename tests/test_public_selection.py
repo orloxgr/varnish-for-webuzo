@@ -140,7 +140,7 @@ class PublicSelection(unittest.TestCase):
             value=sample();value['selectedPublic']['headers'].append(field)
             with self.subTest(field=field):self.assertIsNone(self.parse(value))
     def test_cookie_update_wire_is_strict_and_duplicates_are_rejected(self):
-        for name,value in [('bad\x00name','RVVS'),('bad name','RVVS'),('currency','broken!'),
+        for name,value in [('bad\x00name','RVVS'),('bad;name','RVVS'),('currency','broken!'),
                            ('currency',base64.b64encode(b'EUR; logged_in=1').decode()),
                            ('currency',base64.b64encode(b'EU\r\nR').decode())]:
             payload=sample();payload['selectedPublic']['cookieUpdates']=[dict(name=name,valueBase64=value)]

@@ -4,6 +4,10 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-Public-Source-Version;
     unset req.http.X-UltraCache-Delivery-Public-Source-Role;
     unset req.http.X-UltraCache-Delivery-Public-Source-Outcome;
+    unset req.http.X-UltraCache-Delivery-Public-Source-Projection-Version;
+    unset req.http.X-UltraCache-Delivery-Public-Source-Projection;
+    unset req.http.X-UltraCache-Delivery-Public-Source-Fallback;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Public-Source-Projection-Version;
     unset req.http.X-UltraCache-VCL-Public-Selection-Public-Source-Version;
     # Only the authenticated native dispatch may create this backend phase.
     if (req.http.X-UltraCache-Delivery-Phase == "execution-drain") {
@@ -73,6 +77,7 @@ sub scp_init {
         unset req.http.X-UltraCache-Delivery-Execution-Drain-Context;
         unset req.http.X-UltraCache-Public-Selection-Execution-Drain-Version;
         unset req.http.X-UltraCache-Public-Selection-Public-Source-Version;
+        unset req.http.X-UltraCache-Public-Selection-Public-Source-Projection-Version;
         # These selectors also belong to the separately authenticated native
         # control protocol; ordinary/browser application requests cannot set them.
         unset req.http.X-UltraCache-Delivery-Reuse-Recipe;

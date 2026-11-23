@@ -8,6 +8,7 @@ struct public_declaration {
     struct public_declaration *next;
     char *site, *host, *scope, *wordpress_policy, *names, *guest_policy;
     unsigned public_source;
+    unsigned public_projection;
 };
 static struct public_declaration *public_declarations;
 static unsigned public_selection_vcls;
@@ -143,6 +144,8 @@ VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
         next->guest_policy = strdup(guest_policy ? guest_policy : "");
         next->public_source = delivery_header_equals(ctx->http_req,
             HDR("X-UltraCache-Public-Selection-Public-Source-Version"),"1");
+        next->public_projection = delivery_header_equals(ctx->http_req,
+            HDR("X-UltraCache-Public-Selection-Public-Source-Projection-Version"),"1");
         if (!next->site || !next->host || !next->scope || !next->wordpress_policy || !next->names || !next->guest_policy) { public_declaration_free(next); return 0; }
     }
     pthread_mutex_lock(&lock);
@@ -185,6 +188,14 @@ VCL_BOOL vmod_selection_public_source(VRT_CTX, VCL_STRING site, VCL_STRING host,
     (void)ctx;
     pthread_mutex_lock(&lock); p = public_declaration(site,host,scope);
     available = p && p->public_source;
+    pthread_mutex_unlock(&lock); return available;
+}
+VCL_BOOL vmod_selection_public_projection(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope) {
+    struct public_declaration *p;
+    int available;
+    (void)ctx;
+    pthread_mutex_lock(&lock); p = public_declaration(site,host,scope);
+    available = p && p->public_projection;
     pthread_mutex_unlock(&lock); return available;
 }
 /* An existing authenticated refill can prime the ordinary parent as well as
@@ -262,7 +273,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     struct public_declaration *declaration;
     const char *host = NULL, *method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     char *names = NULL, *wordpress_policy = NULL, *scope = NULL, *actions;
-    int has_variant, found, guest, source_available = 0;
+    int has_variant, found, guest, source_available = 0, projection_available = 0, before_lookup;
     struct guest_request *g = guest_context(ctx);
     unsigned i;
     if ((reselect ? (!d || d->phase != D_RESELECT_READY || !d->reselect_attempted || d->failed ||
@@ -277,6 +288,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     if (found) {
         names = strdup(declaration->names); wordpress_policy = strdup(declaration->wordpress_policy); scope = strdup(declaration->scope);
         source_available = declaration->public_source;
+        projection_available = declaration->public_projection;
     }
     pthread_mutex_unlock(&lock);
     if (!found) return reselect ? -1 : 0;
@@ -287,7 +299,8 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         !strcmp(g->wordpress_policy,wordpress_policy) && !strcmp(g->scope,scope);
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
      * prepares on an actual cold MISS, leaving plain warm HITs alone. */
-    if (!reselect && ((guest && !cold) || (!guest && ((!has_variant && !cold) || (has_variant && cold))))) {
+    before_lookup = has_variant && !projection_available;
+    if (!reselect && ((guest && !cold) || (!guest && ((!before_lookup && !cold) || (before_lookup && cold))))) {
         free(actions); free(wordpress_policy); free(scope); return 0;
     }
     if (ctx->req->restarts+1 > ctx->req->max_restarts) { free(actions); free(wordpress_policy); free(scope); return -1; }
@@ -331,12 +344,13 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     /* Same existing document eligibility; unresolved public resolvers retain
      * their existing actual route resolution. Generic Variant cookies are
      * projected by policy, never by a provider allowlist. */
-    if (!reselect && cold && !guest && !has_variant && source_available &&
+    if (!reselect && cold && !guest && (!has_variant || projection_available) && source_available &&
         delivery_header_equals(ctx->http_req,HDR("X-SCP-Selection-Eligible"),"1")) {
         if (!delivery_copy_header(ctx->http_req,HDR("X-SCP-Key-URL"),&d->source_url) ||
             !delivery_selection_scope_matches(d->selection_scope,d->source_url) ||
             !(d->source_cookie = delivery_selection_projection(d->cookie,d->selection_rules))) return -1;
-        d->source_stage = SOURCE_CAPTURE;
+        d->source_projected = projection_available;
+        d->source_stage = projection_available ? SOURCE_RESOLVER : SOURCE_CAPTURE;
     }
     if (!reselect) for (i = 0; i < 6; ++i)
         if (!delivery_copy_header(ctx->http_req,conditional_headers[i],&d->conditional[i])) return -1;
@@ -367,20 +381,28 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
         if (!d->guest_requested || !delivery_guest_selection_parse(d->body,d->length,d->request_id,d->url,
             d->selection_policy,d->wordpress_policy,d->guest_policy,d->guest_epoch,d->selection_scope,&d->selection)) return 0;
     } else {
-        if (!delivery_selection_parse(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
+        if (d->source_projected) {
+            struct delivery_public_projection *resolved = NULL;
+            if (!delivery_projected_selection_parse(d->body,d->length,d->request_id,d->url,
+                d->selection_policy,d->wordpress_policy,DELIVERY_PROJECTED_PERSONAL,&d->selection,&d->document,&resolved)) return 0;
+            delivery_public_projection_free(resolved);
+        } else if (!delivery_selection_parse(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
             &d->selection,&d->document)) return 0;
         if (d->guest_requested) { guest_disable(ctx); d->cold_entry = !d->guest_has_variant; }
     }
     if (d->document) return 1;
     s = d->selection;
+    if (d->source_projected && (d->source_unstable ||
+        !delivery_public_projection_equal(s->resolved,d->projection))) return 0;
     if (d->source_stage == SOURCE_PERSONAL && !d->source_declined &&
         (!d->source_manifest || strcmp(s->manifest,d->source_manifest) ||
          strcmp(s->parent->generation,d->source_generation))) return 0;
     d->guest_complete = s->guest;
-    if (!delivery_selection_candidate(s,d->cookie,d->selection_rules,&d->candidate)) return 0;
+    if (!delivery_selection_candidate(s,d->resolver_cookie ? d->resolver_cookie : d->cookie,d->selection_rules,&d->candidate)) return 0;
     d->variant = delivery_selection_projection(d->candidate,d->selection_rules);
     if (d->cold_entry) {
-        char *original = delivery_selection_projection(d->cookie,d->selection_rules);
+        char *original = d->source_projected ? delivery_public_projection_cookie(d->projection,d->selection_rules) :
+            delivery_selection_projection(d->cookie,d->selection_rules);
         int same = original && d->variant && !strcmp(original,d->variant);
         free(original);
         if (!same) return 0;
@@ -421,7 +443,7 @@ VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
     if (ctx->req->esi_level || !d || !d->selection_entry || !d->variant ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
-    if (d->cold_entry) return d->lookup_variant ? WS_Copy(ctx->ws,d->lookup_variant,-1) : NULL;
+    if (d->cold_entry && !d->source_projected) return d->lookup_variant ? WS_Copy(ctx->ws,d->lookup_variant,-1) : NULL;
     return WS_Copy(ctx->ws,d->variant,-1);
 }
 VCL_BOOL vmod_selection_local(VRT_CTX, struct vmod_priv *priv) {

@@ -69,8 +69,80 @@ does not accept an unexplained changed Variant tuple. Ordinary warm HITs therefo
 perform no public-source work. Source diagnostics are request-local, never part
 of the cached parent's stored headers.
 
-An explicit typed `resolvedPublic` resolver/reselection extension is agreed but
-not implemented by this checkpoint. Required currency/locale/provider resolution
-is not inferred from an empty projection. Existing configured resolver routes,
-old producers and Basic keep their existing behavior. Actual Blocks and final
+The first gate above does not infer required currency/locale/provider resolution
+from an empty projection. Its separately negotiated extension is below. Old
+producers and Basic keep their existing behavior. Actual Blocks and final
 application-level correctness require separate composed acceptance.
+
+## Explicit actual public projection
+
+This private extension additionally negotiates
+`X-UltraCache-Public-Selection-Public-Source-Projection-Version: 1` and its
+`X-UltraCache-VCL-Public-Selection-Public-Source-Projection-Version: 1` echo.
+It preserves the normal initial lookup, including configured resolver names;
+a valid complete native HIT invokes no resolver, source, prepare or finalizer.
+On a genuine cold MISS, the SAME `public-select` owner runs:
+
+1. `Source-Role: resolver-v1` on the real visitor's original URI and Cookie,
+   before any template/business handler. This is an actual application resolver,
+   not a synthetic provider choice. There is no expected projection to invent.
+2. `Source-Role: parent-v1` on the canonical public source URI with actual
+   Variant-only Cookie. The exact tuple is encoded as padded base64 JSON in
+   `X-UltraCache-Delivery-Public-Source-Projection`.
+3. Actual personal `public-select` on the original visitor URI with its private
+   inputs and the actual resolver-issued Variant updates. It carries the expected
+   projection but no Source-Role. The original raw wire remains separately owned.
+
+All three requests carry
+`X-UltraCache-Delivery-Public-Source-Projection-Version: 1`. Source roles also
+carry `X-UltraCache-Delivery-Public-Source-Version: 1`. The agreed tuple is:
+
+```json
+{
+  "version": 1,
+  "bucket": "actual application bucket",
+  "locale": "actual locale",
+  "language": "actual language",
+  "cookieValues": [{"name": "actual literal Variant name", "valueBase64": "cmF3LXZhbHVl"}]
+}
+```
+
+All three identity fields are strings, including actual empty strings. Rows are
+sorted unique literal names. Canonical base64 encodes exact raw Cookie bytes;
+`null` means actual known absence/deletion and differs from empty or omitted.
+JSON object key order/whitespace do not change identity; duplicate keys, including
+escaped duplicate names, are rejected. Public cookie names use the existing
+Cookie Database literal grammar, including interior spaces, colons, slashes and
+Unicode. Controls, delimiters and leading/trailing whitespace are disallowed;
+every row must also have an active Variant policy. Private consumed-input/PHP
+ambiguity checks retain their existing distinct contract. No provider allowlist,
+global mutation, locale/currency guess or fabricated browser cookie is used.
+
+Resolver-only success has `Source-Version: 1`, `Source-Outcome: resolved`, and
+EXACTLY `schemaVersion`, `requestId`, `originalUrl`, `resolvedPublic` in the outer
+selection envelope. There is no body, snapshot, private recipe or separate
+cookieUpdates field. Its actual cookieValues are merged through the existing
+request-owned visitor candidate; real issuer Set-Cookie headers are retained.
+A matching source snapshot has `Source-Outcome: captured` and MUST include
+`selectedPublic.resolvedPublic`, as must the actual personal selected snapshot.
+The typed tuple, publication and body must all match; an old body cannot be
+relabeled with a new choice. Existing URL/Cookie/Vary dimensions remain the cache
+key authority; the tuple does not introduce an unproven request-to-variant map.
+Changed actual Variant values rejoin the normal key for those actual values,
+never alias the unresolved original/empty key or introduce a manifest-only key
+that repeats source work on every warm lookup.
+
+A parent which measures a different tuple before its template returns the same
+top-level resolvedPublic-only outcome. Its cookies are NOT visitor issuance.
+Native re-enters the real original-visitor resolver once for actual issuer work,
+then retries the pure source. Those two finite internal transitions reserve only
+their own request's restart headroom, like the existing finalizer, without any
+global resource/timeout setting. Repeated instability enters one real private
+personal fallback using authenticated
+`X-UltraCache-Delivery-Public-Source-Fallback: unstable-public-projection`, without
+Source-Role or expected-projection values. Only an actual privateDocument or raw
+private response may complete it; no shared snapshot/private reuse is admitted.
+The explicit fallback reason is not feature-goal acceptance. Actual resolver and
+personal issuer headers retain chronological order; pure source cookies are
+discarded. Private reuse evidence/finalization uses the real effective visitor
+Cookie, while final original-route ownership still uses the preserved raw URI.

@@ -36,7 +36,7 @@ void delivery_selection_free(struct delivery_public_selection *s) {
         while (u) { struct delivery_cookie_update *n = u->next; free(u->name); free(u->value); free(u); u = n; }
         while (h) { struct delivery_header *n = h->next; free(h->line); free(h); h = n; }
         free(s->manifest); free(s->target); delivery_public_parent_free(s->parent);
-        delivery_free_fragments(s->fragments); free(s);
+        delivery_free_fragments(s->fragments); delivery_public_projection_free(s->resolved); free(s);
     }
 }
 
@@ -51,6 +51,25 @@ static int selection_token(const char *s, size_t length) {
     return 1;
 }
 int delivery_cookie_name(const char *name, size_t length) { return selection_token(name,length); }
+/* Same literal-name contract as cookie_defaults.valid_name. This PUBLIC
+ * projection is not a private consumed-input/PHP identifier declaration. */
+static int selection_cookie_literal(const char *name, size_t length) {
+    static const char *unicode_space[] = {"\xc2\x85","\xc2\xa0","\xe1\x9a\x80",
+        "\xe2\x80\x80","\xe2\x80\x81","\xe2\x80\x82","\xe2\x80\x83","\xe2\x80\x84",
+        "\xe2\x80\x85","\xe2\x80\x86","\xe2\x80\x87","\xe2\x80\x88","\xe2\x80\x89",
+        "\xe2\x80\x8a","\xe2\x80\xa8","\xe2\x80\xa9","\xe2\x80\xaf","\xe2\x81\x9f","\xe3\x80\x80"};
+    size_t i;
+    if (!length || name[0] == ' ' || name[length-1] == ' ') return 0;
+    for (i = 0; i < sizeof(unicode_space)/sizeof(*unicode_space); ++i) {
+        size_t n = strlen(unicode_space[i]);
+        if (length >= n && (!memcmp(name,unicode_space[i],n) || !memcmp(name+length-n,unicode_space[i],n))) return 0;
+    }
+    for (i = 0; i < length; ++i) {
+        unsigned char c = (unsigned char)name[i];
+        if (c < 32 || c == 127 || strchr(";=\"{}",c)) return 0;
+    }
+    return 1;
+}
 static int selection_hex(struct text text) {
     size_t i;
     if (text.length != 64) return 0;
@@ -86,7 +105,7 @@ static int selection_updates(struct reader *r, struct delivery_cookie_update **o
             if (take(r,'}')) break;
             if (!take(r,',')) return 0;
         }
-        if (seen != 3 || !selection_token(name.data,name.length)) return 0;
+        if (seen != 3 || !selection_cookie_literal(name.data,name.length)) return 0;
         for (previous = *out; previous; previous = previous->next)
             if (strlen(previous->name) == name.length && !memcmp(previous->name,name.data,name.length)) return 0;
         u = calloc(1,sizeof(*u));
@@ -104,6 +123,73 @@ static int selection_updates(struct reader *r, struct delivery_cookie_update **o
         if (take(r,']')) return 1;
         if (!take(r,',')) return 0;
     }
+}
+void delivery_public_projection_free(struct delivery_public_projection *p) {
+    if (p) {
+        struct delivery_cookie_update *u = p->cookies;
+        while (u) { struct delivery_cookie_update *next = u->next; free(u->name); free(u->value); free(u); u = next; }
+        free(p->bucket); free(p->locale); free(p->language); free(p);
+    }
+}
+static int selection_public_projection(struct reader *r, struct delivery_public_projection **out) {
+    struct delivery_public_projection *p = calloc(1,sizeof(*p));
+    struct delivery_cookie_update *previous = NULL, *u;
+    unsigned seen = 0;
+    if (!p || !take(r,'{')) goto invalid;
+    for (;;) {
+        struct text key,value;
+        unsigned bit;
+        uint64_t version;
+        if (!string(r,&key) || !take(r,':')) goto invalid;
+        if (equal(key,"version")) bit = 1;
+        else if (equal(key,"bucket")) bit = 2;
+        else if (equal(key,"locale")) bit = 4;
+        else if (equal(key,"language")) bit = 8;
+        else if (equal(key,"cookieValues")) bit = 16;
+        else goto invalid;
+        if (seen & bit) goto invalid;
+        seen |= bit;
+        if (bit == 1) { if (!number(r,&version) || version != 1) goto invalid; }
+        else if (bit == 16) { if (!selection_updates(r,&p->cookies)) goto invalid; }
+        else {
+            char **field = bit == 2 ? &p->bucket : bit == 4 ? &p->locale : &p->language;
+            if (!string(r,&value) || !(*field = copy(value))) goto invalid;
+        }
+        if (take(r,'}')) break;
+        if (!take(r,',')) goto invalid;
+    }
+    if (seen != 31) goto invalid;
+    for (u = p->cookies; u; previous = u, u = u->next)
+        if (previous && strcmp(previous->name,u->name) >= 0) goto invalid;
+    *out = p; return 1;
+invalid:
+    delivery_public_projection_free(p); return 0;
+}
+int delivery_public_projection_parse(const char *body, size_t length,
+    struct delivery_public_projection **out) {
+    struct reader r;
+    int ok;
+    if (!out) return 0;
+    *out = NULL;
+    if (!body || !length || length == SIZE_MAX) return 0;
+    r.buffer = malloc(length+1); r.offset = 0; r.length = length;
+    if (!r.buffer) return 0;
+    memcpy(r.buffer,body,length); r.buffer[length] = 0;
+    ok = selection_public_projection(&r,out);
+    whitespace(&r);
+    ok = ok && r.offset == length;
+    free(r.buffer);
+    if (!ok) { delivery_public_projection_free(*out); *out = NULL; }
+    return ok;
+}
+int delivery_public_projection_equal(const struct delivery_public_projection *a,
+    const struct delivery_public_projection *b) {
+    const struct delivery_cookie_update *x, *y;
+    if (!a || !b || strcmp(a->bucket,b->bucket) || strcmp(a->locale,b->locale) || strcmp(a->language,b->language)) return 0;
+    for (x = a->cookies, y = b->cookies; x && y; x = x->next, y = y->next)
+        if (strcmp(x->name,y->name) || !!x->value != !!y->value ||
+            (x->value && strcmp(x->value,y->value))) return 0;
+    return !x && !y;
 }
 static int selection_case(const char *s, size_t n, const char *literal) {
     size_t i;
@@ -252,7 +338,7 @@ static int selection_source_role(struct reader *r) {
     }
 }
 static int selected_public(struct reader *r, const char *policy, const char *wordpress_policy,
-    struct delivery_public_selection **output, int source_only) {
+    struct delivery_public_selection **output, int source_only, int projected) {
     struct delivery_public_selection *s = calloc(1,sizeof(*s));
     unsigned seen = 0;
     uint64_t total = 0;
@@ -272,10 +358,13 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         else if (equal(key,"wordpressPolicyDigest")) bit = 128;
         else if (equal(key,"cookieDelivery")) bit = 256;
         else if (source_only && equal(key,"publicSource")) bit = 512;
+        else if (projected && equal(key,"resolvedPublic")) bit = 1024;
         else goto invalid;
         if (seen&bit) goto invalid;
         seen |= bit;
-        if (bit == 512) {
+        if (bit == 1024) {
+            if (!selection_public_projection(r,&s->resolved)) goto invalid;
+        } else if (bit == 512) {
             if (!selection_source_role(r)) goto invalid;
             s->source_only = 1;
         } else if (bit == 1) {
@@ -300,7 +389,7 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if (seen != ((source_only ? 701u : 255u)+(s->cookie_delivery ? 256u : 0u)) ||
+    if (seen != ((source_only ? 701u : 255u)+(s->cookie_delivery ? 256u : 0u)+(projected ? 1024u : 0u)) ||
         (!source_only && total != s->occurrences) || !selection_header_binding(s) ||
         !delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) goto invalid;
     *output = s; return 1;
@@ -309,12 +398,14 @@ invalid:
 }
 static int selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
-    struct delivery_public_selection **selection, struct delivery_private_document **document, int source_only) {
+    struct delivery_public_selection **selection, struct delivery_private_document **document,
+    int source_only, int projection_mode, struct delivery_public_projection **resolved_only) {
     struct reader r;
     unsigned seen = 0;
     int ok = 0;
     if (!selection || !document) return 0;
     *selection = NULL; *document = NULL;
+    if (resolved_only) *resolved_only = NULL;
     if (!body || !length || length == SIZE_MAX || !request_id || !original_url || !policy || strlen(policy) != 64 ||
         !wordpress_policy || strlen(wordpress_policy) != 64) return 0;
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
@@ -329,36 +420,49 @@ static int selection_parse(const char *body, size_t length,
         if (equal(key,"schemaVersion")) bit = 1;
         else if (equal(key,"requestId")) bit = 2;
         else if (equal(key,"originalUrl")) bit = 4;
-        else if (equal(key,"selectedPublic")) bit = 8;
+        else if (projection_mode != DELIVERY_PROJECTED_RESOLVER && equal(key,"selectedPublic")) bit = 8;
         else if (!source_only && equal(key,"privateDocument")) bit = 16;
+        else if (resolved_only && projection_mode >= DELIVERY_PROJECTED_PARENT && equal(key,"resolvedPublic")) bit = 32;
         else goto done;
         if (seen&bit) goto done;
         seen |= bit;
         if (bit == 1) { if (!number(&r,&schema) || schema != 1) goto done; }
         else if (bit == 2 || bit == 4) {
             if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) goto done;
-        } else if (bit == 8) { if (!selected_public(&r,policy,wordpress_policy,selection,source_only)) goto done; }
+        } else if (bit == 8) { if (!selected_public(&r,policy,wordpress_policy,selection,source_only,projection_mode >= 0)) goto done; }
+        else if (bit == 32) { if (!selection_public_projection(&r,resolved_only)) goto done; }
         else if (!private_document_type(&r,document,0)) goto done;
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
     }
     whitespace(&r);
-    ok = (seen == 15 || seen == 23) && r.offset == length;
+    ok = (seen == 15 || seen == 23 || (resolved_only && seen == 39)) && r.offset == length;
 done:
     free(r.buffer);
-    if (!ok) { delivery_selection_free(*selection); *selection = NULL; delivery_private_document_free(*document); *document = NULL; }
+    if (!ok) {
+        delivery_selection_free(*selection); *selection = NULL; delivery_private_document_free(*document); *document = NULL;
+        if (resolved_only) { delivery_public_projection_free(*resolved_only); *resolved_only = NULL; }
+    }
     return ok;
 }
 int delivery_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection, struct delivery_private_document **document) {
-    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,0);
+    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,0,-1,NULL);
 }
 int delivery_public_source_parse(const char *body, size_t length,
     const char *request_id, const char *source_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection) {
     struct delivery_private_document *document = NULL;
-    return selection_parse(body,length,request_id,source_url,policy,wordpress_policy,selection,&document,1);
+    return selection_parse(body,length,request_id,source_url,policy,wordpress_policy,selection,&document,1,-1,NULL);
+}
+int delivery_projected_selection_parse(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    enum delivery_projected_role role, struct delivery_public_selection **selection,
+    struct delivery_private_document **document, struct delivery_public_projection **resolved_only) {
+    if (role < DELIVERY_PROJECTED_PERSONAL || role > DELIVERY_PROJECTED_RESOLVER) return 0;
+    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,
+        role != DELIVERY_PROJECTED_PERSONAL,(int)role,resolved_only);
 }
 /* Complete guest outcome is negotiated separately. Existing batch grammar is
  * intentionally unchanged: no private occurrence or issuer marker is erased. */
@@ -597,4 +701,28 @@ char *delivery_selection_projection(const char *candidate, const char *rules) {
         out[used] = 0;
     }
     free(pairs); return out;
+}
+char *delivery_public_projection_cookie(const struct delivery_public_projection *p, const char *rules) {
+    struct delivery_public_selection input = {0};
+    char *wire = NULL;
+    if (!p) return NULL;
+    input.updates = p->cookies;
+    return delivery_selection_candidate(&input,NULL,rules,&wire) ? wire : NULL;
+}
+int delivery_public_projection_candidate(const struct delivery_public_projection *p,
+    const char *original, const char *rules, char **candidate) {
+    struct delivery_public_selection input = {0};
+    char *wire = NULL, *expected = NULL;
+    int valid = 0;
+    if (!candidate) return 0;
+    *candidate = NULL;
+    if (!p || !(expected = delivery_public_projection_cookie(p,rules))) goto done;
+    input.updates = p->cookies;
+    if (!delivery_selection_candidate(&input,original,rules,candidate) ||
+        !(wire = delivery_selection_projection(*candidate,rules)) || strcmp(wire,expected)) goto done;
+    valid = 1;
+done:
+    free(wire); free(expected);
+    if (!valid) { free(*candidate); *candidate = NULL; }
+    return valid;
 }

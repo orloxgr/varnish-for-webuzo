@@ -62,7 +62,10 @@ class NativeFullReuse(unittest.TestCase):
     def test_fresh_source_authority_namespace_survives_initial_and_postscope_recovery(self):
         self.run_full_actor(anonymous_nonce=True,scope_fence=True,covered=True,namespace_keys=True)
 
-    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False):
+    def test_projected_resolver_registration_does_not_intercept_a_complete_native_hit(self):
+        self.run_full_actor(projected=True)
+
+    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
@@ -145,7 +148,9 @@ class NativeFullReuse(unittest.TestCase):
                 state=self.call(holder['get'],'private-authority-context',tag=nonce_tag('A'))
                 armed.append((signed,state))
             return (BODY,META+([('Vary','Accept')] if covered else [])) if path==PARENT else ('cold',[('Cache-Control','private, no-store')])
-        with proxy('ultracache',origin,transform=all_origin_hooks) as get:
+        from test_cold_public_selection import choices
+        policies = choices(('brandCurrency','variant')) if projected else None
+        with proxy('ultracache',origin,transform=all_origin_hooks,policies=policies) as get:
             holder['get']=get;get(PARENT)
             if covered:
                 for accept in accepts:get(PARENT,extra={'Accept':accept})
@@ -156,10 +161,18 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual(status,200);self.assertIn('private:A-generation1',body)
             self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
             self.assertEqual(len(records),1)
+            if projected:
+                from test_public_selection_runtime import control
+                status,fields,_=control(get,enabled=True,names='brandCurrency',extra={
+                    'X-UltraCache-Public-Selection-Public-Source-Version':'1',
+                    'X-UltraCache-Public-Selection-Public-Source-Projection-Version':'1'})
+                self.assertEqual(status,200)
+                self.assertEqual(fields.get('X-UltraCache-VCL-Public-Selection-Public-Source-Projection-Version'),'1')
             calls.clear()
             status,headers,body2=get(PARENT,'owner=A; _fbp=second')
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
+            if projected: return  # this case qualifies the registered full-HIT boundary only
             if scope_fence:
                 current=self.observe(get)
                 writer=self.call(get,'private-scope-mutation-begin',current,tag=None,

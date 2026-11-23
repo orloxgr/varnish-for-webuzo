@@ -114,6 +114,11 @@ $Restrict vcl_synth
 
 Negotiated source-only public parent role on the existing selection owner.
 
+$Function BOOL selection_public_projection(STRING site, STRING host, STRING scope)
+$Restrict vcl_synth
+
+Negotiated actual public tuple/resolver outcome on the same selection owner.
+
 $Function STRING delivery_public_source_outcome(PRIV_TOP)
 $Restrict vcl_deliver vcl_synth
 
