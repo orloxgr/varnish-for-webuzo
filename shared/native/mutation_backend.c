@@ -84,6 +84,16 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     scope = declaration ? reuse_scope_find(site,host,declaration->scope) : NULL;
     if (!scope || !scope->enabled || !native_policy || strcmp(native_policy,scope->native_policy) ||
         strcmp(declaration->wordpress_policy,scope->wordpress_policy)) goto done;
+    if (task && task->key) {
+        struct handoff *entry = delivery_entry(task->key);
+        struct continuation *delivery = entry ? entry->delivery : NULL;
+        const struct delivery_fragment *fragment = delivery ? delivery_fragment_named(delivery,url) : NULL;
+        /* Native-owned publication-only recovery and prepared private virtual
+         * sources do not execute an application/provider. Client headers alone
+         * cannot enter either phase or create a skip grant. */
+        if (delivery && (delivery->phase == D_RECOVERY ||
+            (delivery->phase == D_DELIVERED && fragment && fragment->cache_key && fragment->cache_ttl))) goto done;
+    }
     /* Until authenticated personal identity maps are wired, this opt-in actor
      * has genuinely unknown provenance. Never disguise it as known-empty. */
     reuse_scope_unbind(scope);
@@ -95,6 +105,16 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
         scope->lost_execution_context = 1; goto done;
     }
     execution->scope = scope; execution->live = execution->awaiting_receipt = execution->unknown = 1;
+    if (task->key) {
+        struct handoff *entry = delivery_entry(task->key);
+        struct continuation *delivery = entry ? entry->delivery : NULL;
+        if (delivery && delivery->phase == D_PREPARE && delivery->site && !strcmp(delivery->site,site) &&
+            delivery->host && !strcmp(delivery->host,host)) {
+            execution->delivery_key = task->key;
+            memcpy(delivery->reuse_origin_request,execution->request_id,65);
+            memcpy(delivery->reuse_origin_challenge,execution->challenge,65);
+        }
+    }
     memcpy(execution->epoch,public_registry_epoch,65); memcpy(execution->incarnation,scope->incarnation,65);
     memcpy(execution->native_policy,scope->native_policy,65); memcpy(execution->wordpress_policy,scope->wordpress_policy,65);
     memcpy(execution->reuse_policy,scope->policy,65);

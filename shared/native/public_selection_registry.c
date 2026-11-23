@@ -292,6 +292,8 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         d->snapshot_ready = d->snapshot_mode = d->cookie_delivery = d->debug_fallback = d->outcome = 0;
         d->public_deadline = d->prepare_response_time = 0;
         d->parent = NULL; d->occurrences = 0;
+        d->reuse_publication[0] = d->reuse_representation[0] = d->reuse_recipe[0] = 0;
+        d->reuse_origin_request[0] = d->reuse_origin_challenge[0] = 0;
         cold = !has_variant;
     }
     d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;

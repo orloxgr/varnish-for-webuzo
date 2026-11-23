@@ -91,6 +91,25 @@ class NativeReuseAuthority(unittest.TestCase):
             self.assertFalse(repeated['active'],'A completed begin retry must never reopen a writer')
             self.assertEqual(repeated['revision'],fresh['revision'])
 
+    def test_same_clean_dependency_generation_is_idempotent_without_bypassing_cas(self):
+        with proxy('ultracache',lambda p,h:('ordinary',[])) as get:
+            self.register(get);clean=self.ready(get)
+            repeated=self.publish(get,clean,clean['generation'])
+            self.assertEqual(repeated['revision'],clean['revision'])
+            self.assertEqual(repeated['generation'],clean['generation'])
+            changed=self.publish(get,repeated,'e'*64)
+            self.assertNotEqual(changed['revision'],repeated['revision'])
+            self.assertEqual(self.publish(get,clean,clean['generation'],status=409)['reason'],'revision-changed')
+            self.assertEqual(self.publish(get,clean,'e'*64,status=409)['reason'],'revision-changed')
+            writer=self.begin(get,changed,'same-generation-writer')
+            self.assertEqual(self.publish(get,writer,'e'*64,status=409)['reason'],'mutation-active')
+            self.commit(get,writer)
+            self.assertEqual(self.publish(get,changed,'e'*64,status=409)['reason'],'revision-changed')
+            current=self.observe(get)
+            published=self.publish(get,current,'e'*64)
+            self.assertNotEqual(published['revision'],current['revision'],'An UNBOUND post-write grant is still a new publication')
+            self.assertEqual(self.publish(get,published,'e'*64)['revision'],published['revision'])
+
     def test_ack_gc_and_tag_recreation_have_no_implicit_clean_state(self):
         with proxy('ultracache',lambda p,h:('ordinary',[])) as get:
             self.register(get);context=self.ready(get)

@@ -12,11 +12,14 @@ struct mutation_execution {
     struct reuse_scope *scope;
     char request_id[65], challenge[65], proof[65], epoch[65], incarnation[65];
     char native_policy[65], wordpress_policy[65], reuse_policy[65];
+    char recipe[65];
+    uint64_t delivery_key;
     unsigned char key[32];
     char *header;
     unsigned live, awaiting_receipt, unknown;
 };
 static void mutation_execution_free(struct mutation_execution *);
+static int mutation_context_current(const struct mutation_execution *);
 
 struct reuse_transaction {
     struct reuse_transaction *next;
@@ -215,7 +218,8 @@ static void reuse_json_field(struct vsb *json, const char *name, const char *val
 }
 static int reuse_control_reply(struct task *task, int status, const char *reason,
     const struct reuse_scope *scope, const struct reuse_tag *tag, const struct reuse_transaction *transaction,
-    const struct mutation_execution *drained) {
+    const struct mutation_execution *drained, const struct mutation_execution *context_owner,
+    const struct continuation *delivery) {
     struct vsb *json = VSB_new_auto();
     char *body = NULL;
     if (!json) return 503;
@@ -225,6 +229,20 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
     if (drained) {
         reuse_json_field(json,"requestId",drained->request_id);
         reuse_json_field(json,"challenge",drained->challenge);
+    }
+    if (context_owner) {
+        int parent_bound = delivery && *delivery->reuse_publication && *delivery->reuse_representation;
+        reuse_json_field(json,"requestId",context_owner->request_id);
+        reuse_json_field(json,"challenge",context_owner->challenge);
+        reuse_json_field(json,"recipeDigest",context_owner->recipe);
+        if (delivery) reuse_json_field(json,"deliveryRequestId",delivery->request_id);
+        reuse_json_field(json,"contextState",parent_bound ? "parent-bound" : "unqualified");
+        reuse_json_field(json,"parentIdentitySource",parent_bound ? "native-selected-parent" : "none");
+        if (parent_bound) {
+            reuse_json_field(json,"publicationDigest",delivery->reuse_publication);
+            reuse_json_field(json,"representation",delivery->reuse_representation);
+        }
+        VSB_cat(json,",\"provisional\":true,\"cachedFragments\":[]");
     }
     if (scope) {
         reuse_json_field(json,"siteId",scope->site); reuse_json_field(json,"canonicalHost",scope->host);
@@ -282,6 +300,8 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     struct reuse_tag *tag = NULL;
     struct reuse_transaction *transaction = NULL;
     struct mutation_execution *drained = NULL;
+    struct mutation_execution *context_owner = NULL;
+    struct continuation *delivery = NULL;
     const char *operation, *application_scope, *id, *epoch, *incarnation, *expected_scope, *expected;
     const char *reason = "invalid-control";
     int status = 400;
@@ -314,6 +334,46 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (!current || strcmp(current->wordpress_policy,scope->wordpress_policy)) {
             reuse_scope_unbind(scope); status = 409; reason = "wordpress-policy-changed"; goto reply;
         }
+    }
+    if (!strcmp(operation,"delivery-reuse-context")) {
+        const char *request_id = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Request-Id"));
+        const char *challenge = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Challenge"));
+        const char *recipe = reuse_single(ctx->http_req,HDR("X-UltraCache-Delivery-Reuse-Recipe"));
+        const char *delivery_id = reuse_single(ctx->http_req,h_request);
+        const char *original_url = reuse_single(ctx->http_req,h_original);
+        const struct public_declaration *boundary;
+        struct handoff *entry;
+        if (!public_policy(request_id) || !public_policy(challenge) || !public_policy(recipe)) goto reply;
+        for (context_owner = scope->executions; context_owner; context_owner = context_owner->next)
+            if (!strcmp(context_owner->request_id,request_id)) break;
+        if (!context_owner || strcmp(context_owner->challenge,challenge) || !context_owner->live ||
+            !epoch || strcmp(epoch,context_owner->epoch) || !incarnation || strcmp(incarnation,context_owner->incarnation) ||
+            !mutation_context_current(context_owner)) {
+            context_owner = NULL; status = 409; reason = "execution-context-unavailable"; goto reply;
+        }
+        if (*context_owner->recipe && strcmp(context_owner->recipe,recipe)) {
+            context_owner = NULL; status = 409; reason = "delivery-recipe-changed"; goto reply;
+        }
+        entry = context_owner->delivery_key ? delivery_entry(context_owner->delivery_key) : NULL;
+        delivery = entry ? entry->delivery : NULL;
+        boundary = delivery ? public_declaration_for_url(site,scope->host,delivery->url) : NULL;
+        if (delivery && (!boundary || strcmp(boundary->scope,scope->scope) ||
+            delivery->failed || delivery->phase != D_PREPARE || delivery->sent != 1 || delivery->complete ||
+            (delivery_id && strcmp(delivery->request_id,delivery_id)) || strcmp(delivery->site,site) ||
+            strcmp(delivery->host,scope->host) || (original_url && strcmp(delivery->url,original_url)) ||
+            strcmp(delivery->reuse_origin_request,request_id) || strcmp(delivery->reuse_origin_challenge,challenge) ||
+            (*delivery->reuse_recipe && strcmp(delivery->reuse_recipe,recipe)) ||
+            (delivery->selection_scope && strcmp(delivery->selection_scope,scope->scope)) ||
+            (delivery->selection_policy && strcmp(delivery->selection_policy,scope->native_policy)) ||
+            (delivery->wordpress_policy && strcmp(delivery->wordpress_policy,scope->wordpress_policy)))) {
+            delivery = NULL; context_owner = NULL; status = 409; reason = "delivery-owner-unavailable"; goto reply;
+        }
+        if (!delivery && (delivery_id || original_url)) {
+            context_owner = NULL; status = 409; reason = "delivery-owner-unavailable"; goto reply;
+        }
+        memcpy(context_owner->recipe,recipe,65);
+        if (delivery) memcpy(delivery->reuse_recipe,recipe,65);
+        status = 200; reason = "delivery-context-provisional"; goto reply;
     }
     if (!strcmp(operation,"private-authority-context")) {
         if (id) {
@@ -367,6 +427,9 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (reuse_active(tag)) { status = 409; reason = "mutation-active"; goto reply; }
         if (!expected || strcmp(expected,tag->revision)) { status = 409; reason = "revision-changed"; goto reply; }
         if (!public_policy(generation)) goto reply;
+        if (reuse_tag_clean(scope,tag) && !strcmp(tag->generation,generation)) {
+            status = 200; reason = "generation-published"; goto reply;
+        }
         if (!reuse_random_id(tag->revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
         memcpy(tag->generation,generation,65); memcpy(tag->bound_scope_revision,scope->revision,65); tag->clean = 1;
         status = 200; reason = "generation-published"; goto reply;
@@ -419,7 +482,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         }
     }
 reply:
-    status = reuse_control_reply(task,status,reason,scope,tag,transaction,drained);
+    status = reuse_control_reply(task,status,reason,scope,tag,transaction,drained,context_owner,delivery);
     mutation_execution_free(drained);
     pthread_mutex_unlock(&lock); return status;
 }

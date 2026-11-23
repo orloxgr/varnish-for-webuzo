@@ -129,6 +129,8 @@ struct continuation {
     struct delivery_public_parent *public_parent; /* same-request public bytes */
     struct delivery_private_document *document;
     struct delivery_public_selection *selection;
+    char reuse_origin_request[65], reuse_origin_challenge[65], reuse_recipe[65];
+    char reuse_publication[65], reuse_representation[65];
     struct fields *public_headers;
     struct fields *document_headers;
 };
@@ -136,6 +138,7 @@ static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static int public_selection_parse(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
 static void reuse_registry_free(void);
+static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -819,6 +822,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->restart = ctx->req->restarts; d->occurrences = (uint64_t)occurrences;
         d->cookie_delivery = (unsigned)cookie_delivery;
         d->parent = ctx->req->objcore;
+        (void)delivery_reuse_capture_parent(ctx,d);
         d->phase = D_QUEUED;
         return 1;
     }

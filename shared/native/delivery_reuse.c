@@ -23,6 +23,40 @@ struct delivery_reuse_plan {
     unsigned materialized;
 };
 
+static void reuse_hash_lp(struct VSHA256Context *hash, const void *bytes, size_t length) {
+    const unsigned char prefix[4] = {(unsigned char)(length>>24),(unsigned char)(length>>16),
+        (unsigned char)(length>>8),(unsigned char)length};
+    VSHA256_Update(hash,prefix,sizeof(prefix));
+    if (length) VSHA256_Update(hash,bytes,length);
+}
+static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *d) {
+    static const char domain[] = "ultracache-native-representation-v1";
+    struct VSHA256Context hash;
+    unsigned char digest[VSHA256_LEN];
+    const unsigned char *vary;
+    ssize_t length = 0;
+    size_t i;
+    static const char hex[] = "0123456789abcdef";
+    if (!d || !d->manifest || !ctx->req->objcore || !ctx->req->wrk || d->public_deadline <= ctx->now) return 0;
+    if (!delivery_selection_digest((const unsigned char *)d->manifest,strlen(d->manifest),d->reuse_publication)) return 0;
+    vary = ObjHasAttr(ctx->req->wrk,ctx->req->objcore,OA_VARY) ?
+        ObjGetAttr(ctx->req->wrk,ctx->req->objcore,OA_VARY,&length) : NULL;
+    if (length < 0 || (uintmax_t)length > UINT32_MAX || (!vary && length)) {
+        d->reuse_publication[0] = 0; return 0;
+    }
+    VSHA256_Init(&hash);
+    reuse_hash_lp(&hash,domain,sizeof(domain)-1);
+    reuse_hash_lp(&hash,ctx->req->digest,sizeof(ctx->req->digest));
+    reuse_hash_lp(&hash,vary,(size_t)length);
+    VSHA256_Final(digest,&hash);
+    for (i = 0; i < sizeof(digest); ++i) {
+        d->reuse_representation[2*i] = hex[digest[i]>>4];
+        d->reuse_representation[2*i+1] = hex[digest[i]&15];
+    }
+    d->reuse_representation[64] = 0;
+    return 1;
+}
+
 static void delivery_reuse_release(VRT_CTX, struct delivery_reuse_plan *plan) {
     struct delivery_reuse_pin *pin;
     if (!plan) return;
@@ -214,6 +248,7 @@ static double delivery_fragment_deadline(const struct continuation *d, const str
     return d->prepare_response_time+(double)f->cache_ttl;
 }
 #else
+static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *d) { (void)ctx; (void)d; return 0; }
 static void delivery_reuse_release(VRT_CTX, struct delivery_reuse_plan *p) { (void)ctx; (void)p; }
 VCL_BOOL vmod_delivery_reuse_available(VRT_CTX) { (void)ctx; return 0; }
 VCL_INT vmod_delivery_reuse_resolve(VRT_CTX, struct vmod_priv *p) { (void)ctx; (void)p; return -1; }

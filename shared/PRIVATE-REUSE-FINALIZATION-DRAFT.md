@@ -41,6 +41,7 @@ candidate data cannot install reusable admission or personal provenance.
       {
         "descriptor": "<same recipe descriptor>", "url": "/?ultracache_esi=...",
         "cache": {"key": "<existing cache.key64>", "ttl": 120, "tags": "<existing tags field>"},
+        "bodyValidUntil": 1795400000,
         "identity": {
           "identityState": "personal",
           "identityInputs": {"cookieNames": [], "cookiePrefixes": [], "phpMaxInputVars": 1000},
@@ -178,7 +179,9 @@ Absolute `validUntil` values are positive integer Unix seconds from actual
 provider/identity/nonce validity; no configured artificial TTL is introduced.
 The admission deadline is no later than every required identity/body/dependency
 deadline and `cookieWork.validUntil`. Existing `cache.ttl` remains the actual
-positive remaining renderer descriptor TTL. A replay, metadata refill, cache
+positive remaining renderer descriptor TTL. Every fragment also carries its
+original absolute `bodyValidUntil`; protocol delay cannot turn the retained
+relative TTL into a fresh lifetime. A replay, metadata refill, cache
 HIT or object pin never restarts either lifetime. Native also bounds reuse by
 each private HSH object's actual original expiry and actual selected parent
 freshness. Parent or one required private dependency missing/expired/busy means
@@ -215,3 +218,81 @@ execution drain. That phase must not recursively get a mutation context, and
 cannot change/replay the original business status/body/Set-Cookie. Publication
 into native metadata cache and the final pre-header path are implementation
 gates, not claims made by this grammar document.
+
+## Active original execution: `delivery-reuse-context`
+
+Use the existing authenticated per-site control transport, exact application
+scope and the **actual signed backend context's** identities:
+
+```text
+X-UltraCache-Operation: delivery-reuse-context
+X-UltraCache-Private-Request-Id: <signed backend requestId64>
+X-UltraCache-Private-Challenge: <signed backend challenge64>
+X-UltraCache-Private-Epoch: <signed backend epoch64>
+X-UltraCache-Private-Incarnation: <signed backend incarnation64>
+X-UltraCache-Delivery-Reuse-Recipe: <actual canonical proposed recipeDigest64>
+```
+
+If present, `X-UltraCache-Delivery-Request` and
+`X-UltraCache-Delivery-Original-URL` must match the joined actual delivery owner.
+The caller cannot select another owner via those optional fields. Native joins
+the backend task's privately retained request/challenge to its own handoff key,
+then finds the live delivery continuation under the existing registry lock.
+An ordinary original backend with no delivery continuation can receive only an
+unqualified seven-field provenance base. Ended/unknown/mismatched execution,
+current-policy change, wrong epoch/incarnation or changed sealed recipe is not
+accepted. The first canonical recipe proposal is retained as request-local
+metadata; an identical retry is idempotent. It is not an admission installation.
+
+The accepted JSON retains the existing native scope context and adds:
+
+```json
+{
+  "requestId": "<actual signed backend requestId64>",
+  "challenge": "<actual signed backend challenge64>",
+  "recipeDigest": "<sealed proposed64>",
+  "deliveryRequestId": "<actual opaque delivery id, only if joined>",
+  "provisional": true,
+  "contextState": "unqualified",
+  "parentIdentitySource": "none",
+  "cachedFragments": []
+}
+```
+
+Cold selection has no actual selected parent yet and returns no invented
+publication/representation. A hot-parent fill returns
+`contextState:"parent-bound"`, `parentIdentitySource:"native-selected-parent"`
+and `publicationDigest` / `representation` captured from the actual selected
+native parent before prepare. Both cases remain `provisional:true`: the final
+current-parent/authority comparison is still mandatory before installation.
+`cachedFragments:[]` truthfully means this stage has reserved no reusable HIT
+bytes; selective native reservation is a later owner integration, not a grant.
+
+The native representation is lowercase SHA-256 over:
+
+```text
+LP("ultracache-native-representation-v1")
+LP(actual selected parent native hash digest bytes)
+LP(actual selected parent's packed Vary bytes, or empty)
+```
+
+The digest is captured while that actual parent object is owned by the current
+native request; a later control caller does not dereference a borrowed object
+pointer. Shared/irrelevant cookies do not invent another representation, while
+actual native Vary remains effective. The producer echoes this opaque digest;
+it does not reconstruct internal Vary bytes or infer a future representation.
+
+While original raw input is still request-local, the producer persists
+`inputEvidence`, using the existing **seven-field cross-route identity MAC
+primitive over the complete recipe.inputs projection**, and the individual
+identityBindings/actual claims/fingerprints. No raw Cookie/frame/HTML is written
+to the execution row. A parent-bound original can additionally compute the
+full ten-field page binding then. A cold candidate stays unqualified. In the
+later protocol-only finalization the native owner still has its request-local
+wire/effective updates, verifies retained inputEvidence and derives the actual
+full binding after the parent exists; signatures alone cannot qualify stale
+body/state. This late finalization API/storage step remains an integration gate.
+
+Native publication-only recovery and prepared private virtual sources do not
+execute the application and cannot recursively create mutation contexts. That
+exclusion uses actual owned phases/source claims, never an incoming skip header.

@@ -143,6 +143,12 @@ CAS of exactly those observed revisions. Native requires ready scope, no active
 tag writers and matching revisions. A stale sequence retries all steps, never
 attaches an old state read to a newer revision. Only this explicit operation
 grants a tag generation; ordinary fills/context/fragment lookup never do.
+Generations describe actual provider dependencies/tags, not fragment cache keys
+or aggregate recipe keys. Two different fragment bodies may share an owner tag.
+After all scope/active-writer/current-revision checks, publishing the identical
+already-CLEAN generation preserves its existing revision. Different generations,
+UNBOUND/post-write publication and stale CAS retain the normal fencing checks;
+same-generation requests never bypass an outstanding writer or stale revision.
 
 ### `private-mutation-ack`
 
