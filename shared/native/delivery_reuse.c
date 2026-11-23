@@ -86,7 +86,7 @@ static struct objcore *delivery_reuse_lookup(VRT_CTX, const struct continuation 
     const hdr_t object_marker = HDR("X-SCP-Private-Object");
     int strange = worker->strangelove, valid = 0;
     const char *parts[] = {"ultracache-private-v1", d->site, d->host,
-        fragment->url, fragment->cache_key};
+        fragment ? fragment->url : NULL, fragment ? fragment->cache_key : NULL};
     size_t i;
     r = Req_New(parent->sp,parent);
     r->wrk = worker;
@@ -95,22 +95,30 @@ static struct objcore *delivery_reuse_lookup(VRT_CTX, const struct continuation 
     VSLb(parent->vsl,SLT_Link,"req %ju reuse",(uintmax_t)VXID(r->vsl->wid));
     HTTP_Setup(r->http,r->ws,r->vsl,SLT_ReqMethod);
     HTTP_Dup(r->http,parent->http);
-    http_SetH(r->http,HTTP_HDR_URL,fragment->url);
-    http_ForceField(r->http,HTTP_HDR_METHOD,"GET");
-    http_Unset(r->http,H_Cookie); http_Unset(r->http,H_Authorization);
-    http_Unset(r->http,H_Accept_Encoding);
-    /* Request fields used by BAN/Vary retain the actual private namespace. */
-    http_ForceHeader(r->http,H_Host,d->host);
-    http_ForceHeader(r->http,h_private_key,fragment->cache_key);
-    http_ForceHeader(r->http,HDR("X-SCP-Key-URL"),fragment->url);
+    if (fragment) {
+        http_SetH(r->http,HTTP_HDR_URL,fragment->url);
+        http_ForceField(r->http,HTTP_HDR_METHOD,"GET");
+        http_Unset(r->http,H_Cookie); http_Unset(r->http,H_Authorization);
+        http_Unset(r->http,H_Accept_Encoding);
+        /* Request fields used by BAN/Vary retain the actual private namespace. */
+        http_ForceHeader(r->http,H_Host,d->host);
+        http_ForceHeader(r->http,h_private_key,fragment->cache_key);
+        http_ForceHeader(r->http,HDR("X-SCP-Key-URL"),fragment->url);
+    }
     r->t_req = VTIM_real(); r->d_ttl = -1; r->d_grace = -1;
     r->hash_ignore_busy = 1;
     if (WS_Overflowed(r->ws)) goto done;
-    VSHA256_Init(&hash);
-    for (i = 0; i < sizeof(parts)/sizeof(parts[0]); ++i) {
-        HSH_AddString(r,&hash,parts[i]); HSH_AddString(r,&hash,NULL);
+    if (fragment) {
+        VSHA256_Init(&hash);
+        for (i = 0; i < sizeof(parts)/sizeof(parts[0]); ++i) {
+            HSH_AddString(r,&hash,parts[i]); HSH_AddString(r,&hash,NULL);
+        }
+        VSHA256_Final(r->digest,&hash);
+    } else {
+        /* The parent uses its actual already-computed native digest and Vary
+         * request. Do not reconstruct its cache key or normalize its inputs. */
+        memcpy(r->digest,parent->digest,sizeof(r->digest));
     }
-    VSHA256_Final(r->digest,&hash);
     VRY_Prep(r);
     result = HSH_Lookup(r,&object,&busy);
     VRY_Finish(r,DISCARD);
@@ -120,8 +128,9 @@ static struct objcore *delivery_reuse_lookup(VRT_CTX, const struct continuation 
      * tests active fetch ownership; never wait in ObjIterate for such a body. */
     fetch = HSH_RefBoc(object);
     if (fetch) { HSH_DerefBoc(worker,object); goto done; }
-    marker = HTTP_GetHdrPack(worker,object,object_marker);
-    valid = marker && !strcmp(marker,"1") &&
+    marker = fragment ? HTTP_GetHdrPack(worker,object,object_marker) : NULL;
+    valid = (fragment ? marker && !strcmp(marker,"1") :
+        object == parent->objcore && object->t_origin+object->ttl > VTIM_real()) &&
         !HTTP_GetHdrPack(worker,object,H_Set_Cookie) &&
         !HTTP_GetHdrPack(worker,object,h_set_cookie2);
 done:

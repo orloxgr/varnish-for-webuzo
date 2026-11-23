@@ -8,6 +8,8 @@
 #include "delivery_reuse_inputs.h"
 
 struct reuse_scope;
+struct reuse_execution_tag { struct reuse_execution_tag *next; char id[65]; };
+struct reuse_identity_schema;
 struct reuse_discovery {
     struct reuse_discovery *next;
     char publication[65], representation[65], revision[65];
@@ -24,6 +26,7 @@ struct mutation_execution {
     unsigned char key[32];
     char *header;
     unsigned live, awaiting_receipt, unknown;
+    struct reuse_execution_tag *known_tags; /* revoke-only fences until actual drain */
 };
 static void mutation_execution_free(struct mutation_execution *);
 static int mutation_context_current(const struct mutation_execution *);
@@ -50,11 +53,17 @@ struct reuse_scope {
     struct mutation_execution *executions;
     struct reuse_discovery **discoveries; /* declarations only; cached record is authority */
     size_t discovery_capacity, discovery_count;
+    struct reuse_identity_schema *identity_schemas;
     struct reuse_tag **tags;
     size_t tag_capacity, tag_count;
 };
 static struct reuse_scope *reuse_scopes;
 static const char *reuse_single(const struct http *, hdr_t);
+static void reuse_identity_free(struct reuse_scope *);
+#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+static int reuse_identity_install(struct reuse_scope *, const struct delivery_reuse_record *);
+#endif
+static void reuse_identity_prearm(struct reuse_scope *, struct mutation_execution *, const char *);
 
 static int reuse_random_id(char output[65]) {
     unsigned char bytes[32];
@@ -82,6 +91,7 @@ static void reuse_registry_free(void) {
             scope->discoveries[i] = value->next; delivery_reuse_recipe_free(value->recipe); free(value);
         }
         free(scope->discoveries);
+        reuse_identity_free(scope);
         for (i = 0; i < scope->tag_capacity; ++i) {
             struct reuse_tag *tag = scope->tags[i];
             while (tag) { struct reuse_tag *next = tag->next; reuse_tag_free(tag); tag = next; }
@@ -145,6 +155,14 @@ static size_t reuse_active(const struct reuse_tag *tag) {
     for (transaction = tag ? tag->transactions : NULL; transaction; transaction = transaction->next)
         if (transaction->active) ++count;
     return count;
+}
+static int reuse_tag_execution(const struct reuse_scope *scope, const char *id) {
+    const struct mutation_execution *execution;
+    for (execution = scope->executions; execution; execution = execution->next) {
+        const struct reuse_execution_tag *tag;
+        for (tag = execution->known_tags; tag; tag = tag->next) if (!strcmp(tag->id,id)) return 1;
+    }
+    return 0;
 }
 static int reuse_tag_clean(const struct reuse_scope *scope, const struct reuse_tag *tag) {
     return scope && scope->ready && tag->clean && !strcmp(tag->bound_scope_revision,scope->revision);
@@ -572,6 +590,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (!scope->ready) { status = 409; reason = "scope-unbound"; goto reply; }
         if (!expected_scope || strcmp(expected_scope,scope->revision)) { status = 409; reason = "scope-revision-changed"; goto reply; }
         if (reuse_active(tag)) { status = 409; reason = "mutation-active"; goto reply; }
+        if (reuse_tag_execution(scope,id)) { status = 409; reason = "execution-unsettled"; goto reply; }
         if (!expected || strcmp(expected,tag->revision)) { status = 409; reason = "revision-changed"; goto reply; }
         if (!public_policy(generation)) goto reply;
         if (reuse_tag_clean(scope,tag) && !strcmp(tag->generation,generation)) {
@@ -585,6 +604,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         struct reuse_tag **position;
         if (!expected || strcmp(expected,tag->revision)) { status = 409; reason = "revision-changed"; goto reply; }
         if (tag->transactions) { status = 409; reason = "transaction-unacknowledged"; goto reply; }
+        if (reuse_tag_execution(scope,id)) { status = 409; reason = "execution-unsettled"; goto reply; }
         position = &scope->tags[reuse_hash(id)%scope->tag_capacity];
         while (*position && *position != tag) position = &(*position)->next;
         *position = tag->next; --scope->tag_count; reuse_tag_free(tag); tag = NULL;

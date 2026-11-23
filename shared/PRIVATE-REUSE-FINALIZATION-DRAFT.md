@@ -477,7 +477,14 @@ blanket prohibition of unrelated Shared tracking issuers. Native does not infer
 none from missing Set-Cookie, synthesize an issuer value or silently substitute
 an effective consumed-cookie projection for the original evidence.
 
-Generic revoke-only personal maps / targeted execution fencing and actual
-external mutation/content invalidation coverage remain separately tracked gates.
-Unknown execution still invalidates only its own scope; a mapping or Shared
-policy cannot infer known-empty/full arbitrary cross-route actor coverage.
+Generic revoke-only personal maps are now installed only after full accepted
+finalization. They retain declaration schemas, seven-field identity MACs, opaque
+owner/tag identities and actual identity-validity boundaries, never raw Cookie,
+frames or bodies. Multiple owners sharing one input binding coexist. A matching
+later backend prearms those exact tag revisions before application dispatch;
+original execution fences remain until explicit actual-drain retirement. Response
+headers, receipts or native task fini cannot retire them. Tag publication/retire
+checks those fences too. Unknown execution still invalidates only its own scope;
+a positive mapping or Shared policy cannot infer known-empty/full arbitrary
+cross-route actor coverage. Actual external mutation/content invalidation coverage
+and producer application acceptance remain separate gates.

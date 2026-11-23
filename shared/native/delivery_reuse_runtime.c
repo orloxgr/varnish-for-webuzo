@@ -160,6 +160,7 @@ static int delivery_reuse_finish(VRT_CTX, struct continuation *d) {
         pthread_mutex_lock(&lock);
         if (delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),1)) {
             if (delivery_reuse_publish_discovery(d,delivery_reuse_current_scope(d),record)) {
+                (void)reuse_identity_install(delivery_reuse_current_scope(d),record);
                 delivery_reuse_record_free(d->reuse_record); d->reuse_record = record; record = NULL;
             }
         }
@@ -240,6 +241,13 @@ unlock:
     discovery = scope ? delivery_reuse_discovery(scope,d) : NULL;
     valid = discovery && !strcmp(discovery->revision,d->reuse_discovery_revision) &&
         delivery_reuse_record_current(d,record,scope,0) && wire.object->t_origin+wire.object->ttl > VTIM_real();
+    if (valid) {
+        struct objcore *current_parent = delivery_reuse_lookup(ctx,d,NULL);
+        struct objcore *current_metadata = delivery_reuse_lookup(ctx,d,&metadata);
+        valid = current_parent && current_parent == ctx->req->objcore && current_metadata && current_metadata == wire.object;
+        if (current_parent) (void)HSH_DerefObjCore(ctx->req->wrk,&current_parent);
+        if (current_metadata) (void)HSH_DerefObjCore(ctx->req->wrk,&current_metadata);
+    }
     for (pin = d->reuse_plan->pins; valid && pin; pin = pin->next) {
         struct objcore *current = delivery_reuse_lookup(ctx,d,pin->fragment);
         valid = current && current == pin->object && pin->deadline > VTIM_real();

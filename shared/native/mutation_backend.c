@@ -10,6 +10,10 @@ static void mutation_execution_free(struct mutation_execution *execution) {
     volatile unsigned char *wipe;
     size_t i;
     if (!execution) return;
+    while (execution->known_tags) {
+        struct reuse_execution_tag *next = execution->known_tags->next;
+        free(execution->known_tags); execution->known_tags = next;
+    }
     delivery_mutation_header_free(execution->header);
     wipe = execution->key;
     for (i = 0; i < sizeof(execution->key); ++i) wipe[i] = 0;
@@ -95,8 +99,9 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
         if (delivery && (delivery->phase == D_RECOVERY || delivery->phase == D_FINALIZE ||
             (delivery->phase == D_DELIVERED && fragment && fragment->cache_key && fragment->cache_ttl))) goto done;
     }
-    /* Until authenticated personal identity maps are wired, this opt-in actor
-     * has genuinely unknown provenance. Never disguise it as known-empty. */
+    /* Positive personal maps prearm known tags below. They do not prove full
+     * cross-route actor coverage for this backend lifecycle: retain the explicit
+     * own-scope unknown fence instead of inferring known-empty from a match. */
     reuse_scope_unbind(scope);
     execution = calloc(1,sizeof(*execution));
     if (!task || !execution || !credential || !*credential ||
@@ -106,6 +111,7 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
         scope->lost_execution_context = 1; goto done;
     }
     execution->scope = scope; execution->live = execution->awaiting_receipt = execution->unknown = 1;
+    reuse_identity_prearm(scope,execution,reuse_single(ctx->http_bereq,H_Cookie));
     if (task->key) {
         struct handoff *entry = delivery_entry(task->key);
         struct continuation *delivery = entry ? entry->delivery : NULL;

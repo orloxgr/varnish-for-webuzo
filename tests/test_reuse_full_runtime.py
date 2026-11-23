@@ -39,7 +39,8 @@ class NativeFullReuse(unittest.TestCase):
     recover=authority.NativeReuseAuthority.recover
     publish=authority.NativeReuseAuthority.publish
     def test_metadata_and_all_private_bodies_compose_without_any_origin_then_missing_body_refills(self):
-        holder={};calls=[];prepared={};generation=[1];records=[]
+        holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
+        nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
         recipe=seal_recipe(dict(inputs=declaration(['owner']),fragments=[
             dict(url=PRIVATE,provider='cart',occurrences=2),dict(url=ADAPTIVE,provider='nonce',occurrences=1)]))
         def cache_key(url,owner):return hashlib.sha256((url+'|'+owner+'|'+str(generation[0])).encode()).hexdigest()
@@ -77,16 +78,27 @@ class NativeFullReuse(unittest.TestCase):
                 rows=[]
                 for descriptor in recipe['fragments']:
                     f=next(row for row in old['renderedFragments'] if row['url']==descriptor['url'])
+                    dependency=owner_tag
+                    if descriptor['provider']=='nonce':
+                        dependency=nonce_tag(owner)
+                        nonce_context=self.call(holder['get'],'private-authority-context',tag=dependency)
+                        dependency_ack=self.call(holder['get'],'private-generation-publish',nonce_context,tag=dependency,
+                            extra={'X-UltraCache-Private-Generation':hashlib.sha256(str(generation[0]).encode()).hexdigest()})
+                    else:dependency_ack=ack
                     rows.append(dict(descriptor=descriptor['descriptor'],url=descriptor['url'],cache=f['cache'],bodyValidUntil=deadline+10,
                         identity=dict(identityState='personal',identityInputs=recipe['inputs'],identityBinding=identity_mac(c,owner),
-                            owner=owner_tag,tags=[owner_tag],validUntil=deadline+20),
-                        authority=[dict(tag=owner_tag,revision=ack['revision'],generation=ack['generation'])]))
+                            owner=dependency,tags=[dependency],validUntil=deadline+20),
+                        authority=[dict(tag=dependency,revision=dependency_ack['revision'],generation=dependency_ack['generation'])]))
                 record=dict(schemaVersion=1,requestId=context['deliveryRequestId'],originalUrl=path,
                     reuse=dict(version=1,context=c,recipe=recipe,admission=dict(binding=context['binding'],validUntil=deadline,
                         cookieWork=dict(state='none',validUntil=deadline+20),fragments=rows)))
                 records.append(record)
                 return json.dumps(record),[('Content-Type','application/vnd.ultracache.reuse+json'),('Cache-Control','private, no-store'),
                     ('X-UltraCache-Delivery-Reuse-Outcome','finalized'),('X-UltraCache-Delivery-Reuse-Fresh-Remaining','99')]
+            if path=='/__owned_mutation-map':
+                signed=signed_context(self,headers,path,'GET')
+                state=self.call(holder['get'],'private-authority-context',tag=nonce_tag('A'))
+                armed.append((signed,state))
             return (BODY,META) if path==PARENT else ('cold',[('Cache-Control','private, no-store')])
         with proxy('ultracache',origin,transform=all_origin_hooks) as get:
             holder['get']=get;get(PARENT);calls.clear();self.register(get)
@@ -121,5 +133,22 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual(calls,[],'The second independently bound owner also uses native-only composed HIT')
             status,_,again=get(PARENT,'owner=A')
             self.assertEqual(status,200);self.assertIn('private:A-generation2',again);self.assertNotIn('private:B-',again)
+            # Two provider owners share the same input binding. Both mappings
+            # coexist; a later cross-route backend prearms the nonce owner too.
+            old_nonce=self.call(get,'private-authority-context',tag=nonce_tag('A'))
+            other_nonce=self.call(get,'private-authority-context',tag=nonce_tag('B'))
+            self.assertEqual(get('/__owned_mutation-map','owner=A; _fbp=unrelated')[0],200)
+            signed,state=armed[-1]
+            self.assertNotEqual(state['revision'],old_nonce['revision'])
+            self.assertEqual(self.call(get,'private-authority-context',tag=nonce_tag('B'))['revision'],other_nonce['revision'])
+            self.assertEqual(self.call(get,'private-tag-retire',state,tag=nonce_tag('A'),expected_status=409)['reason'],'execution-unsettled')
+            ended=self.call(get,'private-authority-context',tag=nonce_tag('A'))
+            self.assertEqual(self.call(get,'private-tag-retire',ended,tag=nonce_tag('A'),expected_status=409)['reason'],'execution-unsettled',
+                'Backend response/fini must not retire the execution fence')
+            self.call(get,'private-execution-drained',ended,tag=None,extra={
+                'X-UltraCache-Private-Request-Id':signed['requestId'],'X-UltraCache-Private-Challenge':signed['challenge'],
+                'X-UltraCache-Private-Drained':'1'})
+            self.assertEqual(self.call(get,'private-tag-retire',ended,tag=nonce_tag('A'))['reason'],'tag-retired')
+            self.assertEqual(self.observe(get)['scopeState'],'unbound','Revoke maps never imply whole actor coverage or CLEAN')
 
 if __name__=='__main__':unittest.main()
