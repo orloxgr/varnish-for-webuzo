@@ -91,11 +91,11 @@ class GuestEnvelope(unittest.TestCase):
             b',"guestInputs":'+json.dumps(valid).encode())
         self.assertFalse(self.parse(raw)['guestInputs'])
 
-    def test_extended_candidate_requires_every_active_name_explicitly_shared(self):
+    def test_extended_candidate_uses_existing_shared_fallback_and_explicit_actions(self):
         self.lib.delivery_selection_all_shared.argtypes=[ctypes.c_char_p,ctypes.c_char_p]
         self.lib.delivery_selection_all_shared.restype=ctypes.c_int
         rules=b'shared\tprefix\tmetric_\nvariant\texact\tcurrency\nprivate\texact\tauth\n'
-        for raw,expected in ((b'metric_a=1; metric_b=2',1),(b'unknown=1',0),
+        for raw,expected in ((b'metric_a=1; metric_b=2',1),(b'unknown=1',1),
             (b'metric_a=1; currency=EUR',0),(b'auth=1',0),(b'',0),(b'metric_a',0)):
             self.assertEqual(self.lib.delivery_selection_all_shared(raw,rules),expected)
     def test_all_owner_bindings_are_exact(self):

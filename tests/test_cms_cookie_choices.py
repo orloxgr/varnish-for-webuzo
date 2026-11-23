@@ -38,7 +38,7 @@ def cache(fields):
 class CMSCookieDefaults(unittest.TestCase):
     def test_only_the_visible_cms_defaults_change_each_existing_profile_identity(self):
         prior = json.loads((Path(__file__).parent/'fixtures/cookie-defaults-2026.11.20.11.json').read_text())
-        added = {'SSESS', 'SESS', 'PrestaShop-', 'joomla_user_state', 'joomla_remember_me_'}
+        added = {'SSESS', 'SESS', 'PrestaShop-', 'joomla_user_state', 'joomla_remember_me_', 'ultracache_esi_optin'}
         remaining = [row for row in cookie_defaults.defaults()['rules'] if row['match']['value'] not in added]
         for profile in ('basic', 'ultracache'):
             projection = sorted((row['match']['kind'], row['match']['value'], row['actions'][profile]) for row in remaining)

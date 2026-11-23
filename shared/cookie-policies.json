@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.21.1",
+  "version": "2026.11.23.1",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -2487,6 +2487,50 @@
         "ultracache": "private"
       },
       "description": "Joomla uses this cookie to initiate remembered authentication. The default is Private in both profiles; the selected cookie action remains overrideable."
+    },
+    {
+      "id": "ultracache-esi-optin",
+      "match": {
+        "kind": "exact",
+        "value": "ultracache_esi_optin"
+      },
+      "provider": "UltraCache",
+      "integration": "woocommerce-esi-client-capability",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application-client",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "functional-capability",
+        "authority": "provider"
+      },
+      "attributes": {
+        "domain": "host-only",
+        "path": "/",
+        "maxAgeSeconds": null,
+        "secure": "https",
+        "httpOnly": false,
+        "sameSite": "Lax"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "https://github.com/orloxgr/ultracache-dev/blob/5197d0fd422c050564222b6a2a2a7477d630abe4/assets/js/woocommerce-esi-optin.js"
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "description": "Browser capability marker for UltraCache ESI mini-cart support. It contains no customer or session identity. Actual provider/session inputs remain separate. Shared by default in both profiles; administrator Shared, Variant and Private choices remain authoritative."
     }
   ]
 }

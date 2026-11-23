@@ -612,9 +612,9 @@ done:
     return ok;
 }
 
-static int selection_cookie_action(const char *rules, const char *name, size_t length, int fallback) {
+int delivery_cookie_action(const char *rules, const char *name, size_t length) {
     const char *p = rules;
-    if (!p) return fallback;
+    if (!p) return 0;
     while (*p) {
         const char *end = strchr(p,'\n'), *action = strchr(p,'\t'), *kind = action ? strchr(action+1,'\t') : NULL;
         size_t n;
@@ -633,10 +633,7 @@ static int selection_cookie_action(const char *rules, const char *name, size_t l
         }
         p = *end ? end+1 : end;
     }
-    return fallback;
-}
-int delivery_cookie_action(const char *rules, const char *name, size_t length) {
-    return selection_cookie_action(rules,name,length,0);
+    return 0;
 }
 int delivery_selection_all_shared(const char *original, const char *rules) {
     const char *p = original;
@@ -648,7 +645,7 @@ int delivery_selection_all_shared(const char *original, const char *rules) {
         while (p < end && (*p == ' ' || *p == '\t')) ++p;
         equals = memchr(p,'=',(size_t)(end-p));
         if (!equals || !delivery_cookie_name(p,(size_t)(equals-p)) ||
-            selection_cookie_action(rules,p,(size_t)(equals-p),-1) != 0) return 0;
+            delivery_cookie_action(rules,p,(size_t)(equals-p)) != 0) return 0;
         ++pairs; p = *end ? end+1 : end;
     }
     return pairs != 0;

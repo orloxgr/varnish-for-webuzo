@@ -22,6 +22,19 @@ def dual(basic,ultracache,name='comment_author_',kind='prefix'):
 
 
 class CookieProfiles(unittest.TestCase):
+    def test_optin_is_an_ordinary_visible_shared_default_with_both_overrides(self):
+        match=dict(kind='exact',value='ultracache_esi_optin')
+        row=next(r for r in defaults.defaults()['rules'] if r['match']==match)
+        self.assertEqual(row['id'],'bundled:policy:ultracache-esi-optin')
+        self.assertEqual(row['actions'],dict(basic='shared',ultracache='shared'))
+        visible=next(r for r in admin.table({'records':[]},load_catalogue()) if r['match']==match)
+        for profile in admin.PROFILES:self.assertEqual(visible['profile_actions'][profile]['action'],'shared')
+        for action in ('shared','variant','private'):
+            selected=dual(action,action,name=match['value'],kind='exact')
+            for profile in admin.PROFILES:
+                active=admin.active(selected,profile=profile)
+                self.assertEqual(next(r['action'] for r in active if r['match']==match),action)
+
     def test_all_defaults_have_two_concrete_actions_and_only_app_integrated_choices_differ(self):
         policy,metadata=defaults.bundle()
         artifact=json.loads((ROOT/'shared/cookie-defaults.json').read_text(encoding='utf-8'))

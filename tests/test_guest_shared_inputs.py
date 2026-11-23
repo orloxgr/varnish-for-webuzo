@@ -18,13 +18,14 @@ def declaration(names=('actual_session',),prefixes=('actual_auth_',),fragments=T
 
 class SharedGuests(Guests):
     def __init__(self):
-        super().__init__();self.inputs=declaration();self.negotiate=True
+        super().__init__();self.inputs=declaration();self.negotiate=True;self.vary_cookie=False
     def __call__(self,path,headers):
         result=super().__call__(path,headers)
         if headers.get('X-UltraCache-Delivery-Guest-Publication-Version')=='1':
             self.asserted_version=headers.get('X-UltraCache-VCL-Guest-Inputs-Version')
             body,fields=result;payload=json.loads(body)
             if self.negotiate and self.asserted_version=='1':payload['guestPublic']['guestInputs']=copy.deepcopy(self.inputs)
+            if self.vary_cookie:payload['guestPublic']['headers'].append('Vary: Cookie')
             return json.dumps(payload),fields
         return result
 
@@ -89,8 +90,9 @@ class SharedGuestInputs(unittest.TestCase):
                     self.assertEqual(status,200);self.assertIn('private:'+kind,body)
                     self.assertNotIn('X-UltraCache-Guest-Publication',dict(fields))
 
-    def test_variant_private_and_unknown_cookies_do_not_enter_extended_guest_key(self):
-        for name,action in (('cmp_value','variant'),('secret','private'),('unknown',None)):
+    def test_explicit_variant_and_private_cookies_do_not_enter_extended_guest_key(self):
+        for name,action in (('cmp_value','variant'),('secret','private'),
+                            ('ultracache_esi_optin','variant'),('ultracache_esi_optin','private')):
             with self.subTest(name=name):
                 app=SharedGuests();policy=choices(*([(name,action)] if action else []))
                 with proxy('ultracache',app,policies=policy) as get:
@@ -99,6 +101,24 @@ class SharedGuestInputs(unittest.TestCase):
                     self.assertEqual(status,200)
                     self.assertNotIn('X-UltraCache-Guest-Publication',dict(fields))
                     self.assertEqual(len(app.guest_requests),1)
+
+    def test_existing_shared_fallback_reuses_guest_without_requiring_a_named_rule(self):
+        app=SharedGuests();app.vary_cookie=True
+        with proxy('ultracache',app) as get:
+            register(get);get('/fallback');get.stop_origin()
+            for owner in ('A','B'):
+                status,fields,body=get('/fallback','unlisted_functional='+owner)
+                self.assertEqual((status,cache(fields),body),(200,'HIT',GUEST_BODY))
+            self.assertEqual(len(app.calls),1)
+
+    def test_shared_fallback_still_binds_actual_provider_input(self):
+        app=SharedGuests();app.inputs=declaration(names=('unlisted_provider_input',),prefixes=())
+        with proxy('ultracache',app) as get:
+            register(get);get('/actual-input')
+            status,fields,body=get('/actual-input','unlisted_provider_input=present',{'X-Test-Visitor':'provider'})
+            self.assertEqual(status,200);self.assertIn('private:provider',body)
+            self.assertNotIn('X-UltraCache-Guest-Publication',dict(fields))
+            self.assertEqual(len(app.guest_requests),1)
 
     def test_empty_actual_private_closure_still_checks_all_shared_policy(self):
         app=SharedGuests();app.inputs=declaration(names=(),prefixes=(),fragments=False)
@@ -129,13 +149,16 @@ class SharedGuestInputs(unittest.TestCase):
             self.assertEqual(len(app.guest_requests),1)
 
     def test_bundled_shared_sourcebuster_does_not_require_first_stateful_admission(self):
-        app=SharedGuests()
-        with proxy('ultracache',app) as get:
+        app=SharedGuests();app.vary_cookie=True
+        with proxy('ultracache',app,daemon_parameters=('vsl_mask=+Debug',)) as get:
             register(get);get('/sourcebuster');get.stop_origin()
             for owner in ('A','B'):
-                raw='sbjs_current_add='+owner+'; sbjs_first_add='+owner+'; sbjs_migrations=1'
+                raw='; '.join(name+'='+owner for name in ('sbjs_current','sbjs_current_add','sbjs_first',
+                    'sbjs_first_add','sbjs_migrations','sbjs_session','sbjs_udata'))+'; ultracache_esi_optin=1'
                 status,fields,body=get('/sourcebuster',raw)
                 self.assertEqual((status,cache(fields),body),(200,'HIT',GUEST_BODY))
             self.assertEqual(len(app.calls),1)
+            log=subprocess.check_output(['varnishlog','-n',str(get.instance),'-d','-g','request','-i','Debug'],text=True)
+            self.assertIn('uc-guest-inputs admitted=1 reason=empty-provider-inputs',log)
 
 if __name__=='__main__':unittest.main()

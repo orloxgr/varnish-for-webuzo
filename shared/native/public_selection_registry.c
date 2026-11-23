@@ -283,6 +283,8 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRI
     char digest[65];
     int shared = g && !g->eligible && g->original_cookie &&
         delivery_selection_all_shared(g->original_cookie,rules);
+    if (g && g->original_cookie && !g->disabled && !g->key && !shared)
+        VSLb(ctx->vsl,SLT_Debug,"uc-guest-inputs candidate=stateful reason=effective-cookie-action");
     if (!g || (!g->eligible && !shared) || g->disabled || g->key || ctx->req->esi_level ||
         !site || !public_policy(policy) || !http_GetHdr(ctx->http_req,H_Host,&host)) return;
     pthread_mutex_lock(&lock);
@@ -301,6 +303,15 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRI
     identity = WS_Printf(ctx->ws,"guest-v1|%s|%s|%s|%s|%s|%s|%s",site,host,policy,g->wordpress_policy,g->policy,g->epoch,g->scope);
     if (!identity || !delivery_selection_digest((const unsigned char *)identity,strlen(identity),digest) ||
         !(g->key = strdup(digest))) VRT_fail(ctx,"Guest namespace unavailable");
+    else {
+        /* All candidate actions are Shared under the existing resolver. Only
+         * this guest namespace uses the empty guest Vary projection. Preserve
+         * ORIGINAL Cookie for the later typed proof and normal fallback; the
+         * restart's ordinary classifier reconstructs its normal Vary fields. */
+        http_Unset(ctx->http_req,HDR("X-SCP-Vary-Cookie"));
+        http_Unset(ctx->http_req,HDR("X-SCP-Vary-ESI-Cookie"));
+        if (shared) VSLb(ctx->vsl,SLT_Debug,"uc-guest-inputs candidate=shared");
+    }
 }
 
 /* Attach evidence to the authenticated complete publication owner. A cache
@@ -340,6 +351,7 @@ VCL_BOOL vmod_guest_shared_hit(VRT_CTX, VCL_STRING key, VCL_STRING manifest, VCL
     size_t actual_length = 0;
     size_t bucket;
     int valid = 0;
+    const char *reason = "publication-context";
     if (!vmod_guest_shared_pending(ctx) || !complete || !key || !manifest ||
         !public_policy(manifest) || strcmp(key,g->key)) return 0;
     bucket = guest_input_bucket(key,manifest);
@@ -350,14 +362,17 @@ VCL_BOOL vmod_guest_shared_hit(VRT_CTX, VCL_STRING key, VCL_STRING manifest, VCL
     guest_input_publications_prune(&owner->guest_inputs[bucket],ctx->now);
     for (p = owner->guest_inputs[bucket]; p; p = p->next)
         if (!strcmp(p->key,key) && !strcmp(p->manifest,manifest)) break;
-    if (!p) goto done;
+    if (!p) { reason = "input-evidence-unavailable"; goto done; }
     valid = delivery_reuse_input_projection(p->recipe->inputs,(const unsigned char *)g->original_cookie,
-        strlen(g->original_cookie),&actual,&actual_length) == DELIVERY_REUSE_INPUT_OK &&
-        actual_length == p->empty_length && !memcmp(actual,p->empty_projection,actual_length);
+        strlen(g->original_cookie),&actual,&actual_length) == DELIVERY_REUSE_INPUT_OK;
+    if (!valid) { reason = "input-projection-unavailable"; goto done; }
+    valid = actual_length == p->empty_length && !memcmp(actual,p->empty_projection,actual_length);
+    reason = valid ? "empty-provider-inputs" : "provider-inputs-differ";
     if (valid) { g->shared_proved = 1; memcpy(g->shared_manifest,manifest,65); }
 done:
     pthread_mutex_unlock(&lock);
     delivery_reuse_frame_free(actual,actual_length);
+    VSLb(ctx->vsl,SLT_Debug,"uc-guest-inputs admitted=%u reason=%s",(unsigned)valid,reason);
     return valid;
 }
 VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {

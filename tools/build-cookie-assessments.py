@@ -22,13 +22,31 @@ from cookie_catalogue import load_catalogue
 from cookie_defaults import infer, bundle
 
 
+def write_defaults():
+    """Rebuild ordinary defaults from pinned assessments + reviewed catalogue."""
+    bundle.cache_clear()
+    policy, metadata = bundle()
+    artifact = dict(policy, version=metadata['version'], sourceRevision=metadata['sourceRevision'])
+    (SHARED / 'cookie-defaults.json').write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
+    return artifact
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, required=True, help='Pinned upstream open-cookie-database.csv')
-    parser.add_argument('--revision', required=True, help='Upstream commit containing this source CSV')
+    parser.add_argument('--source', type=Path, help='Pinned upstream open-cookie-database.csv')
+    parser.add_argument('--revision', help='Upstream commit containing this source CSV')
     parser.add_argument('--version', default='2026.11.20.5', help='Editorial assessment version')
-    parser.add_argument('--output', type=Path, required=True, help='Versioned concrete editorial default JSON')
+    parser.add_argument('--output', type=Path, help='Versioned concrete editorial default JSON')
+    parser.add_argument('--defaults-only', action='store_true', help='Regenerate defaults from existing pinned assessments and reviewed catalogue, without CSV changes')
     args = parser.parse_args()
+    if args.defaults_only:
+        if args.source or args.revision or args.output:
+            parser.error('--defaults-only does not import a source or write assessments')
+        artifact = write_defaults()
+        print(json.dumps({'defaults':len(artifact['rules']),'version':artifact['version'],'sourceRevision':artifact['sourceRevision']}))
+        return
+    if not args.source or not args.revision or not args.output:
+        parser.error('--source, --revision and --output are required for CSV assessment generation')
     raw = args.source.read_bytes()
     catalogue = load_catalogue()
     revision = args.revision
@@ -72,10 +90,7 @@ def main():
                   records=records)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
     if args.output.resolve() == (SHARED / 'cookie-assessments.json').resolve():
-        bundle.cache_clear()
-        policy, metadata = bundle()
-        artifact = dict(policy, version=metadata['version'], sourceRevision=metadata['sourceRevision'])
-        (SHARED / 'cookie-defaults.json').write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
+        write_defaults()
     print(json.dumps({'assessed': len(records), 'confidence': dict(collections.Counter(row['confidence'] for row in records.values())),
                       'suggestions': {p:dict(collections.Counter(row['actions'][p] for row in records.values())) for p in ('basic','ultracache')}}))
 

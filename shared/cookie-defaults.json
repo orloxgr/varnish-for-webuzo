@@ -27480,8 +27480,20 @@
         "basic": "private",
         "ultracache": "private"
       }
+    },
+    {
+      "id": "bundled:policy:ultracache-esi-optin",
+      "match": {
+        "kind": "exact",
+        "value": "ultracache_esi_optin"
+      },
+      "description": "Browser capability marker for UltraCache ESI mini-cart support. It contains no customer or session identity. Actual provider/session inputs remain separate. Shared by default in both profiles; administrator Shared, Variant and Private choices remain authoritative.",
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
     }
   ],
-  "version": "2026.11.21.1",
+  "version": "2026.11.23.1",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

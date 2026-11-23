@@ -106,10 +106,12 @@ if (cookie_handoff.guest_key() &&
 }
 # UltraCache composition candidates may reuse only origin-approved parents.
 # Saved Private cookie choices have already passed before this lookup.
+# A native-proved complete guest object has no remaining ESI composition.
 if (
     req.http.X-UltraCache-ESI-Candidate == "1" &&
     obj.http.X-UltraCache-ESI-Shared-Parent != "1" &&
-    obj.http.X-UltraCache-Woo-Async-Parent != "1" && !cookie_handoff.selection_manifest()
+    obj.http.X-UltraCache-Woo-Async-Parent != "1" && !cookie_handoff.selection_manifest() &&
+    !cookie_handoff.guest_key()
 ) {
     set req.http.X-SCP-Reason = "unapproved-private-parent";
     return (pass);

@@ -382,16 +382,21 @@ closure; missing/unknown claims cannot be treated as empty. Malformed or duplica
 optional declarations disable this extension while retaining an otherwise valid
 legacy no-Cookie guest publication. Older producers can omit it entirely.
 
-Only requests whose original Cookie pairs all have an explicit effective Shared
-action may look up the existing guest namespace as candidates. Before delivery,
+Requests whose original Cookie pairs resolve to Shared through the existing
+effective action owner, including its existing Shared fallback, may look up the
+guest namespace as candidates. No separate named-rule requirement is added. Before delivery,
 native matches the actual cached object's complete marker and manifest digest,
 the existing site/host/scope/policy/epoch owner, and its remaining publication
 lifetime. Its ORIGINAL Cookie is projected through the publication's actual typed
 provider inputs and must equal the original empty-guest projection. An unrelated
 Shared analytics cookie can reuse the complete body immediately. A Shared Woo,
 authentication or other provider input that changes presence/value retains the
-stateful route; present-empty is not absence. Private, Variant and unclassified
-cookies do not enter this extended candidate namespace.
+stateful route; present-empty is not absence. Explicit Private and Variant
+decisions do not enter this extended candidate namespace. A complete native-proved
+guest object is already composed and does not need an ESI-parent marker.
+Only the guest candidate's derived Cookie Vary projection is empty, consistently
+with those Shared decisions; the original Cookie remains intact. An ineligible
+candidate's restart reconstructs ordinary functional Vary before stateful lookup.
 
 Evidence is hash-indexed publication metadata under the existing declaration
 owner, keyed by the guest namespace and actual manifest digest, not visitor values
@@ -408,3 +413,11 @@ existing adapter gateway. An unproven candidate cannot expose guest headers/body
 
 Native mock transport tests cover this contract and remain distinct from actual
 WordPress/provider/browser acceptance with the matching producer.
+
+The reviewed `ultracache-esi-optin` catalogue row exposes the application's
+client-capability marker as a normal Shared default in both profiles. Its actual
+provider inputs are still projected; neither that name nor an unlisted cookie
+gets a native exception. Administrators can select Variant or Private normally.
+Regenerate ordinary defaults from the pinned assessments and reviewed catalogue
+with `python tools/build-cookie-assessments.py --defaults-only`; no CSV download,
+runtime migration or automatic cookie issuance is involved.
