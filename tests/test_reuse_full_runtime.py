@@ -129,9 +129,15 @@ class NativeFullReuse(unittest.TestCase):
             with self.subTest(field=field):
                 self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure=field)
 
+    def test_value_free_reuse_stage_diagnostics_identify_actual_cold_metadata_and_complete_hits(self):
+        self.run_full_actor(anonymous_nonce=True,diagnostic_only=True)
+
+    def test_reuse_stage_diagnostics_are_masked_by_default_without_changing_cached_delivery(self):
+        self.run_full_actor(anonymous_nonce=True,diagnostic_only=False)
+
     def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False,
                        anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False,
-                       held_case='read'):
+                       held_case='read',diagnostic_only=None):
         holder={};calls=[];prepared={};prepared_accepts={};generation=[1];records=[];armed=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         later_entered=threading.Event();later_release=threading.Event();later_original=[]
@@ -260,7 +266,7 @@ class NativeFullReuse(unittest.TestCase):
             return source
         with proxy('ultracache',origin,transform=actor_policy,policies=policies,
                    management=held_case in ('reload','cancel'),daemon_parameters=(
-                       ('vsl_mask=+Debug',)+
+                       (('vsl_mask=+Debug',) if diagnostic_only is not False else ())+
                        (('send_timeout=1',) if held_case=='deadline' else
                         ('debug=+vclrel',) if held_case in ('reload','cancel') else ()))) as get:
             holder['get']=get;get(PARENT)
@@ -290,6 +296,30 @@ class NativeFullReuse(unittest.TestCase):
             status,headers,body2=get(PARENT,'owner=A; _fbp=second')
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
+            if diagnostic_only is not None:
+                status,_,other=get(PARENT,'owner=B')
+                self.assertEqual(status,200);self.assertIn('private:B-generation1',other)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
+                calls.clear()
+                self.assertEqual(get(PARENT,'owner=B')[2],other)
+                self.assertEqual(calls,[],'Diagnostics cannot add provider calls to a valid cached HIT')
+                trace=subprocess.check_output(['varnishlog','-n',str(get.instance),'-d','-g','raw','-i','Debug'],text=True)
+                # varnishlog escapes Debug's trailing NUL in its quoted format.
+                messages=[line.split('uc-reuse',1)[1].removesuffix('%00"')
+                          for line in trace.splitlines() if 'uc-reuse' in line]
+                if diagnostic_only:
+                    self.assertTrue(any('admission=miss reason=scope-not-ready' in line for line in messages),messages)
+                    self.assertTrue(any('admission=miss reason=metadata-object-unavailable' in line for line in messages))
+                    self.assertTrue(any('lookup kind=metadata outcome=object-unavailable' in line for line in messages))
+                    self.assertTrue(any('lookup kind=metadata outcome=hit' in line for line in messages))
+                    self.assertTrue(any('admission=hit reason=complete-plan' in line for line in messages))
+                    for message in messages:
+                        self.assertRegex(message,r'^(?:-lookup )?[a-z0-9= .-]+$')
+                        self.assertNotIn('owner=',message)
+                        self.assertNotIn('PHPSESSID',message)
+                        self.assertNotRegex(message,r'[0-9a-f]{32}')
+                else:self.assertEqual(messages,[],'Native Debug diagnostics must remain off by default')
+                return
             if verify_budget_expiry:
                 time.sleep(body_budget+.2);generation[0]=2
                 status,_,fresh=get(PARENT,'owner=A')

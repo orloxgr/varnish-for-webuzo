@@ -82,6 +82,7 @@ static struct objcore *delivery_reuse_lookup(VRT_CTX, const struct continuation 
     struct boc *fetch;
     struct VSHA256Context hash;
     enum lookup_e result;
+    const char *outcome = "workspace-unavailable";
     const char *marker;
     const hdr_t object_marker = HDR("X-SCP-Private-Object");
     int strange = worker->strangelove, valid = 0;
@@ -123,17 +124,24 @@ static struct objcore *delivery_reuse_lookup(VRT_CTX, const struct continuation 
     result = HSH_Lookup(r,&object,&busy);
     VRY_Finish(r,DISCARD);
     if (busy) HSH_Withdraw(worker,&busy);
-    if (result != HSH_HIT || !object) goto done;
+    if (result != HSH_HIT || !object) {
+        VSLb(r->vsl,SLT_Debug,"uc-reuse-lookup native-result=%d",(int)result);
+        outcome = "object-unavailable"; goto done;
+    }
     /* A streaming HIT is not a complete pre-header dependency. RefBoc safely
      * tests active fetch ownership; never wait in ObjIterate for such a body. */
     fetch = HSH_RefBoc(object);
-    if (fetch) { HSH_DerefBoc(worker,object); goto done; }
+    if (fetch) { HSH_DerefBoc(worker,object); outcome = "object-fetching"; goto done; }
     marker = fragment ? HTTP_GetHdrPack(worker,object,object_marker) : NULL;
     valid = (fragment ? marker && !strcmp(marker,"1") :
         object == parent->objcore && object->t_origin+object->ttl > VTIM_real()) &&
         !HTTP_GetHdrPack(worker,object,H_Set_Cookie) &&
         !HTTP_GetHdrPack(worker,object,h_set_cookie2);
+    outcome = valid ? "hit" : "object-contract-rejected";
 done:
+    VSLb(r->vsl,SLT_Debug,"uc-reuse-lookup kind=%s outcome=%s",
+        !fragment ? "parent" : !strncmp(fragment->url,"/__ultracache-native/reuse-v1/",
+            sizeof("/__ultracache-native/reuse-v1/")-1) ? "metadata" : "body",outcome);
     if (!valid && object) (void)HSH_DerefObjCore(worker,&object);
     r->wrk = NULL; Req_Release(r);
     worker->strangelove = strange;

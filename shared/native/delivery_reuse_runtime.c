@@ -124,50 +124,74 @@ static int delivery_reuse_bound_record(const struct continuation *d, struct deli
     if (record->valid_until > (uint64_t)floor(deadline)) record->valid_until = (uint64_t)floor(deadline);
     return 1;
 }
-static int delivery_reuse_record_current(const struct continuation *d, const struct delivery_reuse_record *record,
-    const struct reuse_scope *scope, int original) {
+static int delivery_reuse_record_reject(const char **reason, const char *value) {
+    if (reason) *reason = value;
+    return 0;
+}
+static int delivery_reuse_record_current_reason(const struct continuation *d, const struct delivery_reuse_record *record,
+    const struct reuse_scope *scope, int original, const char **reason) {
     const struct delivery_reuse_admitted_fragment *f;
     struct delivery_reuse_context page;
     unsigned char *frame = NULL;
     size_t length = 0;
     char binding[65];
     const char *fields[12];
+    static const char *context_reasons[] = {"context-site","context-host","context-scope","context-epoch",
+        "context-incarnation","context-scope-revision","context-native-policy","context-wordpress-policy",
+        "context-reuse-policy","context-publication","context-representation","context-recipe"};
     size_t i;
     double now = VTIM_real();
-    if (!scope || !delivery_reuse_scope_ready(d,scope) || scope->lost_execution_context || !record ||
-        record->valid_until <= now || d->public_deadline <= now || record->recipe->occurrences != d->occurrences ||
-        strcmp(record->binding,d->reuse_binding) || strcmp(record->recipe->digest,d->reuse_recipe)) return 0;
+    if (!scope) return delivery_reuse_record_reject(reason,"scope-unavailable");
+    if (!delivery_reuse_scope_ready(d,scope)) return delivery_reuse_record_reject(reason,"scope-not-ready");
+    if (scope->lost_execution_context) return delivery_reuse_record_reject(reason,"scope-lost-execution");
+    if (!record) return delivery_reuse_record_reject(reason,"record-unavailable");
+    if (record->valid_until <= now) return delivery_reuse_record_reject(reason,"record-expired");
+    if (d->public_deadline <= now) return delivery_reuse_record_reject(reason,"parent-expired");
+    if (record->recipe->occurrences != d->occurrences) return delivery_reuse_record_reject(reason,"occurrence-mismatch");
+    if (strcmp(record->binding,d->reuse_binding)) return delivery_reuse_record_reject(reason,"input-binding-mismatch");
+    if (strcmp(record->recipe->digest,d->reuse_recipe)) return delivery_reuse_record_reject(reason,"recipe-mismatch");
     fields[0] = d->site; fields[1] = d->host; fields[2] = scope->scope; fields[3] = public_registry_epoch;
     fields[4] = scope->incarnation; fields[5] = scope->revision; fields[6] = scope->native_policy;
     fields[7] = scope->wordpress_policy; fields[8] = scope->policy; fields[9] = d->reuse_publication;
     fields[10] = d->reuse_representation; fields[11] = d->reuse_recipe;
-    for (i = 0; i < 12; ++i) if (strcmp(record->context[i],fields[i])) return 0;
+    for (i = 0; i < 12; ++i)
+        if (strcmp(record->context[i],fields[i])) return delivery_reuse_record_reject(reason,context_reasons[i]);
     page = (struct delivery_reuse_context){fields[0],fields[1],fields[2],fields[3],fields[6],fields[7],fields[8],fields[9],fields[10],fields[11]};
     if (delivery_reuse_input_projection(record->recipe->inputs,(const unsigned char *)delivery_personal_cookie(d),
-        strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
+        strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK)
+        return delivery_reuse_record_reject(reason,"input-projection-invalid");
     i = delivery_reuse_input_mac(scope->reuse_key,&page,frame,length,binding) && !strcmp(binding,record->binding);
     delivery_reuse_frame_free(frame,length);
-    if (!i) return 0;
+    if (!i) return delivery_reuse_record_reject(reason,"input-binding-rejected");
     for (f = record->fragments; f; f = f->next) {
         const struct delivery_reuse_authority *a;
         const struct delivery_fragment *body = delivery_fragment_named(d,f->url);
         if (original && (!body || !body->cache_key || strcmp(body->cache_key,f->cache_key) ||
             !body->cache_tags || strcmp(body->cache_tags,f->cache_tags) ||
-            (double)f->body_valid_until > d->prepare_response_time+(double)body->cache_ttl)) return 0;
+            (double)f->body_valid_until > d->prepare_response_time+(double)body->cache_ttl))
+            return delivery_reuse_record_reject(reason,"original-body-grant-mismatch");
         frame = NULL; length = 0;
         if (delivery_reuse_input_projection(f->identity_inputs,(const unsigned char *)delivery_personal_cookie(d),
-            strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
+            strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK)
+            return delivery_reuse_record_reject(reason,"identity-projection-invalid");
         i = delivery_reuse_identity_mac(scope->reuse_key,&page,frame,length,binding) && !strcmp(binding,f->identity_binding);
         delivery_reuse_frame_free(frame,length);
-        if (!i) return 0;
+        if (!i) return delivery_reuse_record_reject(reason,"identity-binding-rejected");
         for (a = f->authority; a; a = a->next) {
             const struct reuse_tag *tag = reuse_tag_find((struct reuse_scope *)scope,a->tag,0);
-            if (!tag || !tag->clean || strcmp(tag->bound_scope_revision,scope->revision) ||
-                reuse_active(tag) || strcmp(tag->revision,a->revision) ||
-                strcmp(tag->generation,a->generation)) return 0;
+            if (!tag) return delivery_reuse_record_reject(reason,"tag-unavailable");
+            if (!tag->clean) return delivery_reuse_record_reject(reason,"tag-not-clean");
+            if (strcmp(tag->bound_scope_revision,scope->revision)) return delivery_reuse_record_reject(reason,"tag-scope-revision");
+            if (reuse_active(tag)) return delivery_reuse_record_reject(reason,"tag-active-writer");
+            if (strcmp(tag->revision,a->revision)) return delivery_reuse_record_reject(reason,"tag-revision");
+            if (strcmp(tag->generation,a->generation)) return delivery_reuse_record_reject(reason,"tag-generation");
         }
     }
     return 1;
+}
+static int delivery_reuse_record_current(const struct continuation *d, const struct delivery_reuse_record *record,
+    const struct reuse_scope *scope, int original) {
+    return delivery_reuse_record_current_reason(d,record,scope,original,NULL);
 }
 static int delivery_reuse_finish(VRT_CTX, struct continuation *d) {
     struct delivery_reuse_record *record = NULL;
@@ -214,17 +238,26 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     const char *native_policy = reuse_single(ctx->http_req,HDR("X-SCP-Selection-Native-Policy"));
     char uri[sizeof("/__ultracache-native/reuse-v1/")+64];
     int valid = 0, outcome = REUSE_PLAN_MISS;
-    if (!*d->reuse_publication || !*d->reuse_representation || !native_policy) return 0;
+    const char *reason = "input-context-unavailable";
+    if (!*d->reuse_publication || !*d->reuse_representation || !native_policy) {
+        VSLb(ctx->vsl,SLT_Debug,"uc-reuse admission=miss reason=%s",reason); return 0;
+    }
     pthread_mutex_lock(&lock);
     declaration = public_declaration_for_url(d->site,d->host,d->url);
     scope = declaration ? reuse_scope_find(d->site,d->host,declaration->scope) : NULL;
-    if (!scope || !scope->enabled || !scope->ready || scope->revision_pending || strcmp(native_policy,scope->native_policy) ||
-        strcmp(declaration->wordpress_policy,scope->wordpress_policy) || !(discovery = delivery_reuse_discovery(scope,d)) ||
-        discovery->recipe->occurrences != d->occurrences) goto done_locked;
+    if (!scope) { reason = "scope-unavailable"; goto done_locked; }
+    if (!scope->enabled) { reason = "scope-disabled"; goto done_locked; }
+    if (!scope->ready) { reason = "scope-not-ready"; goto done_locked; }
+    if (scope->revision_pending) { reason = "scope-revision-pending"; goto done_locked; }
+    if (strcmp(native_policy,scope->native_policy)) { reason = "scope-native-policy"; goto done_locked; }
+    if (strcmp(declaration->wordpress_policy,scope->wordpress_policy)) { reason = "scope-wordpress-policy"; goto done_locked; }
+    if (!(discovery = delivery_reuse_discovery(scope,d))) { reason = "discovery-unavailable"; goto done_locked; }
+    if (discovery->recipe->occurrences != d->occurrences) { reason = "discovery-occurrences"; goto done_locked; }
     d->reuse_cut_active = 1; d->reuse_cut_provisional = 1;
     d->reuse_execution_cut = scope->execution_sequence;
     page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
         scope->native_policy,scope->wordpress_policy,scope->policy,d->reuse_publication,d->reuse_representation,discovery->recipe->digest};
+    reason = "metadata-input-binding-unavailable";
     if (delivery_reuse_input_projection(discovery->recipe->inputs,(const unsigned char *)delivery_personal_cookie(d),
         strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK ||
         !delivery_reuse_input_mac(scope->reuse_key,&page,frame,length,d->reuse_binding) ||
@@ -236,14 +269,24 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     snprintf(uri,sizeof(uri),"/__ultracache-native/reuse-v1/%s",d->reuse_metadata_key);
     metadata.url = uri; metadata.cache_key = d->reuse_metadata_key;
     wire.object = delivery_reuse_lookup(ctx,d,&metadata);
-    if (!wire.object || !HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker) ||
-        strcmp(HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker),"1") ||
-        ObjIterate(ctx->req->wrk,wire.object,&wire,delivery_reuse_chunk,1) ||
-        !delivery_reuse_record_parse(wire.copy,wire.length,&record) ||
-        !delivery_reuse_bound_record(NULL,record,wire.object->t_origin+wire.object->ttl,0)) goto done_locked;
-    valid = delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),0);
+    if (!wire.object) { reason = "metadata-object-unavailable"; goto done_locked; }
+    if (!HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker) ||
+        strcmp(HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker),"1")) {
+        reason = "metadata-marker-rejected"; goto done_locked;
+    }
+    if (ObjIterate(ctx->req->wrk,wire.object,&wire,delivery_reuse_chunk,1)) {
+        reason = "metadata-body-unavailable"; goto done_locked;
+    }
+    if (!delivery_reuse_record_parse(wire.copy,wire.length,&record)) {
+        reason = "metadata-wire-rejected"; goto done_locked;
+    }
+    if (!delivery_reuse_bound_record(NULL,record,wire.object->t_origin+wire.object->ttl,0)) {
+        reason = "metadata-grant-rejected"; goto done_locked;
+    }
+    valid = delivery_reuse_record_current_reason(d,record,delivery_reuse_current_scope(d),0,&reason);
     if (!valid) goto done_locked;
     valid = 0;
+    reason = "fragment-descriptor-unavailable";
     for (admitted = record->fragments; admitted; admitted = admitted->next) {
         struct delivery_fragment *fragment = calloc(1,sizeof(*fragment));
         const struct delivery_reuse_descriptor *descriptor;
@@ -258,22 +301,26 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
         fragment->occurrences = descriptor->occurrences;
     }
     d->phase = D_READY; d->reuse_fast = 1;
+    reason = "private-body-plan-unavailable";
     if (vmod_delivery_reuse_resolve(ctx,priv) != 1 || !delivery_reuse_materialize(ctx,priv,1)) goto done_locked;
     /* No body/header is exposed until every required native object is pinned,
      * complete and copied. The last scope/authority check shares the writer lock. */
     scope = delivery_reuse_current_scope(d);
     discovery = scope ? delivery_reuse_discovery(scope,d) : NULL;
+    reason = "final-record-validation-rejected";
     valid = discovery && !strcmp(discovery->revision,d->reuse_discovery_revision) &&
         delivery_reuse_record_current(d,record,scope,0) && wire.object->t_origin+wire.object->ttl > VTIM_real();
     if (valid) {
         struct objcore *current_parent = delivery_reuse_lookup(ctx,d,NULL);
         struct objcore *current_metadata = delivery_reuse_lookup(ctx,d,&metadata);
+        reason = "final-object-identity-rejected";
         valid = current_parent && current_parent == ctx->req->objcore && current_metadata && current_metadata == wire.object;
         if (current_parent) (void)HSH_DerefObjCore(ctx->req->wrk,&current_parent);
         if (current_metadata) (void)HSH_DerefObjCore(ctx->req->wrk,&current_metadata);
     }
     for (pin = d->reuse_plan->pins; valid && pin; pin = pin->next) {
         struct objcore *current = delivery_reuse_lookup(ctx,d,pin->fragment);
+        reason = "final-private-object-rejected";
         valid = current && current == pin->object && pin->deadline > VTIM_real();
         if (current) (void)HSH_DerefObjCore(ctx->req->wrk,&current);
     }
@@ -283,6 +330,7 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
         if (!delivery_reuse_scope_ready(d,scope)) {
             d->held_parent = ctx->req->objcore; HSH_Ref(d->held_parent);
             d->held_metadata = wire.object; wire.object = NULL;
+            reason = "held-schedule-unavailable";
             if (delivery_held_schedule(ctx,d,scope)) outcome = REUSE_PLAN_HELD;
             else valid = 0;
         } else { d->reuse_cut_active = 0; outcome = REUSE_PLAN_HIT; }
@@ -296,6 +344,9 @@ done_locked:
     if (!valid) {
         delivery_held_drop(ctx,d);
     }
+    VSLb(ctx->vsl,SLT_Debug,"uc-reuse admission=%s reason=%s",
+        outcome == REUSE_PLAN_HELD ? "held" : outcome == REUSE_PLAN_HIT ? "hit" : "miss",
+        outcome != REUSE_PLAN_MISS ? "complete-plan" : reason);
     return outcome;
 }
 #else
