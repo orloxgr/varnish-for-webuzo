@@ -24,7 +24,7 @@ struct delivery_reuse_descriptor {
     uint64_t occurrences;
 };
 struct delivery_reuse_recipe {
-    char digest[65]; /* producer-authenticated identity, not native authority */
+    char digest[65]; /* checked canonical digest, not native authority */
     struct delivery_reuse_inputs *inputs;
     struct delivery_reuse_descriptor *fragments;
     uint64_t occurrences;
@@ -41,6 +41,8 @@ void delivery_reuse_inputs_free(struct delivery_reuse_inputs *inputs);
 int delivery_reuse_recipe_parse(const char *json, size_t length,
     uint64_t expected_occurrences, struct delivery_reuse_recipe **output);
 void delivery_reuse_recipe_free(struct delivery_reuse_recipe *recipe);
+int delivery_reuse_descriptor_digest(const char *url, const char *provider, char digest[65]);
+int delivery_reuse_recipe_digest(const struct delivery_reuse_recipe *recipe, char digest[65]);
 int delivery_reuse_input_projection(const struct delivery_reuse_inputs *inputs,
     const unsigned char *cookie, size_t cookie_length,
     unsigned char **frame, size_t *frame_length);

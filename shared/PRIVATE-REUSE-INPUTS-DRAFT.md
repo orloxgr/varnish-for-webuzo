@@ -106,10 +106,12 @@ and URI duplicates are rejected and the occurrence sum must equal the native
 parent's supplied expected count. Malformed/unknown/duplicate fields reject the
 whole recipe, without partial output.
 
-`digest` is currently a producer-authenticated declared identity. Canonical
-full-recipe digest computation, authenticated metadata cache publication,
-pre-prepare recipe discovery and admission are NOT implemented by this parser.
-Those protocol decisions still need joint producer/consumer vectors and review.
+`digest` now has the checked canonical descriptor/recipe framing frozen in
+`PRIVATE-REUSE-FINALIZATION-DRAFT.md`. The parser recomputes every exact-URI /
+provider descriptor and the complete order-independent recipe digest. Four
+independent synthetic Python/C recipe vectors qualify that framing. Authenticated
+metadata cache publication, pre-prepare discovery and admission remain separate
+integration gates; a valid digest alone grants no authority.
 
 ## Executed parity scope
 

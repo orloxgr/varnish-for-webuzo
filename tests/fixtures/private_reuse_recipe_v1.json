@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "source": "independent Python hashlib/struct oracle; synthetic metadata only",
+  "vectors": [
+    {
+      "name": "empty",
+      "recipe": {
+        "inputs": {
+          "cookieNames": [],
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 1000
+        },
+        "fragments": [],
+        "digest": "5d353fb8165387139c7d838e88cbeb406a1399303b83649779b01165445558fe"
+      },
+      "recipeFrameHex": "0000001c756c74726163616368652d707269766174652d7265636970652d76310000002f0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000003e800000000000000000000000000000000"
+    },
+    {
+      "name": "cart-and-nonce",
+      "recipe": {
+        "inputs": {
+          "cookieNames": [
+            "owned_input",
+            "owned_input"
+          ],
+          "cookiePrefixes": [
+            "new_"
+          ],
+          "phpMaxInputVars": 1000
+        },
+        "fragments": [
+          {
+            "url": "/shop/?ultracache_esi=first",
+            "provider": "native-cart",
+            "occurrences": 2,
+            "descriptor": "c48d423ccf2260380021945e2b47aea88ee4f9d4490729101156fdbaa53c3285"
+          },
+          {
+            "url": "/shop/?ultracache_esi=second",
+            "provider": "nonce",
+            "occurrences": 1,
+            "descriptor": "b2ab9b93efc50ef9855a0536176b160e700faa236a08c26d979e70ed03a1d6ad"
+          }
+        ],
+        "digest": "c87944c10787450c20614d5bd11f4bf1cab46354298ca8370c9f5240adebe327"
+      },
+      "recipeFrameHex": "0000001c756c74726163616368652d707269766174652d7265636970652d7631000000460000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000003e8000000010000000b6f776e65645f696e70757400000001000000046e65775f000000000000000200000040623261623962393365666335306566393835356130353336313736623136306537303066616132333661303863323664393739653730656430336131643661640000001c2f73686f702f3f756c74726163616368655f6573693d7365636f6e64000000056e6f6e6365000000000000000100000040633438643432336363663232363033383030323139343565326234376165613838656534663964343439303732393130313135366664626161353363333238350000001b2f73686f702f3f756c74726163616368655f6573693d66697273740000000b6e61746976652d636172740000000000000002"
+    },
+    {
+      "name": "unicode-and-query",
+      "recipe": {
+        "inputs": {
+          "cookieNames": [
+            "auth_token"
+          ],
+          "cookiePrefixes": [
+            "identity_"
+          ],
+          "phpMaxInputVars": 2048
+        },
+        "fragments": [
+          {
+            "url": "/shop/%CE%B1?ultracache_esi=signed%2Bvalue&literal=a+b",
+            "provider": "provider-\u0395\u03bb\u03bb\u03ac\u03b4\u03b1",
+            "occurrences": 2,
+            "descriptor": "e9bf6dfafc47c20574d26f1bfdfd0e2667f78e4710bdce72e97d7f77b7ecb853"
+          }
+        ],
+        "digest": "73254e615cf575d0357a667c7de4c7c33aa210b47bd76c7a17cfb8ea0cf1e211"
+      },
+      "recipeFrameHex": "0000001c756c74726163616368652d707269766174652d7265636970652d76310000004a0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000800000000010000000a617574685f746f6b656e00000001000000096964656e746974795f00000000000000010000004065396266366466616663343763323035373464323666316266646664306532363637663738653437313062646365373265393764376637376237656362383533000000362f73686f702f2543452542313f756c74726163616368655f6573693d7369676e656425324276616c7565266c69746572616c3d612b620000001570726f76696465722dce95cebbcebbceacceb4ceb10000000000000002"
+    },
+    {
+      "name": "u64-occurrences",
+      "recipe": {
+        "inputs": {
+          "cookieNames": [],
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 0
+        },
+        "fragments": [
+          {
+            "url": "/private",
+            "provider": "provider",
+            "occurrences": 4294967299,
+            "descriptor": "a56c78ce55af114cb4c8fe624ceb7496e8705eecb1cbf310f9b9b2533392c78b"
+          }
+        ],
+        "digest": "a7e6af3091ab3daef1ad6baf9fecfbee0104b246182aa4141127a158acc9fbcc"
+      },
+      "recipeFrameHex": "0000001c756c74726163616368652d707269766174652d7265636970652d76310000002f0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000000000000000000000000000000000000010000004061353663373863653535616631313463623463386665363234636562373439366538373035656563623163626633313066396239623235333333393263373862000000082f707269766174650000000870726f76696465720000000100000003"
+    }
+  ]
+}

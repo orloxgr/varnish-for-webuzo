@@ -38,6 +38,23 @@ def lp(value):
 def declaration(names=(),prefixes=(),budget=1000):
     return dict(cookieNames=list(names),cookiePrefixes=list(prefixes),phpMaxInputVars=budget)
 
+def descriptor_digest(url,provider):
+    return hashlib.sha256(lp('ultracache-private-descriptor-v1')+lp(url)+lp(provider)).hexdigest()
+
+def recipe_frame(recipe):
+    inputs=recipe['inputs'];names=sorted(set(inputs['cookieNames']));prefixes=sorted(set(inputs['cookiePrefixes']))
+    declaration_frame=(lp('ultracache-cookie-inputs-v1')+struct.pack('>I',inputs['phpMaxInputVars'])+
+        struct.pack('>I',len(names))+b''.join(lp(v) for v in names)+
+        struct.pack('>I',len(prefixes))+b''.join(lp(v) for v in prefixes)+struct.pack('>I',0))
+    fragments=sorted(recipe['fragments'],key=lambda row:row['descriptor'])
+    return (lp('ultracache-private-recipe-v1')+lp(declaration_frame)+struct.pack('>I',len(fragments))+
+        b''.join(lp(row['descriptor'])+lp(row['url'])+lp(row['provider'])+struct.pack('>Q',row['occurrences']) for row in fragments))
+
+def seal_recipe(recipe):
+    for row in recipe['fragments']:row['descriptor']=descriptor_digest(row['url'],row['provider'])
+    recipe['digest']=hashlib.sha256(recipe_frame(recipe)).hexdigest()
+    return recipe
+
 @unittest.skipUnless(CC,'Portable C compiler required; skipped does not qualify parity')
 class ReuseCookieInputs(unittest.TestCase):
     @classmethod
@@ -60,6 +77,8 @@ class ReuseCookieInputs(unittest.TestCase):
         cls.lib.delivery_reuse_recipe_parse.argtypes=[ctypes.c_char_p,ctypes.c_size_t,ctypes.c_uint64,
             ctypes.POINTER(ctypes.POINTER(Recipe))]
         cls.lib.delivery_reuse_recipe_free.argtypes=[ctypes.POINTER(Recipe)]
+        cls.lib.delivery_reuse_descriptor_digest.argtypes=[ctypes.c_char_p,ctypes.c_char_p,ctypes.c_void_p]
+        cls.lib.delivery_reuse_recipe_digest.argtypes=[ctypes.POINTER(Recipe),ctypes.c_void_p]
     @classmethod
     def tearDownClass(cls):
         if os.name=='nt':
@@ -212,9 +231,9 @@ class ReuseCookieInputs(unittest.TestCase):
             self.assertEqual(frame,expected)
 
     def test_recipe_metadata_is_strict_and_binds_complete_occurrence_count(self):
-        recipe={'digest':'a'*64,'inputs':declaration(['owned_input','owned_input'],['new_']),
+        recipe=seal_recipe({'digest':'a'*64,'inputs':declaration(['owned_input','owned_input'],['new_']),
             'fragments':[{'descriptor':'b'*64,'url':'/shop/?ultracache_esi=first','provider':'native-cart','occurrences':2},
-                         {'descriptor':'c'*64,'url':'/shop/?ultracache_esi=second','provider':'nonce','occurrences':1}]}
+                         {'descriptor':'c'*64,'url':'/shop/?ultracache_esi=second','provider':'nonce','occurrences':1}]})
         def parse(value,count=3):
             raw=json.dumps(value).encode() if not isinstance(value,str) else value.encode()
             out=ctypes.POINTER(Recipe)()
@@ -225,7 +244,7 @@ class ReuseCookieInputs(unittest.TestCase):
             self.assertEqual(result,1);self.assertEqual(out.contents.occurrences,3)
             self.assertEqual(out.contents.inputs.contents.name_count,1)
             self.assertEqual(out.contents.fragments.contents.provider,b'native-cart')
-            self.assertEqual(out.contents.fragments.contents.next.contents.descriptor,b'c'*64)
+            self.assertEqual(out.contents.fragments.contents.next.contents.descriptor,recipe['fragments'][1]['descriptor'].encode())
         finally:self.lib.delivery_reuse_recipe_free(out)
         cases=[]
         for key in ('digest','inputs','fragments'):
@@ -237,6 +256,8 @@ class ReuseCookieInputs(unittest.TestCase):
         changed=copy.deepcopy(recipe);changed['fragments'][0]['occurrences']=2**64-1;cases.append(changed)
         changed=copy.deepcopy(recipe);changed['fragments'][0]['extra']=True;cases.append(changed)
         changed=copy.deepcopy(recipe);changed['extra']=True;cases.append(changed)
+        changed=copy.deepcopy(recipe);changed['digest']='a'*64;cases.append(changed)
+        changed=copy.deepcopy(recipe);changed['fragments'][0]['provider']='other-provider';cases.append(changed)
         cases.append(json.dumps(recipe).replace('"digest":','"digest":"'+('d'*64)+'","digest":',1))
         cases.append(json.dumps(recipe).replace('"provider":','"provider":"duplicate","provider":',1))
         for value in cases:
@@ -247,6 +268,28 @@ class ReuseCookieInputs(unittest.TestCase):
         result,out=parse(recipe,count=4)
         try:self.assertEqual(result,0);self.assertFalse(out)
         finally:self.lib.delivery_reuse_recipe_free(out)
+
+    def test_canonical_recipe_vectors_and_native_digest_match_independent_frames(self):
+        vectors=json.loads((ROOT/'tests/fixtures/private_reuse_recipe_v1.json').read_text(encoding='utf-8'))
+        for row in vectors['vectors']:
+            with self.subTest(name=row['name']):
+                recipe=row['recipe'];frame=recipe_frame(recipe)
+                self.assertEqual(frame.hex(),row['recipeFrameHex'])
+                self.assertEqual(hashlib.sha256(frame).hexdigest(),recipe['digest'])
+                for descriptor in recipe['fragments']:
+                    output=ctypes.create_string_buffer(65)
+                    self.assertEqual(self.lib.delivery_reuse_descriptor_digest(descriptor['url'].encode(),
+                        descriptor['provider'].encode(),output),1)
+                    self.assertEqual(output.value.decode(),descriptor_digest(descriptor['url'],descriptor['provider']))
+                for candidate in (recipe,dict(recipe,fragments=list(reversed(recipe['fragments'])))):
+                    raw=json.dumps(candidate).encode();out=ctypes.POINTER(Recipe)()
+                    count=sum(d['occurrences'] for d in candidate['fragments'])
+                    self.assertEqual(self.lib.delivery_reuse_recipe_parse(raw,len(raw),count,ctypes.byref(out)),1)
+                    try:
+                        digest=ctypes.create_string_buffer(65)
+                        self.assertEqual(self.lib.delivery_reuse_recipe_digest(out,digest),1)
+                        self.assertEqual(digest.value.decode(),recipe['digest'])
+                    finally:self.lib.delivery_reuse_recipe_free(out)
 
 
 for index,row in enumerate(VECTORS['vectors']):

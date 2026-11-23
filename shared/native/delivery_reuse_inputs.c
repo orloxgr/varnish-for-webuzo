@@ -174,6 +174,10 @@ static int reuse_descriptors(struct reader *reader, struct delivery_reuse_recipe
             if (!take(reader,',')) goto failed;
         }
         if (seen != 15) goto failed;
+        {
+            char expected[65];
+            if (!delivery_reuse_descriptor_digest(row->url,row->provider,expected) || strcmp(row->descriptor,expected)) goto failed;
+        }
         for (other = recipe->fragments; other; other = other->next)
             if (!strcmp(row->descriptor,other->descriptor) || !strcmp(row->url,other->url)) goto failed;
         recipe->occurrences += row->occurrences;
@@ -217,6 +221,10 @@ int delivery_reuse_recipe_parse(const char *json, size_t length,
     }
     whitespace(&reader);
     valid = seen == 7 && reader.offset == reader.length && recipe->occurrences == expected_occurrences;
+    if (valid) {
+        char expected[65];
+        valid = delivery_reuse_recipe_digest(recipe,expected) && !strcmp(recipe->digest,expected);
+    }
 finished:
     free(reader.buffer);
     if (valid) *output = recipe;
@@ -248,6 +256,60 @@ static int reuse_lp(struct reuse_frame *frame, const void *bytes, size_t length)
 }
 static int reuse_lp_string(struct reuse_frame *frame, const char *value) {
     return reuse_lp(frame,value,strlen(value));
+}
+static int reuse_u64(struct reuse_frame *frame, uint64_t value) {
+    unsigned char bytes[8];
+    size_t i;
+    for (i = 0; i < sizeof(bytes); ++i) bytes[i] = (unsigned char)(value>>(56-8*i));
+    return reuse_append(frame,bytes,sizeof(bytes));
+}
+int delivery_reuse_descriptor_digest(const char *url, const char *provider, char digest[65]) {
+    struct reuse_frame frame = {NULL,0,0};
+    size_t i;
+    int valid = 0;
+    if (digest) digest[0] = 0;
+    if (!digest || !delivery_relative(url) || !provider || !*provider) return 0;
+    for (i = 0; provider[i]; ++i) if ((unsigned char)provider[i] < 32 || provider[i] == 127) return 0;
+    if (reuse_lp_string(&frame,"ultracache-private-descriptor-v1") &&
+        reuse_lp_string(&frame,url) && reuse_lp_string(&frame,provider))
+        valid = delivery_selection_digest(frame.bytes,frame.length,digest);
+    delivery_reuse_frame_free(frame.bytes,frame.length); return valid;
+}
+static int reuse_descriptor_compare(const void *left, const void *right) {
+    const struct delivery_reuse_descriptor *a = *(const struct delivery_reuse_descriptor * const *)left;
+    const struct delivery_reuse_descriptor *b = *(const struct delivery_reuse_descriptor * const *)right;
+    return strcmp(a->descriptor,b->descriptor);
+}
+int delivery_reuse_recipe_digest(const struct delivery_reuse_recipe *recipe, char digest[65]) {
+    const struct delivery_reuse_descriptor *row, **ordered = NULL;
+    struct reuse_frame frame = {NULL,0,0};
+    unsigned char *declaration = NULL;
+    size_t length = 0, count = 0, i;
+    int valid = 0;
+    if (digest) digest[0] = 0;
+    if (!digest || !recipe || !recipe->inputs) return 0;
+    for (row = recipe->fragments; row; row = row->next) {
+        if (count == UINT32_MAX || count == SIZE_MAX/sizeof(*ordered)) goto done;
+        ++count;
+    }
+    if (count && !(ordered = malloc(count*sizeof(*ordered)))) goto done;
+    for (row = recipe->fragments,i = 0; row; row = row->next) ordered[i++] = row;
+    if (count > 1) qsort(ordered,count,sizeof(*ordered),reuse_descriptor_compare);
+    if (delivery_reuse_input_projection(recipe->inputs,NULL,0,&declaration,&length) != DELIVERY_REUSE_INPUT_OK ||
+        !reuse_lp_string(&frame,"ultracache-private-recipe-v1") || !reuse_lp(&frame,declaration,length) ||
+        !reuse_u32(&frame,count)) goto done;
+    for (i = 0; i < count; ++i) {
+        char expected[65];
+        row = ordered[i];
+        if (!row->occurrences || !delivery_reuse_descriptor_digest(row->url,row->provider,expected) ||
+            strcmp(row->descriptor,expected) || (i && !strcmp(ordered[i-1]->descriptor,row->descriptor)) ||
+            !reuse_lp_string(&frame,row->descriptor) || !reuse_lp_string(&frame,row->url) ||
+            !reuse_lp_string(&frame,row->provider) || !reuse_u64(&frame,row->occurrences)) goto done;
+    }
+    valid = delivery_selection_digest(frame.bytes,frame.length,digest);
+done:
+    free(ordered); delivery_reuse_frame_free(declaration,length);
+    delivery_reuse_frame_free(frame.bytes,frame.length); return valid;
 }
 static int reuse_selector_matches(const char *selector, const char *php_name, int prefix) {
     size_t i;
