@@ -6,9 +6,11 @@ these functions and no producer capability is advertised by this stage.
 
 ## Complete declarations and PHP projection
 
-`recipe.inputs` has exactly two required arrays, `cookieNames` and
-`cookiePrefixes`, including names currently absent and prefixes currently
-matching nothing. Selectors are nonempty cookie tokens, byte-sorted and
+`recipe.inputs` has two required arrays, `cookieNames` and `cookiePrefixes`,
+plus required `phpMaxInputVars`, the nonnegative U32 actual effective PHP
+runtime setting. There is no guessed PHP default or addon quota. Declarations
+include names currently absent and prefixes currently matching nothing.
+Selectors are nonempty cookie tokens, byte-sorted and
 deduplicated within each array. Unknown/duplicate JSON fields are rejected.
 This is a declaration of consumed inputs, not an observed-name inventory.
 
@@ -50,6 +52,7 @@ or lifetime limits. Allocation and arithmetic overflow fail without truncation.
 
 ```
 LP("ultracache-cookie-inputs-v1")
+U32(actual phpMaxInputVars)
 U32(cookieNames count), LP(each complete declared name)
 U32(cookiePrefixes count), LP(each complete declared prefix)
 U32(group count)
@@ -60,6 +63,13 @@ for each normalized PHP-name group:
 ```
 
 No matches still encodes the complete declarations and zero groups.
+
+PHP's actual Cookie parsing token count runs before input selection. Empty,
+whitespace-only and empty-name pairs do not consume a token; unrelated and bare
+tokens do. A declared consumed input after the actual runtime budget reports
+`DELIVERY_REUSE_INPUT_RUNTIME`, using ordinary prepare rather than a reusable
+admission. Unrelated tail tokens after an already consumed input do not change
+its binding or cause a blanket block. No PHP/server setting is changed.
 
 ## Binding MAC and accepted context
 
@@ -105,9 +115,11 @@ Those protocol decisions still need joint producer/consumer vectors and review.
 
 `tests/fixtures/private_reuse_cookie_inputs_v1.json` contains only synthetic
 inputs from an actual PHP-FPM 8.3.37 parser plus production projection/binding
-helper run. All 21 cases match in native C: exact binary frame for qualified
+helper run. All 28 cases match in native C: exact binary frame for qualified
 cases, actual PHP MACs, and the same ambiguous-input eligibility result for the
-three negative cases. Independent Python HMAC agrees as well.
+negative cases, including consumed input beyond the actual parsing budget.
+Independent Python HMAC agrees as well. The earlier 21-case pre-budget frame is
+historical development evidence, not the current wire contract.
 
 Additional portable checks cover every accepted-context dimension and secret,
 strict declaration and recipe metadata schemas, occurrence coverage, forbidden
@@ -115,10 +127,7 @@ controls and randomized unrelated-input/prefix order. These qualify byte
 agreement only. Real application claims, cached authorization, mutation barriers,
 restart recovery and zero-application delivery remain separate open gates.
 
-Actual application runtime parsing eligibility also remains an explicit gate:
-PHP's configured `max_input_vars` counts unrelated cookie pairs before native
-registration and can change whether a later consumed name exists. The framing
-helper does not currently model or advertise an accepted runtime parser budget.
-A matching MAC alone therefore cannot authorize reuse. The negotiated context
-must qualify actual effective PHP parser semantics before admission; no new
-addon limit, guessed PHP default or cookie-policy change is introduced here.
+The negotiated recipe must carry the producer's actual effective runtime
+metadata and its accepted policy identity. The primitive does not obtain or
+advertise those values itself, publish a cache admission, or replace producer
+identity/state validation. A matching frame/MAC alone cannot authorize reuse.

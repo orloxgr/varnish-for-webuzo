@@ -3,7 +3,7 @@
   "syntheticSecret": "owned-cookie-frame-secret-v1",
   "provenance": {
     "scope": "Actual PHP parser and production projection helper. Synthetic cookies only. No native admission/authorization proof.",
-    "sourceSha256": "29dfe950fc541e04dbb2119253aab3a4b8f77b9d397b480855cc602ec567d214",
+    "sourceSha256": "2f7152262cf2d892531bd72d8cd82a545b6919c73ef8703aaec7bccaea964772",
     "runtime": "actual PHP-FPM 8.3.37; synthetic inputs only"
   },
   "vectors": [
@@ -14,17 +14,19 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": [],
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e7075740000000000000000"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e7075740000000000000000"
       },
       "context": {
         "siteId": "owned-site",
@@ -38,7 +40,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "d312407fa0f459cff3e129e0f405a2287b12d08faf526afb83d0807f1aabbe3c"
+      "binding": "b1af532ecb7291149bb6fb47f9ec27998cd23cc03afe4404abe645386f09869d"
     },
     {
       "name": "exact",
@@ -47,14 +49,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -64,7 +68,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
       },
       "context": {
         "siteId": "owned-site",
@@ -78,7 +82,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "753bb24881193337e0c6c84e8a4a4a95bf558d82b8bdbfd388c6390ae0d9f22b"
+      "binding": "9e7a08ed366ff8c1e03f30906aec7b0ef966081cb42df1f4c20509f9271fb324"
     },
     {
       "name": "unrelated-shared",
@@ -87,14 +91,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -104,7 +110,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
       },
       "context": {
         "siteId": "owned-site",
@@ -118,7 +124,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "753bb24881193337e0c6c84e8a4a4a95bf558d82b8bdbfd388c6390ae0d9f22b"
+      "binding": "9e7a08ed366ff8c1e03f30906aec7b0ef966081cb42df1f4c20509f9271fb324"
     },
     {
       "name": "two-names",
@@ -128,7 +134,8 @@
           "owned_input",
           "owned_other"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
@@ -136,7 +143,8 @@
             "owned_input",
             "owned_other"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -152,7 +160,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000020000000b6f776e65645f696e7075740000000b6f776e65645f6f7468657200000000000000020000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c7068610000000b6f776e65645f6f74686572000000010000000b6f776e65645f6f746865720000000462657461"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000020000000b6f776e65645f696e7075740000000b6f776e65645f6f7468657200000000000000020000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c7068610000000b6f776e65645f6f74686572000000010000000b6f776e65645f6f746865720000000462657461"
       },
       "context": {
         "siteId": "owned-site",
@@ -166,7 +174,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "614939bd6d4704639929d9d64cc9984bc98402dc3ebc982dc23013246c2d6b44"
+      "binding": "16b083ca16292c08e260e8bce81892991cebcd1cefb4a1f9e57f4431c16f5eca"
     },
     {
       "name": "two-names-reversed",
@@ -176,7 +184,8 @@
           "owned_other",
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
@@ -184,7 +193,8 @@
             "owned_input",
             "owned_other"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -200,7 +210,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000020000000b6f776e65645f696e7075740000000b6f776e65645f6f7468657200000000000000020000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c7068610000000b6f776e65645f6f74686572000000010000000b6f776e65645f6f746865720000000462657461"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000020000000b6f776e65645f696e7075740000000b6f776e65645f6f7468657200000000000000020000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c7068610000000b6f776e65645f6f74686572000000010000000b6f776e65645f6f746865720000000462657461"
       },
       "context": {
         "siteId": "owned-site",
@@ -214,7 +224,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "614939bd6d4704639929d9d64cc9984bc98402dc3ebc982dc23013246c2d6b44"
+      "binding": "16b083ca16292c08e260e8bce81892991cebcd1cefb4a1f9e57f4431c16f5eca"
     },
     {
       "name": "duplicate-first-wins",
@@ -223,14 +233,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -244,7 +256,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e70757400000005616c7068610000000b6f776e65645f696e7075740000000462657461"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e70757400000005616c7068610000000b6f776e65645f696e7075740000000462657461"
       },
       "context": {
         "siteId": "owned-site",
@@ -258,7 +270,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "d50d9dfb9a1b38126d823e8592978d5bd6ed28aca3a0a3ef8c13077222d2047a"
+      "binding": "26ea3757a3d671be7875982cc2509ac498e66686803c90823544b7c6b5108b2e"
     },
     {
       "name": "duplicate-reversed",
@@ -267,14 +279,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -288,7 +302,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e70757400000004626574610000000b6f776e65645f696e70757400000005616c706861"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e70757400000004626574610000000b6f776e65645f696e70757400000005616c706861"
       },
       "context": {
         "siteId": "owned-site",
@@ -302,7 +316,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "b2ecbcb9e97f30381c479b32b027fb8e10e81fe3205ca21abb8933f27600e1da"
+      "binding": "32832051f5bd41968c375b78234fc020ac9d07758d8d21e38ab9d018711c7886"
     },
     {
       "name": "php-dot-alias-first",
@@ -311,14 +325,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -332,7 +348,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65642e696e707574000000066f776e6572420000000b6f776e65645f696e707574000000066f776e657241"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65642e696e707574000000066f776e6572420000000b6f776e65645f696e707574000000066f776e657241"
       },
       "context": {
         "siteId": "owned-site",
@@ -346,7 +362,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "fe9ee48d589b80c79bb6d6284157752f7b85696d9678743629744b0a89924a27"
+      "binding": "e9dd65f8c6a6c506dca5f65fed0c84d5974090c904c3ae57a4303bbb4a2d4b21"
     },
     {
       "name": "php-dot-alias-second",
@@ -355,14 +371,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -376,7 +394,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e707574000000066f776e6572410000000b6f776e65642e696e707574000000066f776e657242"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e707574000000066f776e6572410000000b6f776e65642e696e707574000000066f776e657242"
       },
       "context": {
         "siteId": "owned-site",
@@ -390,7 +408,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "6501f7ec186404b5ed1b0d121d517983b6975e94e9f9ff5212b48d82bf3bf879"
+      "binding": "e35e4c663cbd71b0e3779302aa47d83d6312d903d12cb34a766b60d9f02efc38"
     },
     {
       "name": "plus-is-not-space",
@@ -399,14 +417,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -416,7 +436,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000003412b42"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000003412b42"
       },
       "context": {
         "siteId": "owned-site",
@@ -430,7 +450,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "50d0caefa690060953518796177a0f86a732e9ffd97aa7d32ddbef6bea1c6f8e"
+      "binding": "c6eb0e52416aaa8ac031706cdefafe804ca1c5b636d27dd47b62e7533f7c91e7"
     },
     {
       "name": "percent-value",
@@ -439,14 +459,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -456,7 +478,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000009254532253832254143"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000009254532253832254143"
       },
       "context": {
         "siteId": "owned-site",
@@ -470,7 +492,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "14f9921e15a2b6ed391ccb60e1ae40678db71969c0163c25295017ffa61e4f6c"
+      "binding": "521d28e57d49ac2f0199898ebf1bd17a6d9abde9d8ec6e7616e1d03fde88d96b"
     },
     {
       "name": "percent-name-not-decoded",
@@ -479,17 +501,19 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": [],
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e7075740000000000000000"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e7075740000000000000000"
       },
       "context": {
         "siteId": "owned-site",
@@ -503,7 +527,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "d312407fa0f459cff3e129e0f405a2287b12d08faf526afb83d0807f1aabbe3c"
+      "binding": "b1af532ecb7291149bb6fb47f9ec27998cd23cc03afe4404abe645386f09869d"
     },
     {
       "name": "empty-value-present",
@@ -512,14 +536,16 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -529,7 +555,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000000"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000000"
       },
       "context": {
         "siteId": "owned-site",
@@ -543,7 +569,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "fe3328d3b85a5cdd4e841a0ecf1e5c3c6bc3e8824b7ef0189fe2d4b36c93ccad"
+      "binding": "b48127b9f9355620d99ba933d96bc59754c40ce5ca81ba0398b7ce05b9f8623c"
     },
     {
       "name": "prefix-absent",
@@ -552,17 +578,19 @@
         "cookieNames": [],
         "cookiePrefixes": [
           "owned_family_"
-        ]
+        ],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [],
           "cookiePrefixes": [
             "owned_family_"
-          ]
+          ],
+          "phpMaxInputVars": 4000
         },
         "groups": [],
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000000000000010000000d6f776e65645f66616d696c795f00000000"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa000000000000000010000000d6f776e65645f66616d696c795f00000000"
       },
       "context": {
         "siteId": "owned-site",
@@ -576,7 +604,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "a241d52c50dc17b8cb008c8e56ff0fbd7978abdd029e6b7452e0e23cf704690e"
+      "binding": "370f633fcb5685d1e34ccf874d2beca5625e975b32270836aaf133952df03c2b"
     },
     {
       "name": "new-prefix-input",
@@ -585,14 +613,16 @@
         "cookieNames": [],
         "cookiePrefixes": [
           "owned_family_"
-        ]
+        ],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [],
           "cookiePrefixes": [
             "owned_family_"
-          ]
+          ],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_family_session": [
@@ -602,7 +632,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000000000000010000000d6f776e65645f66616d696c795f00000001000000146f776e65645f66616d696c795f73657373696f6e00000001000000146f776e65645f66616d696c795f73657373696f6e0000000c61637475616c2d76616c7565"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa000000000000000010000000d6f776e65645f66616d696c795f00000001000000146f776e65645f66616d696c795f73657373696f6e00000001000000146f776e65645f66616d696c795f73657373696f6e0000000c61637475616c2d76616c7565"
       },
       "context": {
         "siteId": "owned-site",
@@ -616,7 +646,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "b8b23dd15a893791a14fff0174ce4f588cb0ec5f9e86763d7482ddf907763c10"
+      "binding": "4997e99fc6dd7dbb703324372af843a2cd8ecea89067fd6ef35b6d50d0f4f893"
     },
     {
       "name": "prefix-dot-alias",
@@ -625,14 +655,16 @@
         "cookieNames": [],
         "cookiePrefixes": [
           "owned_family_"
-        ]
+        ],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [],
           "cookiePrefixes": [
             "owned_family_"
-          ]
+          ],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_family_session": [
@@ -642,7 +674,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000000000000010000000d6f776e65645f66616d696c795f00000001000000146f776e65645f66616d696c795f73657373696f6e00000001000000146f776e65642e66616d696c792e73657373696f6e0000000c61637475616c2d76616c7565"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa000000000000000010000000d6f776e65645f66616d696c795f00000001000000146f776e65645f66616d696c795f73657373696f6e00000001000000146f776e65642e66616d696c792e73657373696f6e0000000c61637475616c2d76616c7565"
       },
       "context": {
         "siteId": "owned-site",
@@ -656,7 +688,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "7d6511c6ccf71711afd6b115abbb52a0120792a9fcb30db9e236f355f73761ab"
+      "binding": "0cd12a83db99407f590de186b4ed340d5e7dca54c9d083c67bc55fe75065339d"
     },
     {
       "name": "array-input",
@@ -665,7 +697,8 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "error": "ultracache_reuse_input_ambiguous"
@@ -691,7 +724,8 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "error": "ultracache_reuse_input_ambiguous"
@@ -717,7 +751,8 @@
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "error": "ultracache_reuse_input_ambiguous"
@@ -744,14 +779,16 @@
           "owned_input",
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -761,7 +798,7 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
       },
       "context": {
         "siteId": "owned-site",
@@ -775,23 +812,79 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "753bb24881193337e0c6c84e8a4a4a95bf558d82b8bdbfd388c6390ae0d9f22b"
+      "binding": "9e7a08ed366ff8c1e03f30906aec7b0ef966081cb42df1f4c20509f9271fb324"
     },
     {
-      "name": "other-native-epoch",
-      "cookieHeader": "owned_input=alpha",
+      "name": "unmatched-bracket-exact",
+      "cookieHeader": "owned[input=ownerB; owned_input=ownerA",
       "inputs": {
         "cookieNames": [
           "owned_input"
         ],
-        "cookiePrefixes": []
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "error": "ultracache_reuse_input_ambiguous"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": null
+    },
+    {
+      "name": "unmatched-bracket-prefix",
+      "cookieHeader": "owned[family[session=actual-value",
+      "inputs": {
+        "cookieNames": [],
+        "cookiePrefixes": [
+          "owned_family_"
+        ],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "error": "ultracache_reuse_input_ambiguous"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": null
+    },
+    {
+      "name": "unrelated-unmatched-bracket",
+      "cookieHeader": "tracker[broken=value; owned_input=alpha",
+      "inputs": {
+        "cookieNames": [
+          "owned_input"
+        ],
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
       },
       "projection": {
         "inputs": {
           "cookieNames": [
             "owned_input"
           ],
-          "cookiePrefixes": []
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
         },
         "groups": {
           "owned_input": [
@@ -801,7 +894,206 @@
             ]
           ]
         },
-        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d7631000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": "9e7a08ed366ff8c1e03f30906aec7b0ef966081cb42df1f4c20509f9271fb324"
+    },
+    {
+      "name": "leading-tab-exact",
+      "cookieHeader": "tracker=1;\towned_input=ownerB; owned_input=ownerA",
+      "inputs": {
+        "cookieNames": [
+          "owned_input"
+        ],
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "inputs": {
+          "cookieNames": [
+            "owned_input"
+          ],
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
+        },
+        "groups": {
+          "owned_input": [
+            [
+              "owned_input",
+              "ownerB"
+            ],
+            [
+              "owned_input",
+              "ownerA"
+            ]
+          ]
+        },
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000020000000b6f776e65645f696e707574000000066f776e6572420000000b6f776e65645f696e707574000000066f776e657241"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": "a5f6d3089b365c1b4b5baa7ab3a6bdbcee468013ada95bc74bc238b8e5bd1aee"
+    },
+    {
+      "name": "leading-tab-prefix",
+      "cookieHeader": "tracker=1;\towned_family_session=actual-value",
+      "inputs": {
+        "cookieNames": [],
+        "cookiePrefixes": [
+          "owned_family_"
+        ],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "inputs": {
+          "cookieNames": [],
+          "cookiePrefixes": [
+            "owned_family_"
+          ],
+          "phpMaxInputVars": 4000
+        },
+        "groups": {
+          "owned_family_session": [
+            [
+              "owned_family_session",
+              "actual-value"
+            ]
+          ]
+        },
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa000000000000000010000000d6f776e65645f66616d696c795f00000001000000146f776e65645f66616d696c795f73657373696f6e00000001000000146f776e65645f66616d696c795f73657373696f6e0000000c61637475616c2d76616c7565"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": "4997e99fc6dd7dbb703324372af843a2cd8ecea89067fd6ef35b6d50d0f4f893"
+    },
+    {
+      "name": "native-budget-consumed-before",
+      "cookieHeader": "owned_input=alpha;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;",
+      "inputs": {
+        "cookieNames": [
+          "owned_input"
+        ],
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "inputs": {
+          "cookieNames": [
+            "owned_input"
+          ],
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
+        },
+        "groups": {
+          "owned_input": [
+            [
+              "owned_input",
+              "alpha"
+            ]
+          ]
+        },
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": "9e7a08ed366ff8c1e03f30906aec7b0ef966081cb42df1f4c20509f9271fb324"
+    },
+    {
+      "name": "native-budget-consumed-after",
+      "cookieHeader": "n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;n;owned_input=alpha",
+      "inputs": {
+        "cookieNames": [
+          "owned_input"
+        ],
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "error": "ultracache_reuse_input_budget"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": null
+    },
+    {
+      "name": "other-native-epoch",
+      "cookieHeader": "owned_input=alpha",
+      "inputs": {
+        "cookieNames": [
+          "owned_input"
+        ],
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "inputs": {
+          "cookieNames": [
+            "owned_input"
+          ],
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
+        },
+        "groups": {
+          "owned_input": [
+            [
+              "owned_input",
+              "alpha"
+            ]
+          ]
+        },
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000b6f776e65645f696e70757400000000000000010000000b6f776e65645f696e707574000000010000000b6f776e65645f696e70757400000005616c706861"
       },
       "context": {
         "siteId": "owned-site",
@@ -815,7 +1107,7 @@
         "representation": "6666666666666666666666666666666666666666666666666666666666666666",
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
-      "binding": "a7848c2d069e1e20fe456a90227cd1149b2b9d81f032fa28a3ff554390d10113"
+      "binding": "307f85eaa34aae2bebd67e19a06806180364f7a9dcdd4ce914cd18edc6e133c8"
     }
   ]
 }

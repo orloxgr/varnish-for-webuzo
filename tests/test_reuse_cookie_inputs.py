@@ -21,7 +21,7 @@ FIELDS=('siteId','canonicalHost','scope','epoch','nativePolicy','wordpressPolicy
 
 class Inputs(ctypes.Structure):
     _fields_=[('names',ctypes.POINTER(ctypes.c_char_p)),('prefixes',ctypes.POINTER(ctypes.c_char_p)),
-              ('name_count',ctypes.c_size_t),('prefix_count',ctypes.c_size_t)]
+              ('name_count',ctypes.c_size_t),('prefix_count',ctypes.c_size_t),('php_max_input_vars',ctypes.c_uint32)]
 class Descriptor(ctypes.Structure):pass
 Descriptor._fields_=[('next',ctypes.POINTER(Descriptor)),('descriptor',ctypes.c_char*65),
                     ('url',ctypes.c_char_p),('provider',ctypes.c_char_p),('occurrences',ctypes.c_uint64)]
@@ -34,6 +34,9 @@ class Context(ctypes.Structure):
 def lp(value):
     if isinstance(value,str):value=value.encode()
     return struct.pack('>I',len(value))+value
+
+def declaration(names=(),prefixes=(),budget=1000):
+    return dict(cookieNames=list(names),cookiePrefixes=list(prefixes),phpMaxInputVars=budget)
 
 @unittest.skipUnless(CC,'Portable C compiler required; skipped does not qualify parity')
 class ReuseCookieInputs(unittest.TestCase):
@@ -87,8 +90,9 @@ class ReuseCookieInputs(unittest.TestCase):
     def vector(self,row):
         result,frame=self.projection(row['inputs'],row['cookieHeader'])
         if row['projection'].get('error'):
-            self.assertEqual(row['projection']['error'],'ultracache_reuse_input_ambiguous')
-            self.assertEqual(result,-4);self.assertIsNone(frame);return
+            expected={'ultracache_reuse_input_ambiguous':-4,'ultracache_reuse_input_budget':-5}
+            self.assertIn(row['projection']['error'],expected)
+            self.assertEqual(result,expected[row['projection']['error']]);self.assertIsNone(frame);return
         self.assertEqual(result,1)
         self.assertEqual(frame.hex(),row['projection']['frameHex'])
         native=self.binding(row['context'],frame)
@@ -104,13 +108,14 @@ class ReuseCookieInputs(unittest.TestCase):
             changed=dict(row['context']);changed[field]+='x'
             with self.subTest(field=field):self.assertNotEqual(self.binding(changed,frame),baseline)
         self.assertNotEqual(self.binding(row['context'],frame,b'other-synthetic-secret'),baseline)
-    def test_declarations_require_both_arrays_and_strict_unambiguous_schema(self):
-        bad=['{}','{"cookieNames":[]}','{"cookieNames":[],"cookiePrefixes":[],"other":0}',
-             '{"cookieNames":[],"cookieNames":[],"cookiePrefixes":[]}',
-             '{"cookieNames":["owned input"],"cookiePrefixes":[]}',
-             '{"cookieNames":["owned\\u0000input"],"cookiePrefixes":[]}',
-             '{"cookieNames":[],"cookiePrefixes":[""]}',
-             '{"cookieNames":[],"cookiePrefixes":[]} trailing']
+    def test_declarations_require_complete_runtime_metadata_and_strict_unambiguous_schema(self):
+        bad=['{}','{"cookieNames":[]}','{"cookieNames":[],"cookiePrefixes":[]}',
+             '{"cookieNames":[],"cookieNames":[],"cookiePrefixes":[],"phpMaxInputVars":1000}',
+             '{"cookieNames":[],"cookiePrefixes":[],"phpMaxInputVars":1000,"phpMaxInputVars":1000}',
+             json.dumps(dict(declaration(),other=0)),json.dumps(declaration(['owned input'])),
+             json.dumps(declaration(['owned\x00input'])),json.dumps(declaration(prefixes=[''])),
+             json.dumps(declaration())+' trailing']
+        bad += [json.dumps(declaration(budget=value)) for value in (-1,True,'1000',2.5,2**32)]
         for raw in bad:
             with self.subTest(raw=raw):
                 result,out=self.inputs(raw)
@@ -118,43 +123,54 @@ class ReuseCookieInputs(unittest.TestCase):
                 finally:self.lib.delivery_reuse_inputs_free(out)
     def test_cookie_control_bytes_fail_projection_not_cookie_policy(self):
         for value in (b'owned_input=one\x00two',b'unrelated=one\rtwo'):
-            result,frame=self.projection({'cookieNames':['owned_input'],'cookiePrefixes':[]},value)
+            result,frame=self.projection(declaration(['owned_input']),value)
             self.assertEqual(result,-3);self.assertIsNone(frame)
     def test_unmatched_bracket_fallback_cannot_hide_consumed_exact_or_prefix_input(self):
-        cases=[({'cookieNames':['auth_session'],'cookiePrefixes':[]},'auth[session=ownerB; auth_session=ownerA'),
-               ({'cookieNames':[],'cookiePrefixes':['wp_woocommerce_session_']},'wp[woocommerce[session_x=ownerB'),
-               ({'cookieNames':['auth_session'],'cookiePrefixes':[]},'auth[session')]
-        for declaration,wire in cases:
+        cases=[(declaration(['auth_session']),'auth[session=ownerB; auth_session=ownerA'),
+               (declaration(prefixes=['wp_woocommerce_session_']),'wp[woocommerce[session_x=ownerB'),
+               (declaration(['auth_session']),'auth[session')]
+        for inputs,wire in cases:
             with self.subTest(wire=wire):
-                result,frame=self.projection(declaration,wire)
+                result,frame=self.projection(inputs,wire)
                 self.assertEqual(result,-4);self.assertIsNone(frame)
-        declaration={'cookieNames':['auth_session'],'cookiePrefixes':[]}
-        self.assertEqual(self.projection(declaration,'unrelated[session=not-consumed; auth_session=ownerA'),
-                         self.projection(declaration,'auth_session=ownerA'))
+        inputs=declaration(['auth_session'])
+        self.assertEqual(self.projection(inputs,'unrelated[session=not-consumed; auth_session=ownerA'),
+                         self.projection(inputs,'auth_session=ownerA'))
+        empty_base=declaration(['_auth_session'])
+        self.assertEqual(self.projection(empty_base,'[auth_session=ignored'),self.projection(empty_base,''))
     def test_leading_tab_before_consumed_name_is_bound_like_php(self):
-        cases=[({'cookieNames':['auth_session'],'cookiePrefixes':[]},'auth_session'),
-               ({'cookieNames':[],'cookiePrefixes':['wp_woocommerce_session_']},'wp_woocommerce_session_x')]
-        for declaration,name in cases:
+        cases=[(declaration(['auth_session']),'auth_session'),
+               (declaration(prefixes=['wp_woocommerce_session_']),'wp_woocommerce_session_x')]
+        for inputs,name in cases:
             with self.subTest(name=name):
-                self.assertEqual(self.projection(declaration,'tracker=1;\t'+name+'=ownerB; '+name+'=ownerA'),
-                                 self.projection(declaration,name+'=ownerB; '+name+'=ownerA'))
-                self.assertNotEqual(self.projection(declaration,'tracker=1;\t'+name+'=ownerB; '+name+'=ownerA'),
-                                    self.projection(declaration,name+'=ownerA'))
+                self.assertEqual(self.projection(inputs,'tracker=1;\t'+name+'=ownerB; '+name+'=ownerA'),
+                                 self.projection(inputs,name+'=ownerB; '+name+'=ownerA'))
+                self.assertNotEqual(self.projection(inputs,'tracker=1;\t'+name+'=ownerB; '+name+'=ownerA'),
+                                    self.projection(inputs,name+'=ownerA'))
+    def test_actual_parser_budget_counts_tokens_without_binding_unrelated_tail(self):
+        inputs=declaration(['owned_input'],budget=1)
+        expected=self.projection(inputs,'owned_input=one')
+        self.assertEqual(self.projection(inputs,'; \t; =empty;owned_input=one;'+('n;'*2000)),expected)
+        self.assertEqual(self.projection(inputs,'n;owned_input=one'),(-5,None))
+        self.assertEqual(self.projection(inputs,'n;n;n;owned_input=one'),(-5,None))
+        self.assertNotEqual(self.projection(declaration(['owned_input'],budget=2),'owned_input=one'),expected)
+        self.assertEqual(self.projection(declaration(['owned_input'],budget=0),'owned_input=one'),(-5,None))
+        self.assertEqual(self.projection(declaration(['owned_input'],budget=0),'')[0],1)
     def test_alias_prefix_and_unrelated_input_permutations_match_independent_frames(self):
         rng=random.Random(1006)
-        declaration={'cookieNames':['absent'], 'cookiePrefixes':['owned.family.']}
+        inputs=declaration(['absent'],['owned.family.'])
         for n in range(100):
             values=[('owned.family.a','value+'+str(n)),('owned_family_b','%2B'+str(n))]
             rng.shuffle(values)
             wire='; '.join(k+'='+v for k,v in [values[0],('analytics','unconsumed-'+str(n)),values[1]])
-            result,frame=self.projection(declaration,wire);self.assertEqual(result,1)
-            expected=lp('ultracache-cookie-inputs-v1')+struct.pack('>I',1)+lp('absent')+struct.pack('>I',1)+lp('owned.family.')+struct.pack('>I',2)
+            result,frame=self.projection(inputs,wire);self.assertEqual(result,1)
+            expected=lp('ultracache-cookie-inputs-v1')+struct.pack('>II',1000,1)+lp('absent')+struct.pack('>I',1)+lp('owned.family.')+struct.pack('>I',2)
             for raw,value in sorted(values,key=lambda pair:pair[0].replace('.','_')):
                 expected+=lp(raw.replace('.','_'))+struct.pack('>I',1)+lp(raw)+lp(value)
             self.assertEqual(frame,expected)
 
     def test_recipe_metadata_is_strict_and_binds_complete_occurrence_count(self):
-        recipe={'digest':'a'*64,'inputs':{'cookieNames':['owned_input','owned_input'],'cookiePrefixes':['new_']},
+        recipe={'digest':'a'*64,'inputs':declaration(['owned_input','owned_input'],['new_']),
             'fragments':[{'descriptor':'b'*64,'url':'/shop/?ultracache_esi=first','provider':'native-cart','occurrences':2},
                          {'descriptor':'c'*64,'url':'/shop/?ultracache_esi=second','provider':'nonce','occurrences':1}]}
         def parse(value,count=3):

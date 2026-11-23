@@ -9,11 +9,13 @@ enum delivery_reuse_input_result {
     DELIVERY_REUSE_INPUT_MEMORY = -1,
     DELIVERY_REUSE_INPUT_DECLARATION = -2,
     DELIVERY_REUSE_INPUT_SYNTAX = -3,
-    DELIVERY_REUSE_INPUT_AMBIGUOUS = -4
+    DELIVERY_REUSE_INPUT_AMBIGUOUS = -4,
+    DELIVERY_REUSE_INPUT_RUNTIME = -5
 };
 struct delivery_reuse_inputs {
     char **names, **prefixes; /* complete declarations, sorted/deduplicated */
     size_t name_count, prefix_count;
+    uint32_t php_max_input_vars; /* actual negotiated PHP runtime, not addon limit */
 };
 struct delivery_reuse_descriptor {
     struct delivery_reuse_descriptor *next;

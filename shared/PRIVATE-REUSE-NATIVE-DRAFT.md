@@ -20,7 +20,9 @@ work will supply authenticated metadata before prepare; that does not exist in
 this stage. These experimental methods do not advertise reuse negotiation.
 
 The agreed producer input-declaration direction is
-`recipe.inputs={"cookieNames":[...],"cookiePrefixes":[...]}`, with complete
+`recipe.inputs={"cookieNames":[...],"cookiePrefixes":[...],"phpMaxInputVars":1000}`,
+where the example integer is replaced by actual effective producer runtime
+metadata, never a consumer default. It includes complete
 declarations including absent names and prefixes which currently match nothing.
 It is not an observed-cookie-name list. Proposed binding groups every matching
 wire occurrence by normalized PHP flat name, sorts groups by bytes and preserves

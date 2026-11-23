@@ -77,16 +77,23 @@ static int reuse_read_inputs(struct reader *reader, struct delivery_reuse_inputs
         if (!string(reader,&key) || !take(reader,':')) goto failed;
         if (equal(key,"cookieNames")) bit = 1;
         else if (equal(key,"cookiePrefixes")) bit = 2;
+        else if (equal(key,"phpMaxInputVars")) bit = 4;
         else goto failed;
         if (seen & bit) goto failed;
         seen |= bit;
         if (bit == 1) {
             if (!reuse_selectors(reader,&inputs->names,&inputs->name_count)) goto failed;
-        } else if (!reuse_selectors(reader,&inputs->prefixes,&inputs->prefix_count)) goto failed;
+        } else if (bit == 2) {
+            if (!reuse_selectors(reader,&inputs->prefixes,&inputs->prefix_count)) goto failed;
+        } else {
+            uint64_t actual;
+            if (!number(reader,&actual) || actual > UINT32_MAX) goto failed;
+            inputs->php_max_input_vars = (uint32_t)actual;
+        }
         if (take(reader,'}')) break;
         if (!take(reader,',')) goto failed;
     }
-    if (seen != 3) goto failed;
+    if (seen != 7) goto failed;
     *output = inputs; return 1;
 failed:
     delivery_reuse_inputs_free(inputs); return 0;
@@ -272,7 +279,7 @@ int delivery_reuse_input_projection(const struct delivery_reuse_inputs *inputs,
     unsigned char **output, size_t *output_length) {
     struct reuse_pair *pairs = NULL;
     struct reuse_frame frame = {NULL,0,0};
-    size_t i, cursor = 0, count = 0, groups = 0;
+    size_t i, cursor = 0, count = 0, groups = 0, php_tokens = 0;
     int result = DELIVERY_REUSE_INPUT_MEMORY;
     if (!output || !output_length) return DELIVERY_REUSE_INPUT_DECLARATION;
     *output = NULL; *output_length = 0;
@@ -290,6 +297,11 @@ int delivery_reuse_input_projection(const struct delivery_reuse_inputs *inputs,
         while (start < end && (cookie[start] == ' ' || cookie[start] == '\t')) ++start;
         equal_at = start;
         while (equal_at < end && cookie[equal_at] != '=') ++equal_at;
+        /* Match the actual PHP Cookie parser's count before registration:
+         * empty/whitespace-only/empty-name pairs do not consume input slots;
+         * unrelated and bare tokens do. Never impose a guessed PHP default. */
+        if (start == end || equal_at == start) continue;
+        ++php_tokens;
         base_length = 0;
         while (start+base_length < equal_at && cookie[start+base_length] != '[') ++base_length;
         if (base_length == SIZE_MAX) goto finished;
@@ -319,10 +331,15 @@ int delivery_reuse_input_projection(const struct delivery_reuse_inputs *inputs,
                 }
                 php_name[name_length] = 0;
                 if (reuse_input_matches(inputs,php_name)) {
-                    free(php_name); result = DELIVERY_REUSE_INPUT_AMBIGUOUS; goto finished;
+                    free(php_name);
+                    result = php_tokens > inputs->php_max_input_vars ? DELIVERY_REUSE_INPUT_RUNTIME : DELIVERY_REUSE_INPUT_AMBIGUOUS;
+                    goto finished;
                 }
             }
             free(php_name); continue;
+        }
+        if (php_tokens > inputs->php_max_input_vars) {
+            free(php_name); result = DELIVERY_REUSE_INPUT_RUNTIME; goto finished;
         }
         if (equal_at == end || !reuse_token((const char *)cookie+start,equal_at-start)) {
             free(php_name); result = DELIVERY_REUSE_INPUT_AMBIGUOUS; goto finished;
@@ -337,7 +354,8 @@ int delivery_reuse_input_projection(const struct delivery_reuse_inputs *inputs,
     }
     if (count > 1) qsort(pairs,count,sizeof(*pairs),reuse_pair_compare);
     for (i = 0; i < count; ++i) if (!i || strcmp(pairs[i-1].php_name,pairs[i].php_name)) ++groups;
-    if (!reuse_lp_string(&frame,"ultracache-cookie-inputs-v1") || !reuse_u32(&frame,inputs->name_count)) goto finished;
+    if (!reuse_lp_string(&frame,"ultracache-cookie-inputs-v1") ||
+        !reuse_u32(&frame,inputs->php_max_input_vars) || !reuse_u32(&frame,inputs->name_count)) goto finished;
     for (i = 0; i < inputs->name_count; ++i) if (!reuse_lp_string(&frame,inputs->names[i])) goto finished;
     if (!reuse_u32(&frame,inputs->prefix_count)) goto finished;
     for (i = 0; i < inputs->prefix_count; ++i) if (!reuse_lp_string(&frame,inputs->prefixes[i])) goto finished;
