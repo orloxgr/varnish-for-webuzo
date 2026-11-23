@@ -53,3 +53,31 @@ Representation and cold-selection regressions are qualified separately. These
 are native mock-producer checks, not a claim of live WordPress acceptance or
 production deployment. This correction does not repair missing application
 publication manifests; that is a separate producer issue.
+
+## Covered projected selection and retained consent cookies
+
+Active mutation coverage, execution-drain negotiation and public-source
+projection add their own authenticated context to a cold prepare. The native
+module removes four backend-only storage carriers before stamping that context:
+`X-SCP-Vary-Accept`, `X-SCP-Vary-Accept-Language`, `X-SCP-Vary-Cookie` and
+`X-SCP-Vary-ESI-Cookie`. This applies only to the owned `D_PREPARE` phase, whose
+response is an uncacheable typed envelope. Their actual representation inputs
+remain on the owning request and continuation. Ordinary origin and recovery
+fetches keep their Vary inputs. The application negotiation markers and signed
+mutation context remain intact.
+
+After fixing that backend peak, the projected multi-phase fixture exposed a
+second failure in the client workspace: each restore allocated another copy of
+the unchanged original Cookie and URL. Restore now reuses an exactly identical
+single header and unchanged URL. Changed or duplicate headers still use normal
+replacement; absent and empty values remain distinct.
+
+`test_backend_mutation_header_budget.py` exercises both stages with a synthetic
+2315-byte consent Cookie, full browser fields, real native signed-coverage
+verification and an explicitly mock resolver/source/application. Both the
+ordinary navigation and the Pragma/Referer case use unchanged `http_max_hdr=64`,
+96 KiB client/backend workspaces and 8 KiB/32 KiB request limits. A separate
+ordinary authenticated POST verifies exact Cookie, Authorization, URL/query,
+Content-Type and encoded form-body preservation with one backend execution.
+These fixtures qualify native transport behavior, not real WordPress or browser
+acceptance. The earlier header-capacity negative control remains active.

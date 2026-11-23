@@ -159,9 +159,11 @@ class BackendHeaderBudget(unittest.TestCase):
                 self.assertTrue(received.get('X-UltraCache-Delivery-Authorization'))
                 self.assertTrue(received.get('X-UltraCache-Delivery-Request'))
                 self.assertEqual(received.get('X-UltraCache-Delivery-Original-URL'),'/browser')
+            self.assertIsNotNone(app.requests[0].get('X-SCP-HTML-Accept'))
             for name in ('X-SCP-Vary-Accept','X-SCP-Vary-Accept-Language',
-                         'X-SCP-HTML-Accept','X-SCP-Vary-Cookie','X-SCP-Vary-ESI-Cookie'):
-                self.assertIsNotNone(app.requests[0].get(name),'Keep native representation inputs: '+name)
+                         'X-SCP-Vary-Cookie','X-SCP-Vary-ESI-Cookie'):
+                self.assertIsNone(app.requests[0].get(name),
+                    'Owned typed prepare has no cacheable HTTP representation: '+name)
 
     def test_actual_repeated_prepare_is_still_rejected_without_origin_work(self):
         app=BrowserApplication()
@@ -183,12 +185,14 @@ class BackendHeaderBudget(unittest.TestCase):
     def test_header_capacity_is_reported_as_resource_failure_without_origin_work(self):
         app=BrowserApplication()
         def stale_slots(source):
-            # Fault injection: restore the six completed scratch fields that
-            # formerly occupied slots during prepare. Keep the browser intact.
+            # Fault injection: fill the HTTP table after request-side work.
+            # Four ordinary fields retain the slots now released from typed
+            # prepare, so the actual capacity-failure branch remains exercised.
             marker='if (cookie_handoff.delivery_backend()) {'
             scratch={'X-SCP-CMS':'wordpress','X-SCP-CMS-Path':'/',
                      'X-SCP-CMS-Query':'','X-SCP-Selection-Eligible':'1',
-                     'X-SCP-Selection-State':'1','X-SCP-Selection-Native-Policy':'a'*64}
+                     'X-SCP-Selection-State':'1','X-SCP-Selection-Native-Policy':'a'*64,
+                     **{'X-Test-Occupied-Slot-'+str(i):'fixture' for i in range(4)}}
             fields='\n'.join('set bereq.http.'+name+' = "'+value+'";' for name,value in scratch.items())
             assert source.count(marker)==1
             return source.replace(marker,fields+'\n'+marker,1)

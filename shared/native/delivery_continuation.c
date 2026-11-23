@@ -310,6 +310,14 @@ static int delivery_copy_header(const struct http *hp, hdr_t h, char **out) {
 }
 
 static int delivery_restore_header(VRT_CTX, hdr_t h, const char *s) {
+    /* Repeated owned restarts must not copy an unchanged original Cookie into
+     * the finite client workspace again. Preserve absent/empty distinctions;
+     * duplicate or changed fields still take the normal restore path. */
+    const char *current = NULL;
+    unsigned count = http_CountHdr(ctx->http_req,h);
+    if ((!s && !count) || (s && count == 1 &&
+        http_GetHdr(ctx->http_req,h,&current) && !strcmp(current,s)))
+        return !WS_Overflowed(ctx->ws);
     http_Unset(ctx->http_req, h);
     if (s) http_ForceHeader(ctx->http_req, h, s);
     return !WS_Overflowed(ctx->ws);
@@ -317,9 +325,9 @@ static int delivery_restore_header(VRT_CTX, hdr_t h, const char *s) {
 
 static int delivery_restore(VRT_CTX, const struct continuation *d) {
     unsigned i;
-    const char *url = WS_Copy(ctx->ws, d->url, -1);
-    if (!url) return 0;
-    VRT_l_req_url(ctx, NULL, TOSTRAND(url));
+    const char *current = ctx->http_req->hd[HTTP_HDR_URL].b;
+    if (!current || strcmp(current,d->url))
+        VRT_l_req_url(ctx, NULL, TOSTRAND(d->url));
     if (!delivery_restore_header(ctx, H_Host, d->host) ||
         !delivery_restore_header(ctx, H_Cookie, d->cookie) ||
         !delivery_restore_header(ctx, H_Accept_Encoding, d->encoding)) return 0;
@@ -772,6 +780,21 @@ VCL_BOOL vmod_delivery_recover(VRT_CTX, struct vmod_priv *priv) {
     return !WS_Overflowed(ctx->ws);
 }
 
+/* A prepared application execution returns an uncacheable typed envelope, not
+ * the representation stored by the following native snapshot fetch. Keep its
+ * hash/Vary inputs on the owning request and continuation; do not spend backend
+ * header slots copying those four internal storage carriers into PHP. Recovery
+ * and ordinary origin fetches still retain their actual Vary input headers.
+ * Run before mutation/authorization stamping as well as before the envelope:
+ * waiting until after stamping can already exhaust the HTTP header table. */
+static void delivery_prepare_backend_scratch(VRT_CTX, const struct continuation *d) {
+    if (!d || d->phase != D_PREPARE) return;
+    http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-Accept"));
+    http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-Accept-Language"));
+    http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-Cookie"));
+    http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-ESI-Cookie"));
+}
+
 VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
     struct handoff *entry;
@@ -781,6 +804,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
     pthread_mutex_lock(&lock);
     entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
     if (d) {
+        delivery_prepare_backend_scratch(ctx,d);
         owned = 1;
         if ((d->phase != D_PREPARE && d->phase != D_RECOVERY) ||
             (d->phase == D_PREPARE ? d->sent++ : d->recovery_sent++)) d->failed = repeated = 1;
@@ -871,6 +895,7 @@ VCL_BOOL vmod_delivery_public_source_backend(VRT_CTX, struct vmod_priv *priv) {
     pthread_mutex_lock(&lock);
     entry = task && task->key ? delivery_entry(task->key) : NULL;
     d = entry ? entry->delivery : NULL;
+    delivery_prepare_backend_scratch(ctx,d);
     if (d && d->phase == D_PREPARE && d->source_stage == SOURCE_CAPTURE) {
         owned = 1;
         url = WS_Copy(ctx->ws,d->source_url,-1);

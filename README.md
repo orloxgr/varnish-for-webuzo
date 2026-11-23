@@ -1,5 +1,14 @@
 # Varnish for Webuzo
 
+Version **0.13.1** corrects backend header-slot exhaustion and repeated client
+workspace copying during covered UltraCache public-selection continuations.
+Only four internal storage carriers are omitted from owned, uncacheable prepare
+fetches; their representation inputs remain on the original request and native
+continuation. Restoring an already identical original header or URL no longer
+allocates another copy. Application Cookie, Authorization, form bodies and the
+negotiated execution/coverage protocol are preserved. No Varnish limits, cache
+lifetimes or saved settings are changed. See [backend header budget](shared/BACKEND-HEADER-BUDGET.md).
+
 Version **0.13.0** reuses prewarmed complete guest pages across Shared cookies
 when the application's declared provider inputs still match the guest context.
 Stateful visitors can reuse qualified private fragments through native cache
