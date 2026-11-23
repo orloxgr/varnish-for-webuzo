@@ -88,7 +88,9 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
                     *admin_args, '-s', 'malloc,16m',
                     '-p', 'feature=+esi_ignore_other_elements',
                     *[arg for value in daemon_parameters for arg in ('-p',value)]], stdout=log, stderr=log)
-                deadline = time.monotonic() + 15
+                # VM startup/compilation allowance for this disposable actor,
+                # not an origin/application timeout or a cache policy limit.
+                deadline = time.monotonic() + 45
                 while True:
                     if daemon.poll() is not None:
                         log.seek(0)

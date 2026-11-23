@@ -25,6 +25,9 @@ static void mutation_task_fini(VRT_CTX, struct task *task) {
     if (ctx && ctx->http_bereq) http_Unset(ctx->http_bereq,h_mutation_context);
     pthread_mutex_lock(&lock);
     if (execution->awaiting_receipt) mutation_unknown(execution);
+    /* This backend owner can no longer return a receipt. Unknown application
+     * execution remains retained until independent actual-drain attestation. */
+    execution->awaiting_receipt = 0;
     execution->live = 0;
     if (!execution->unknown) {
         struct mutation_execution **position = &execution->scope->executions;

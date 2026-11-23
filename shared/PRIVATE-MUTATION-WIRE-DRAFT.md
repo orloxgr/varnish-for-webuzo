@@ -191,9 +191,10 @@ If creating the owned context itself failed, `lostExecutionContext:true` is
 reported instead. Existing scopes without executions retain the prior JSON
 shape. `private-authority-recover` rejects `execution-unsettled` while these
 markers exist, including when a caller merely sends `Private-Drained: 1`.
-The authenticated actual-drain operation/wire for removing these markers is
-**not yet implemented**, so this stage cannot be enabled in production. There
-is no expiry, implicit cleanup-to-CLEAN or guessed process-death shortcut.
+The actual-drain operation described below is experimental. The complete
+actual-producer integration, targeted prearm and reusable admission are still
+open, so this stage cannot be enabled in production. There is no expiry,
+implicit cleanup-to-CLEAN or guessed process-death shortcut.
 
 Five actual native HTTP actors passed: signed POST preserving a 201/body and
 two real Set-Cookie fields; cross-request receipt replay preserving the actual
@@ -203,3 +204,54 @@ retaining an unknown execution with recovery refused. The full qualification
 also reran existing authority, portable input/identity/receipt and explicit
 engine-receipt tests. No real SQL/provider drain or cached-body admission is
 inferred from these mock-producer HTTP actors.
+
+## `private-execution-drained`: exact ended-execution retirement
+
+This eighth literal control operation uses the same authenticated per-site
+PURGE `/__ultracache-vcl-contract-v2` transport. In addition to the existing
+accepted application scope and exact observed epoch/incarnation, send:
+
+```text
+X-UltraCache-Operation: private-execution-drained
+X-UltraCache-Private-Scope-Revision: <current observed scopeRevision>
+X-UltraCache-Private-Request-Id: <exact native requestId64>
+X-UltraCache-Private-Challenge: <exact native challenge64>
+X-UltraCache-Private-Drained: 1
+```
+
+The authenticated producer must first obtain independent actual PHP/runtime
+and actual provider-connection drain proof for **that requestId/challenge**.
+Every authentic execution, including NONE and unavailable-provider/RPC cases,
+is producer-owned durable work, separate from provider DIRTY transactions.
+Response headers, `_dirty=false`, socket closure, native task end, a successful
+status, or a timeout are not that proof. Native checks the exact marker, current
+scope revision and that its backend task is nonlive and no longer awaiting a
+receipt; the trusted producer attests the independent application drain.
+
+On success the response is accepted JSON with `reason: "execution-drained"`,
+echoed `requestId` and `challenge`, normal accepted native context and any
+remaining `unsettledExecutions`. Only the exact matching marker is removed.
+This operation never sets scope READY, makes a tag CLEAN, closes a provider
+transaction, clears `lostExecutionContext`, or removes another scope's marker.
+The existing explicit authority-recover and fresh generation-publish gates
+remain separate. Scope revision does not rotate merely for marker removal.
+
+Malformed/missing lexical fields or `Drained != 1` return 400. Stale scope
+revision returns 409 `scope-revision-changed`; unknown request returns 409
+`execution-unavailable`; wrong challenge returns 409
+`execution-challenge-changed`; a live/awaiting backend returns 409
+`execution-active`. A repeated retirement of an already removed ID is unknown,
+with no effect on another owner. After an uncertain ACK the producer can
+reobserve that exact marker's absence; no implicit CLEAN follows either way.
+
+Backend-task finalization sets `live=false` and `awaitingReceipt=false` because
+that native owner can no longer return a receipt. Its `unknown=true` marker
+remains until the independent attestation above. Thus backend loss remains
+recoverable after real drain, without equating backend end with application
+completion or retaining impossible future receipt permission indefinitely.
+
+The protocol-only finalization phase is separate from the original business
+execution. It must not recursively create another mutation context. Current
+real-origin fixture hooks only its exact owned Woo actor route; the eventual
+general integration must distinguish a genuinely native-owned finalization
+phase, never a browser-supplied skip header.

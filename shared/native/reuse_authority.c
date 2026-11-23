@@ -214,13 +214,18 @@ static void reuse_json_field(struct vsb *json, const char *name, const char *val
     VSB_putc(json,','); reuse_json(json,name); VSB_putc(json,':'); reuse_json(json,value);
 }
 static int reuse_control_reply(struct task *task, int status, const char *reason,
-    const struct reuse_scope *scope, const struct reuse_tag *tag, const struct reuse_transaction *transaction) {
+    const struct reuse_scope *scope, const struct reuse_tag *tag, const struct reuse_transaction *transaction,
+    const struct mutation_execution *drained) {
     struct vsb *json = VSB_new_auto();
     char *body = NULL;
     if (!json) return 503;
     VSB_printf(json,"{\"schemaVersion\":1,\"accepted\":%s",status == 200 ? "true" : "false");
     reuse_json_field(json,"reason",reason);
     reuse_json_field(json,"epoch",public_registry_epoch);
+    if (drained) {
+        reuse_json_field(json,"requestId",drained->request_id);
+        reuse_json_field(json,"challenge",drained->challenge);
+    }
     if (scope) {
         reuse_json_field(json,"siteId",scope->site); reuse_json_field(json,"canonicalHost",scope->host);
         reuse_json_field(json,"scope",scope->scope); reuse_json_field(json,"incarnation",scope->incarnation);
@@ -276,6 +281,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     struct reuse_scope *scope = NULL;
     struct reuse_tag *tag = NULL;
     struct reuse_transaction *transaction = NULL;
+    struct mutation_execution *drained = NULL;
     const char *operation, *application_scope, *id, *epoch, *incarnation, *expected_scope, *expected;
     const char *reason = "invalid-control";
     int status = 400;
@@ -319,6 +325,25 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     }
     if (!epoch || strcmp(epoch,public_registry_epoch)) { status = 409; reason = "epoch-changed"; goto reply; }
     if (!incarnation || strcmp(incarnation,scope->incarnation)) { status = 409; reason = "incarnation-changed"; goto reply; }
+    if (!strcmp(operation,"private-execution-drained")) {
+        const char *request_id = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Request-Id"));
+        const char *challenge = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Challenge"));
+        struct mutation_execution **position = &scope->executions;
+        struct mutation_execution *execution;
+        if (!public_policy(request_id) || !public_policy(challenge) ||
+            !delivery_header_equals(ctx->http_req,HDR("X-UltraCache-Private-Drained"),"1")) goto reply;
+        if (!expected_scope || strcmp(expected_scope,scope->revision)) { status = 409; reason = "scope-revision-changed"; goto reply; }
+        while (*position && strcmp((*position)->request_id,request_id)) position = &(*position)->next;
+        execution = *position;
+        if (!execution) { status = 409; reason = "execution-unavailable"; goto reply; }
+        if (strcmp(execution->challenge,challenge)) { status = 409; reason = "execution-challenge-changed"; goto reply; }
+        if (execution->live || execution->awaiting_receipt) { status = 409; reason = "execution-active"; goto reply; }
+        /* Authenticated producer attests actual independent runtime/provider
+         * drain for precisely this execution. Native does not infer that from
+         * headers, socket/task end, timeout or the absence of a DIRTY receipt. */
+        *position = execution->next; drained = execution;
+        status = 200; reason = "execution-drained"; goto reply;
+    }
     if (!strcmp(operation,"private-authority-recover")) {
         if (!expected_scope || strcmp(expected_scope,scope->revision)) { status = 409; reason = "scope-revision-changed"; goto reply; }
         if (reuse_scope_active(scope)) { status = 409; reason = "mutation-active"; goto reply; }
@@ -394,7 +419,8 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         }
     }
 reply:
-    status = reuse_control_reply(task,status,reason,scope,tag,transaction);
+    status = reuse_control_reply(task,status,reason,scope,tag,transaction,drained);
+    mutation_execution_free(drained);
     pthread_mutex_unlock(&lock); return status;
 }
 VCL_BOOL vmod_reuse_control_synth(VRT_CTX, struct vmod_priv *priv) {
