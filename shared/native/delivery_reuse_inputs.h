@@ -50,4 +50,9 @@ void delivery_reuse_frame_free(unsigned char *frame, size_t length);
 int delivery_reuse_input_binding(const unsigned char *site_secret, size_t secret_length,
     const struct delivery_reuse_context *context,
     const unsigned char *projection, size_t projection_length, char mac[65]);
+/* Revoke-only identity provenance. Uses the first seven context dimensions;
+ * publication/representation/recipe never split a validated owner mapping. */
+int delivery_reuse_identity_binding(const unsigned char *site_secret, size_t secret_length,
+    const struct delivery_reuse_context *context,
+    const unsigned char *identity_projection, size_t projection_length, char mac[65]);
 #endif

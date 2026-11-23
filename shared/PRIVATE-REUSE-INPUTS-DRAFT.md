@@ -138,3 +138,46 @@ provider may depend on an authentication cookie even when its old rendering
 transport used only a session prefix. Those provider-specific declarations stay
 in the application owner. The native implementation remains generic and does
 not insert a cookie-name override or alter terminal Private choices.
+
+## Separate identity binding for revoke-only owner provenance
+
+Provider-validated `identityInputs` use the **same complete declaration and
+actual PHP-budget projection framing** as above, independently from renderer
+inputs. The raw32 key remains `ultracache-delivery-reuse-key-v1` derived from
+the original accepted site-secret bytes. The identity MAC message is exactly:
+
+```
+LP("ultracache-private-identity-binding-v1")
+LP(siteId), LP(canonicalHost), LP(scope), LP(epoch)
+LP(nativePolicy), LP(wordpressPolicy), LP(reusePolicy)
+LP(binary identity projection frame)
+```
+
+The scope is the exact accepted **raw scope**, not its SHA digest. The last three
+page-admission dimensions (`publicationDigest`, `representation`, `recipeDigest`)
+are absent. Method/URL are absent too, so a validated identity binding can select
+its revoke-only owner mapping on a different ordinary POST route. No raw cookie
+value becomes a global mapping key or public metadata field.
+
+`delivery_reuse_identity_binding` implements this portable MAC. Its context
+struct shares the existing ten fields, but only the first seven are read or
+required. It does not validate provider identity, install a mapping or grant
+cached private delivery. Identity input declarations and `identityBinding`,
+`owner64`, complete raw64 tags and the actual provider `validUntil` must be
+received together through authenticated admission, never client headers. The
+binding alone does not authenticate arbitrary owner/tag/deadline metadata.
+
+The intended native map is existing-registry-owned provenance for revocation,
+not a second private-body cache. Scope/policy/incarnation resets withdraw those
+entries. Unknown/ambiguous/expired identity provenance does not become a known
+empty owner set. UID0/no-session has no personal owner inferred merely from
+absent selectors; any explicit anonymous attestation remains a producer/schema
+integration decision. Provider names and cookie selectors stay application-owned.
+
+`tests/fixtures/private_identity_binding_v1.json` provides 23 independent Python
+HMAC vectors over previously qualified actual PHP projection frames, explicitly
+labelled as **not yet actual PHP identity-MAC output**. Native C matches the exact
+frames/MACs; all seven context dimensions and identity changes alter the MAC,
+while page-admission dimensions do not. The current portable input suite passes
+39 tests without skips. Authenticated serialization, actual PHP identity-MAC
+parity, mapping installation and targeted pre-dispatch use remain separate gates.

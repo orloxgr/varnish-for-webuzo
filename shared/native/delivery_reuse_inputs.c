@@ -378,8 +378,8 @@ finished:
     free(pairs); delivery_reuse_frame_free(frame.bytes,frame.length); return result;
 }
 
-int delivery_reuse_input_binding(const unsigned char *secret, size_t secret_length,
-    const struct delivery_reuse_context *context, const unsigned char *projection,
+static int reuse_context_binding(const unsigned char *secret, size_t secret_length,
+    const struct delivery_reuse_context *context, const char *domain, size_t field_count, const unsigned char *projection,
     size_t projection_length, char mac[65]) {
     struct reuse_frame message = {NULL,0,0};
     unsigned char key[32];
@@ -394,12 +394,12 @@ int delivery_reuse_input_binding(const unsigned char *secret, size_t secret_leng
     fields[3] = context->epoch; fields[4] = context->native_policy; fields[5] = context->wordpress_policy;
     fields[6] = context->reuse_policy; fields[7] = context->publication_digest;
     fields[8] = context->representation; fields[9] = context->recipe_digest;
-    for (i = 0; i < 10; ++i) if (!fields[i] || !*fields[i]) return 0;
+    for (i = 0; i < field_count; ++i) if (!fields[i] || !*fields[i]) return 0;
     if (!delivery_hmac_sha256(secret,secret_length,purpose,sizeof(purpose)-1,key_hex)) return 0;
     for (i = 0; i < sizeof(key); ++i)
         key[i] = (unsigned char)(hex_digit((unsigned char)key_hex[2*i])*16+hex_digit((unsigned char)key_hex[2*i+1]));
-    if (!reuse_lp_string(&message,"ultracache-delivery-reuse-binding-v1")) goto finished;
-    for (i = 0; i < 10; ++i) if (!reuse_lp_string(&message,fields[i])) goto finished;
+    if (!reuse_lp_string(&message,domain)) goto finished;
+    for (i = 0; i < field_count; ++i) if (!reuse_lp_string(&message,fields[i])) goto finished;
     if (!reuse_lp(&message,projection,projection_length)) goto finished;
     valid = delivery_hmac_sha256(key,sizeof(key),message.bytes,message.length,mac);
 finished:
@@ -410,4 +410,16 @@ finished:
         for (i = 0; i < sizeof(key_hex); ++i) wipe[i] = 0;
     }
     delivery_reuse_frame_free(message.bytes,message.length); return valid;
+}
+int delivery_reuse_input_binding(const unsigned char *secret, size_t secret_length,
+    const struct delivery_reuse_context *context, const unsigned char *projection,
+    size_t projection_length, char mac[65]) {
+    return reuse_context_binding(secret,secret_length,context,"ultracache-delivery-reuse-binding-v1",10,
+        projection,projection_length,mac);
+}
+int delivery_reuse_identity_binding(const unsigned char *secret, size_t secret_length,
+    const struct delivery_reuse_context *context, const unsigned char *projection,
+    size_t projection_length, char mac[65]) {
+    return reuse_context_binding(secret,secret_length,context,"ultracache-private-identity-binding-v1",7,
+        projection,projection_length,mac);
 }

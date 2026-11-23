@@ -56,6 +56,7 @@ class ReuseCookieInputs(unittest.TestCase):
         cls.lib.delivery_reuse_frame_free.argtypes=[ctypes.c_void_p,ctypes.c_size_t]
         cls.lib.delivery_reuse_input_binding.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.POINTER(Context),
             ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p]
+        cls.lib.delivery_reuse_identity_binding.argtypes=cls.lib.delivery_reuse_input_binding.argtypes
         cls.lib.delivery_reuse_recipe_parse.argtypes=[ctypes.c_char_p,ctypes.c_size_t,ctypes.c_uint64,
             ctypes.POINTER(ctypes.POINTER(Recipe))]
         cls.lib.delivery_reuse_recipe_free.argtypes=[ctypes.POINTER(Recipe)]
@@ -100,6 +101,47 @@ class ReuseCookieInputs(unittest.TestCase):
         key=hmac.digest(VECTORS['syntheticSecret'].encode(),b'ultracache-delivery-reuse-key-v1','sha256')
         message=lp('ultracache-delivery-reuse-binding-v1')+b''.join(lp(row['context'][k]) for k in FIELDS)+lp(frame)
         self.assertEqual(native,hmac.new(key,message,hashlib.sha256).hexdigest())
+
+    def identity_binding(self,context,frame,secret=None):
+        if secret is None:secret=VECTORS['syntheticSecret'].encode()
+        context=Context(*(context.get(k).encode() if context.get(k) is not None else None for k in FIELDS))
+        output=ctypes.create_string_buffer(65)
+        result=self.lib.delivery_reuse_identity_binding(secret,len(secret),ctypes.byref(context),frame,len(frame),output)
+        return result,output.value.decode()
+
+    def test_identity_binding_matches_independent_vectors_without_page_dimensions(self):
+        vectors=json.loads((ROOT/'tests/fixtures/private_identity_binding_v1.json').read_text(encoding='utf-8'))
+        key=hmac.digest(vectors['syntheticSecret'].encode(),b'ultracache-delivery-reuse-key-v1','sha256')
+        for row in vectors['vectors']:
+            with self.subTest(name=row['name']):
+                source=next(v for v in VECTORS['vectors'] if v['name']==row['projectionSource'])
+                result,projection=self.projection(source['inputs'],source['cookieHeader'])
+                self.assertEqual(result,1)
+                self.assertEqual(projection.hex(),row['projectionFrameHex'])
+                message=lp('ultracache-private-identity-binding-v1')+b''.join(lp(row['context'][k]) for k in FIELDS[:7])+lp(projection)
+                self.assertEqual(message.hex(),row['bindingFrameHex'])
+                self.assertEqual(hmac.new(key,message,hashlib.sha256).hexdigest(),row['identityBinding'])
+                self.assertEqual(self.identity_binding(row['context'],projection),(1,row['identityBinding']))
+
+    def test_identity_binding_changes_with_native_scope_policies_or_identity_not_page(self):
+        row=next(r for r in VECTORS['vectors'] if r['name']=='exact')
+        frame=bytes.fromhex(row['projection']['frameHex']);context=dict(row['context'])
+        result,baseline=self.identity_binding(context,frame)
+        self.assertEqual(result,1)
+        for field in FIELDS[:7]:
+            changed=dict(context);changed[field]+='x'
+            with self.subTest(field=field):
+                self.assertNotEqual(self.identity_binding(changed,frame)[1],baseline)
+                changed[field]=None
+                self.assertEqual(self.identity_binding(changed,frame),(0,''))
+        for field in FIELDS[7:]:
+            for value in ('other-page',None,''):
+                changed=dict(context);changed[field]=value
+                self.assertEqual(self.identity_binding(changed,frame),(1,baseline))
+        absent=next(r for r in VECTORS['vectors'] if r['name']=='absent')
+        self.assertNotEqual(self.identity_binding(context,bytes.fromhex(absent['projection']['frameHex']))[1],baseline)
+        self.assertNotEqual(self.identity_binding(context,frame,b'other-secret')[1],baseline)
+        self.assertNotEqual(self.binding(context,frame),baseline,'Page-admission and identity domains must differ')
 
     def test_all_accepted_context_dimensions_and_secret_change_mac(self):
         row=next(r for r in VECTORS['vectors'] if r['name']=='exact')
