@@ -93,7 +93,9 @@ class NativeProfiles(unittest.TestCase):
         source='varnishtest "Webuzo '+profile+' profile"\nserver s1 {\n'+'\n'.join(responses).removeprefix('accept\n')+'\n} -start\nvarnish v1 '+varnish_args+' -vcl {\n'+compiled+'\n} -start\nclient c1 {\n'+'\n'.join(requests)+'\n} -run\nserver s1 -wait\n'+tail+'\n'
         with tempfile.TemporaryDirectory(prefix='wvw-profiles-') as folder:
             path=Path(folder)/'profile.vtc';path.write_text(source)
-            result=subprocess.run(['varnishtest','-t','20',str(path)],capture_output=True,text=True,timeout=30)
+            # Disposable VM VCL compilation/startup allowance, not an origin
+            # timeout or a product cache/runtime limit.
+            result=subprocess.run(['varnishtest','-t','45',str(path)],capture_output=True,text=True,timeout=60)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
     def test_origin_lifetimes_and_saved_obsolete_caps_are_not_shortened(self):
         original_site=site
