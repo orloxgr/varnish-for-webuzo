@@ -65,6 +65,10 @@ sub scp_init {
         unset req.http.X-UltraCache-Delivery-Reuse-Recipe;
         unset req.http.X-UltraCache-Private-Request-Id;
         unset req.http.X-UltraCache-Private-Challenge;
+        unset req.http.X-UltraCache-Private-Coverage-Proof;
+        unset req.http.X-UltraCache-Private-Coverage-Result;
+        unset req.http.X-UltraCache-Private-Coverage-Policy;
+        unset req.http.X-UltraCache-Private-Coverage-Version;
     }
     unset req.http.X-UltraCache-Mutation-Context;
     unset req.http.X-UltraCache-Mutation-Receipt;
@@ -89,6 +93,8 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-Public-Selection-Actions;
     unset req.http.X-UltraCache-VCL-Public-Selection-Version;
     unset req.http.X-UltraCache-VCL-Public-Selection-Canonical-Host;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Coverage-Version;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Coverage-Policy;
     unset req.http.X-UltraCache-VCL-Public-Selection-Scope;
     unset req.http.X-UltraCache-VCL-Public-Selection-Epoch;
     unset req.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
@@ -184,6 +190,10 @@ sub scp_hit {
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
 }
 sub scp_backend_fetch {
+    unset bereq.http.X-UltraCache-Private-Coverage-Proof;
+    unset bereq.http.X-UltraCache-Private-Coverage-Result;
+    unset bereq.http.X-UltraCache-Private-Coverage-Policy;
+    unset bereq.http.X-UltraCache-Private-Coverage-Version;
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-UltraCache-Guest-Issuer-Version;
@@ -221,6 +231,8 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Delivery-Public-Selection-Actions;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Version;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Canonical-Host;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Coverage-Version;
+    unset bereq.http.X-UltraCache-VCL-Public-Selection-Coverage-Policy;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Scope;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Epoch;
     unset bereq.http.X-UltraCache-VCL-Public-Selection-Native-Policy;
@@ -413,6 +425,8 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-Delivery-Public-Selection-Actions;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Version;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Canonical-Host;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Coverage-Version;
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Coverage-Policy;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Scope;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Epoch;
     unset resp.http.X-UltraCache-VCL-Public-Selection-Native-Policy;

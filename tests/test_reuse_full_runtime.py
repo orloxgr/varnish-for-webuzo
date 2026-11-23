@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import time
+import threading
 import unittest
 import test_reuse_authority as authority
 from test_cookie_delivery import proxy,cookies
@@ -18,6 +19,7 @@ from test_delivery_continuation import BODY,META,PARENT,PRIVATE,ADAPTIVE,envelop
 from test_reuse_delivery_context import all_origin_hooks,signed_context
 from test_reuse_cookie_inputs import declaration,seal_recipe,lp
 from test_private_fragment_ttl import exchange
+import test_mutation_coverage_runtime as coverage
 
 KEY=hmac.digest(('b'*64).encode(),b'ultracache-delivery-reuse-key-v1','sha256')
 OWNER=authority.TAG
@@ -54,8 +56,12 @@ class NativeFullReuse(unittest.TestCase):
     def test_scope_writer_suspends_complete_mixed_hit_until_drained_and_fresh_finalized(self):
         self.run_full_actor(anonymous_nonce=True,scope_fence=True)
 
-    def run_full_actor(self,anonymous_nonce=False,scope_fence=False):
+    def test_covered_unchanged_interleaved_owners_and_all_formats_reuse_without_origin(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True)
+
+    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
+        held_entered=threading.Event();held_release=threading.Event();held_original=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
         nonce_inputs=declaration(['wordpress_logged_in_mock']) if anonymous_nonce else declaration(['owner'])
         recipe=seal_recipe(dict(inputs=declaration(['owner','wordpress_logged_in_mock'] if anonymous_nonce else ['owner']),fragments=[
@@ -63,10 +69,13 @@ class NativeFullReuse(unittest.TestCase):
         def cache_key(url,owner):
             identity='uid0' if anonymous_nonce and url==ADAPTIVE else owner
             return hashlib.sha256((url+'|'+identity+'|'+str(generation[0])).encode()).hexdigest()
+        accepts=('text/html', 'text/html,image/webp', 'text/html,image/avif,image/webp')
+        def read_context(headers,path):
+            return coverage.context(self,headers,'GET',path) if covered else signed_context(self,headers,path,'GET')
         def origin(path,headers):
             phase=headers.get('X-UltraCache-Delivery-Phase');calls.append((path,phase))
             if phase=='prepare':
-                signed=signed_context(self,headers,path,'GET')
+                signed=read_context(headers,path)
                 context=self.call(holder['get'],'delivery-reuse-context',tag=None,extra={
                     'X-UltraCache-Private-Request-Id':signed['requestId'],'X-UltraCache-Private-Challenge':signed['challenge'],
                     'X-UltraCache-Private-Epoch':signed['epoch'],'X-UltraCache-Private-Incarnation':signed['incarnation'],
@@ -78,18 +87,18 @@ class NativeFullReuse(unittest.TestCase):
                     if anonymous_nonce and f['url']==ADAPTIVE:f['html']='nonce:uid0-generation'+str(generation[0])
                 body['reuseCandidate']=dict(version=1,requestId=signed['requestId'],challenge=signed['challenge'],
                     recipe=recipe,inputEvidence=identity_mac(context,owner,recipe['inputs']))
-                prepared[signed['requestId']]=(copy.deepcopy(body),owner)
-                return json.dumps(body),[('Cache-Control','private, no-store')]
+                prepared[signed['requestId']]=(copy.deepcopy(body),owner,signed)
+                return json.dumps(body),[('Cache-Control','private, no-store')]+([coverage.response_receipt(signed)] if covered else [])
             if phase=='reuse-finalize':
                 self.assertEqual(path,PARENT);self.assertIsNone(headers.get('Cookie'))
                 self.assertIsNone(headers.get('X-UltraCache-Mutation-Context'))
                 context=json.loads(base64.b64decode(headers['X-UltraCache-Delivery-Reuse-Context'],validate=True))
-                old,owner=prepared[context['requestId']]
+                old,owner,original=prepared[context['requestId']]
                 current=self.observe(holder['get'])
                 self.call(holder['get'],'private-execution-drained',current,tag=None,extra={
                     'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
-                    'X-UltraCache-Private-Drained':'1'})
-                if self.observe(holder['get'])['scopeMutations']:
+                    'X-UltraCache-Private-Drained':'1',**(coverage.completion_headers(original) if covered else {})})
+                if self.observe(holder['get'])['scopeMutations'] or self.observe(holder['get']).get('temporaryHolds'):
                     return 204,'',[('Cache-Control','private, no-store')]
                 self.recover(holder['get'],self.observe(holder['get']))
                 owner_tag=OWNER if owner=='A' else hashlib.sha256(('mock-owner-'+owner).encode()).hexdigest()
@@ -121,13 +130,22 @@ class NativeFullReuse(unittest.TestCase):
                 records.append(record)
                 return json.dumps(record),[('Content-Type','application/vnd.ultracache.reuse+json'),('Cache-Control','private, no-store'),
                     ('X-UltraCache-Delivery-Reuse-Outcome','finalized'),('X-UltraCache-Delivery-Reuse-Fresh-Remaining','99')]
+            if path=='/__owned_mutation-held':
+                signed=read_context(headers,path);held_original.append(signed);held_entered.set()
+                self.assertTrue(held_release.wait(10))
+                return 'held actual response',[('Cache-Control','private, no-store'),coverage.response_receipt(signed)]
             if path=='/__owned_mutation-map':
-                signed=signed_context(self,headers,path,'GET')
+                signed=read_context(headers,path)
                 state=self.call(holder['get'],'private-authority-context',tag=nonce_tag('A'))
                 armed.append((signed,state))
-            return (BODY,META) if path==PARENT else ('cold',[('Cache-Control','private, no-store')])
+            return (BODY,META+([('Vary','Accept')] if covered else [])) if path==PARENT else ('cold',[('Cache-Control','private, no-store')])
         with proxy('ultracache',origin,transform=all_origin_hooks) as get:
-            holder['get']=get;get(PARENT);calls.clear();self.register(get)
+            holder['get']=get;get(PARENT)
+            if covered:
+                for accept in accepts:get(PARENT,extra={'Accept':accept})
+                coverage.register(self,get)
+            else:self.register(get)
+            calls.clear()
             status,headers,body=get(PARENT,'owner=A; _fbp=first')
             self.assertEqual(status,200);self.assertIn('private:A-generation1',body)
             self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
@@ -176,6 +194,53 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual(calls,[],'The second independently bound owner also uses native-only composed HIT')
             status,_,again=get(PARENT,'owner=A')
             self.assertEqual(status,200);self.assertIn('private:A-generation2',again);self.assertNotIn('private:B-',again)
+            if covered:
+                self.assertEqual(calls,[],'Filling B must preserve A admission without rebasing its authority')
+                stable=self.observe(get)['scopeRevision']
+                for owner in ('A','B'):
+                    for accept in accepts:
+                        get(PARENT,'owner='+owner,{'Accept':accept})
+                        calls.clear()
+                        status,_,html=get(PARENT,'owner='+owner,{'Accept':accept})
+                        self.assertEqual(status,200);self.assertIn('private:'+owner+'-generation2',html)
+                        self.assertEqual(calls,[],'Second request per owner/format must use complete native HIT')
+                self.assertEqual(self.observe(get)['scopeRevision'],stable)
+                for _ in range(2):
+                    for accept in accepts:
+                        for owner in ('A','B'):
+                            status,_,html=get(PARENT,'owner='+owner+'; _fbp=interleaved',{'Accept':accept})
+                            self.assertEqual(status,200);self.assertIn('private:'+owner+'-generation2',html)
+                self.assertEqual(calls,[],'All 12 interleaved owner/format requests must be origin-free')
+                self.assertEqual(self.observe(get)['scopeRevision'],stable)
+                errors=[]
+                def hold_request():
+                    try:get('/__owned_mutation-held','owner=A')
+                    except BaseException as error:errors.append(error)
+                worker=threading.Thread(target=hold_request);worker.start()
+                try:
+                    self.assertTrue(held_entered.wait(10))
+                    self.assertEqual(self.observe(get)['temporaryHolds'],1)
+                    calls.clear()
+                    status,_,during=get(PARENT,'owner=B',{'Accept':accepts[0]})
+                    self.assertEqual(status,200);self.assertIn('private:B-generation2',during)
+                    self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
+                    self.assertEqual(self.observe(get)['temporaryHolds'],1,
+                        'Reader completion must not clear another still-live hold')
+                finally:held_release.set();worker.join(timeout=15)
+                self.assertEqual(errors,[]);self.assertFalse(worker.is_alive())
+                coverage.NativeCoverageHolds.ended(self,get)
+                original=held_original[0]
+                self.call(get,'private-execution-drained',self.observe(get),tag=None,extra={
+                    'X-UltraCache-Private-Request-Id':original['requestId'],
+                    'X-UltraCache-Private-Challenge':original['challenge'],'X-UltraCache-Private-Drained':'1',
+                    **coverage.completion_headers(original)})
+                self.assertEqual(self.observe(get)['scopeRevision'],stable)
+                calls.clear()
+                for accept in accepts:
+                    for owner in ('A','B'):
+                        self.assertEqual(get(PARENT,'owner='+owner,{'Accept':accept})[0],200)
+                self.assertEqual(calls,[],
+                    'Quiescent reader/writer holds must resume all existing admissions without a global refill storm')
             if anonymous_nonce:
                 self.assertIn('nonce:uid0-generation2',other)
                 self.assertIn('nonce:uid0-generation2',again)
@@ -183,7 +248,8 @@ class NativeFullReuse(unittest.TestCase):
                 probe=self.call(get,'private-authority-context',tag=nonce_tag('A'))
                 personal=self.observe(get)
                 self.assertEqual(get('/__owned_mutation-map','owner=A; _fbp=unrelated')[0],200)
-                self.assertNotEqual(self.observe(get)['revision'],personal['revision'])
+                if covered:self.assertNotEqual(self.observe(get)['scopeRevision'],personal['scopeRevision'])
+                else:self.assertNotEqual(self.observe(get)['revision'],personal['revision'])
                 self.assertEqual(self.call(get,'private-authority-context',tag=nonce_tag('A'))['revision'],probe['revision'])
                 self.assertEqual(self.observe(get)['scopeState'],'unbound')
                 return

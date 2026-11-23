@@ -21,7 +21,8 @@ struct mutation_execution {
     struct reuse_scope *scope;
     char request_id[65], challenge[65], proof[65], epoch[65], incarnation[65];
     char native_policy[65], wordpress_policy[65], reuse_policy[65];
-    char recipe[65];
+    char recipe[65], coverage_policy[65], scope_revision[65];
+    unsigned hold, coverage_qualified;
     uint64_t delivery_key;
     unsigned char key[32];
     char *header;
@@ -29,6 +30,7 @@ struct mutation_execution {
     struct reuse_execution_tag *known_tags; /* revoke-only fences until actual drain */
 };
 static void mutation_execution_free(struct mutation_execution *);
+static void mutation_unknown(struct mutation_execution *);
 static int mutation_context_current(const struct mutation_execution *);
 
 struct reuse_transaction {
@@ -46,7 +48,7 @@ struct reuse_scope {
     struct reuse_scope *next;
     char *site, *host, *scope;
     char incarnation[65], revision[65];
-    char native_policy[65], wordpress_policy[65], policy[65];
+    char native_policy[65], wordpress_policy[65], policy[65], coverage_policy[65];
     unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
     unsigned enabled, ready;
     unsigned lost_execution_context;
@@ -169,8 +171,18 @@ static int reuse_tag_execution(const struct reuse_scope *scope, const char *id) 
     }
     return 0;
 }
+static size_t reuse_scope_holds(const struct reuse_scope *scope) {
+    const struct mutation_execution *execution;
+    size_t count = 0;
+    for (execution = scope ? scope->executions : NULL; execution; execution = execution->next)
+        if (execution->hold) ++count;
+    return count;
+}
+static int reuse_scope_ready(const struct reuse_scope *scope) {
+    return scope && scope->ready && !reuse_scope_holds(scope);
+}
 static int reuse_tag_clean(const struct reuse_scope *scope, const struct reuse_tag *tag) {
-    return scope && scope->ready && tag->clean && !strcmp(tag->bound_scope_revision,scope->revision);
+    return reuse_scope_ready(scope) && tag->clean && !strcmp(tag->bound_scope_revision,scope->revision);
 }
 static size_t reuse_scope_active(const struct reuse_scope *scope) {
     size_t count = 0, i;
@@ -211,7 +223,7 @@ static void reuse_scope_unbind(struct reuse_scope *scope) {
 }
 
 VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope,
-    VCL_STRING native_policy, VCL_STRING wordpress_policy, VCL_STRING policy, VCL_BOOL enabled) {
+    VCL_STRING native_policy, VCL_STRING wordpress_policy, VCL_STRING policy, VCL_BOOL enabled, VCL_STRING coverage_policy) {
     struct reuse_scope *value;
     struct public_declaration *declaration;
     unsigned char key[32] = {0};
@@ -219,11 +231,13 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     size_t i;
     int valid = 0;
     (void)ctx;
+    if (!coverage_policy) coverage_policy = "";
 #ifndef UC_EXPERIMENTAL_PRIVATE_REUSE
     (void)site; (void)host; (void)scope; (void)native_policy; (void)wordpress_policy; (void)policy; (void)enabled;
     return 0;
 #endif
     if (!site || !*site || !host || !*host || !delivery_selection_scope_valid(scope) ||
+        (*coverage_policy && !public_policy(coverage_policy)) ||
         (enabled && (!public_policy(native_policy) || !public_policy(wordpress_policy) || !public_policy(policy)))) return 0;
     credential = reuse_single(ctx->http_req,HDR("X-UltraCache-Token"));
     if (enabled && (!credential || !delivery_reuse_key_derive((const unsigned char *)credential,strlen(credential),key))) return 0;
@@ -232,7 +246,7 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     if (!enabled) {
         if (value) {
             volatile unsigned char *wipe = value->reuse_key;
-            value->enabled = 0; reuse_scope_unbind(value);
+            value->enabled = 0; value->coverage_policy[0] = 0; reuse_scope_unbind(value);
             for (i = 0; i < sizeof(value->reuse_key); ++i) wipe[i] = 0;
         }
         valid = 1; goto done;
@@ -251,9 +265,10 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     }
     if (!value->enabled || strcmp(value->native_policy,native_policy) ||
         strcmp(value->wordpress_policy,wordpress_policy) || strcmp(value->policy,policy) ||
-        memcmp(value->reuse_key,key,sizeof(key))) reuse_scope_unbind(value);
+        memcmp(value->reuse_key,key,sizeof(key)) || strcmp(value->coverage_policy,coverage_policy)) reuse_scope_unbind(value);
     memcpy(value->native_policy,native_policy,65); memcpy(value->wordpress_policy,wordpress_policy,65);
-    memcpy(value->policy,policy,65); value->enabled = 1; valid = 1;
+    memcpy(value->policy,policy,65);
+    snprintf(value->coverage_policy,sizeof(value->coverage_policy),"%s",coverage_policy); value->enabled = 1; valid = 1;
     memcpy(value->reuse_key,key,sizeof(key));
 done:
     pthread_mutex_unlock(&lock);
@@ -264,6 +279,14 @@ done:
     return valid;
 }
 
+VCL_STRING vmod_reuse_coverage_policy(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING application_scope) {
+    struct reuse_scope *scope;
+    const char *out = NULL;
+    pthread_mutex_lock(&lock);
+    scope = reuse_scope_find(site,host,application_scope);
+    if (scope && scope->enabled && *scope->coverage_policy) out = WS_Copy(ctx->ws,scope->coverage_policy,-1);
+    pthread_mutex_unlock(&lock); return out;
+}
 static const char *reuse_single(const struct http *http, hdr_t header) {
     const char *value;
     return http_CountHdr(http,header) == 1 && http_GetHdr(http,header,&value) ? value : NULL;
@@ -424,10 +447,14 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
         reuse_json_field(json,"siteId",scope->site); reuse_json_field(json,"canonicalHost",scope->host);
         reuse_json_field(json,"scope",scope->scope); reuse_json_field(json,"incarnation",scope->incarnation);
         reuse_json_field(json,"scopeRevision",scope->revision);
-        reuse_json_field(json,"scopeState",scope->ready ? "ready" : "unbound");
+        reuse_json_field(json,"scopeState",reuse_scope_ready(scope) ? "ready" : "unbound");
+        if (reuse_scope_holds(scope)) VSB_printf(json,",\"temporaryHolds\":%ju",(uintmax_t)reuse_scope_holds(scope));
         reuse_json_field(json,"nativePolicy",scope->native_policy);
         reuse_json_field(json,"wordpressPolicy",scope->wordpress_policy);
         reuse_json_field(json,"reusePolicy",scope->policy);
+        if (*scope->coverage_policy) {
+            VSB_cat(json,",\"coverageVersion\":1"); reuse_json_field(json,"coveragePolicy",scope->coverage_policy);
+        }
         if (scope->executions) {
             const struct mutation_execution *execution;
             VSB_cat(json,",\"unsettledExecutions\":[");
@@ -435,9 +462,14 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
                 if (execution != scope->executions) VSB_putc(json,',');
                 VSB_cat(json,"{\"requestId\":"); reuse_json(json,execution->request_id);
                 reuse_json_field(json,"challenge",execution->challenge);
-                VSB_printf(json,",\"live\":%s,\"awaitingReceipt\":%s,\"unknown\":%s}",
+                VSB_printf(json,",\"live\":%s,\"awaitingReceipt\":%s,\"unknown\":%s",
                     execution->live ? "true" : "false",execution->awaiting_receipt ? "true" : "false",
                     execution->unknown ? "true" : "false");
+                if (execution->hold) {
+                    VSB_printf(json,",\"coverageVersion\":1,\"receiptQualified\":%s",execution->coverage_qualified ? "true" : "false");
+                    reuse_json_field(json,"coveragePolicy",execution->coverage_policy);
+                }
+                VSB_putc(json,'}');
             }
             VSB_putc(json,']');
         }
@@ -588,6 +620,33 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (!execution) { status = 409; reason = "execution-unavailable"; goto reply; }
         if (strcmp(execution->challenge,challenge)) { status = 409; reason = "execution-challenge-changed"; goto reply; }
         if (execution->live || execution->awaiting_receipt) { status = 409; reason = "execution-active"; goto reply; }
+        if (execution->hold) {
+            const char *version = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Coverage-Version"));
+            const char *policy = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Coverage-Policy"));
+            const char *result = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Coverage-Result"));
+            const char *proof = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Coverage-Proof"));
+            char expected_proof[65];
+            unsigned qualified, difference = 0;
+            size_t i;
+            if (!version || strcmp(version,"1") || !policy || strcmp(policy,execution->coverage_policy) ||
+                !result || (strcmp(result,"qualified") && strcmp(result,"unknown")) || !public_policy(proof)) {
+                mutation_unknown(execution); status = 400; reason = "coverage-completion-invalid"; goto reply;
+            }
+            qualified = !strcmp(result,"qualified");
+            if (!delivery_mutation_completion_proof(execution->key,execution->proof,execution->request_id,
+                execution->challenge,execution->coverage_policy,qualified,expected_proof)) {
+                mutation_unknown(execution); status = 503; reason = "coverage-proof-unavailable"; goto reply;
+            }
+            for (i = 0; i < 64; ++i) difference |= (unsigned char)proof[i] ^ (unsigned char)expected_proof[i];
+            if (difference) { mutation_unknown(execution); status = 409; reason = "coverage-proof-mismatch"; goto reply; }
+            if (qualified && (execution->unknown || !execution->coverage_qualified || !mutation_context_current(execution))) {
+                mutation_unknown(execution); status = 409; reason = "coverage-unqualified"; goto reply;
+            }
+            if (qualified && strcmp(execution->scope_revision,scope->revision)) {
+                mutation_unknown(execution); status = 409; reason = "coverage-scope-changed"; goto reply;
+            }
+            if (!qualified) mutation_unknown(execution);
+        }
         /* Authenticated producer attests actual independent runtime/provider
          * drain for precisely this execution. Native does not infer that from
          * headers, socket/task end, timeout or the absence of a DIRTY receipt. */
@@ -662,7 +721,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     if (!tag) { status = 409; reason = "authority-unavailable"; goto reply; }
     if (!strcmp(operation,"private-generation-publish")) {
         const char *generation = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Generation"));
-        if (!scope->ready) { status = 409; reason = "scope-unbound"; goto reply; }
+        if (!reuse_scope_ready(scope)) { status = 409; reason = scope->ready ? "execution-held" : "scope-unbound"; goto reply; }
         if (!expected_scope || strcmp(expected_scope,scope->revision)) { status = 409; reason = "scope-revision-changed"; goto reply; }
         if (reuse_active(tag)) { status = 409; reason = "mutation-active"; goto reply; }
         if (reuse_tag_execution(scope,id)) { status = 409; reason = "execution-unsettled"; goto reply; }

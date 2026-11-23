@@ -30,8 +30,8 @@ int delivery_mutation_key(const unsigned char *secret, size_t length, unsigned c
     }
     return 1;
 }
-int delivery_mutation_request_proof(const unsigned char key[32],
-    const struct delivery_mutation_context *context, char proof[65]) {
+static int mutation_request_proof(const unsigned char key[32],
+    const struct delivery_mutation_context *context, const char *coverage_policy, char proof[65]) {
     struct reuse_frame message = {NULL,0,0};
     const char *fields[12];
     size_t i;
@@ -48,10 +48,34 @@ int delivery_mutation_request_proof(const unsigned char key[32],
     for (i = 2; i < 10; ++i) if (!mutation_hex(fields[i],64)) return 0;
     if (!reuse_token(fields[10],strlen(fields[10])) || fields[11][0] != '/' ||
         !mutation_visible(fields[11]) || strchr(fields[11],'#')) return 0;
-    if (!reuse_lp_string(&message,"ultracache-mutation-request-v1")) goto done;
-    for (i = 0; i < 12; ++i) if (!reuse_lp_string(&message,fields[i])) goto done;
+    if (coverage_policy && !mutation_hex(coverage_policy,64)) return 0;
+    if (!reuse_lp_string(&message,coverage_policy ? "ultracache-mutation-request-v2" : "ultracache-mutation-request-v1")) goto done;
+    for (i = 0; i < 10; ++i) if (!reuse_lp_string(&message,fields[i])) goto done;
+    if (coverage_policy && (!reuse_u32(&message,1) || !reuse_lp_string(&message,coverage_policy))) goto done;
+    for (i = 10; i < 12; ++i) if (!reuse_lp_string(&message,fields[i])) goto done;
     valid = delivery_hmac_sha256(key,32,message.bytes,message.length,proof);
 done:
+    delivery_reuse_frame_free(message.bytes,message.length); return valid;
+}
+int delivery_mutation_request_proof(const unsigned char key[32],
+    const struct delivery_mutation_context *context, char proof[65]) {
+    return mutation_request_proof(key,context,NULL,proof);
+}
+int delivery_mutation_request_proof_v2(const unsigned char key[32],
+    const struct delivery_mutation_context *context, const char *coverage_policy, char proof[65]) {
+    return coverage_policy && mutation_request_proof(key,context,coverage_policy,proof);
+}
+int delivery_mutation_completion_proof(const unsigned char key[32], const char *request_proof,
+    const char *request_id, const char *challenge, const char *coverage_policy, unsigned qualified, char proof[65]) {
+    struct reuse_frame message = {NULL,0,0};
+    int valid = 0;
+    if (proof) proof[0] = 0;
+    if (!key || !proof || qualified > 1 || !mutation_hex(request_proof,64) ||
+        !mutation_hex(request_id,64) || !mutation_hex(challenge,64) || !mutation_hex(coverage_policy,64)) return 0;
+    if (reuse_lp_string(&message,"ultracache-mutation-completion-v2") && reuse_lp_string(&message,request_proof) &&
+        reuse_lp_string(&message,request_id) && reuse_lp_string(&message,challenge) && reuse_u32(&message,1) &&
+        reuse_lp_string(&message,coverage_policy) && reuse_lp_string(&message,qualified ? "qualified" : "unknown"))
+        valid = delivery_hmac_sha256(key,32,message.bytes,message.length,proof);
     delivery_reuse_frame_free(message.bytes,message.length); return valid;
 }
 static int mutation_json_string(struct reuse_frame *json, const char *value) {
@@ -85,8 +109,8 @@ static char *mutation_base64(const unsigned char *bytes, size_t length) {
     }
     out[used] = 0; return out;
 }
-int delivery_mutation_context_header(const unsigned char key[32],
-    const struct delivery_mutation_context *context, char **header, char proof[65]) {
+static int mutation_context_header(const unsigned char key[32],
+    const struct delivery_mutation_context *context, const char *coverage_policy, char **header, char proof[65]) {
     static const char *names[] = {"siteId","canonicalHost","scopeDigest","epoch","incarnation",
         "nativePolicy","wordpressPolicy","reusePolicy","requestId","challenge","proof"};
     const char *values[11];
@@ -94,19 +118,29 @@ int delivery_mutation_context_header(const unsigned char key[32],
     size_t i;
     if (!header) return 0;
     *header = NULL;
-    if (!delivery_mutation_request_proof(key,context,proof)) return 0;
+    if (!mutation_request_proof(key,context,coverage_policy,proof)) return 0;
     values[0] = context->site_id; values[1] = context->host; values[2] = context->scope_digest;
     values[3] = context->epoch; values[4] = context->incarnation;
     values[5] = context->native_policy; values[6] = context->wordpress_policy; values[7] = context->reuse_policy;
     values[8] = context->request_id; values[9] = context->challenge; values[10] = proof;
-    if (!reuse_append(&json,"{\"schemaVersion\":1",18)) goto done;
+    if (!reuse_append(&json,coverage_policy ? "{\"schemaVersion\":2" : "{\"schemaVersion\":1",18)) goto done;
     for (i = 0; i < 11; ++i)
         if (!reuse_append(&json,",",1) || !mutation_json_string(&json,names[i]) || !reuse_append(&json,":",1) ||
             !mutation_json_string(&json,values[i])) goto done;
+    if (coverage_policy && (!reuse_append(&json,",\"coverageVersion\":1,\"coveragePolicy\":",38) ||
+        !mutation_json_string(&json,coverage_policy))) goto done;
     if (!reuse_append(&json,"}",1)) goto done;
     *header = mutation_base64(json.bytes,json.length);
 done:
     delivery_reuse_frame_free(json.bytes,json.length); return *header != NULL;
+}
+int delivery_mutation_context_header(const unsigned char key[32],
+    const struct delivery_mutation_context *context, char **header, char proof[65]) {
+    return mutation_context_header(key,context,NULL,header,proof);
+}
+int delivery_mutation_context_header_v2(const unsigned char key[32],
+    const struct delivery_mutation_context *context, const char *coverage_policy, char **header, char proof[65]) {
+    return coverage_policy && mutation_context_header(key,context,coverage_policy,header,proof);
 }
 void delivery_mutation_header_free(char *header) {
     if (header) delivery_reuse_frame_free((unsigned char *)header,strlen(header));
@@ -175,15 +209,18 @@ static int mutation_receipt_mac(const unsigned char key[32], const char *request
             if (!strcmp(ordered[i-1]->tag,ordered[i]->tag) &&
                 !strcmp(ordered[i-1]->transaction,ordered[i]->transaction)) goto done;
     }
-    if (!reuse_lp_string(&frame,"ultracache-mutation-response-v1") || !reuse_lp_string(&frame,request_proof) ||
-        !reuse_lp_string(&frame,state) || !reuse_u32(&frame,receipt->count)) goto done;
+    if (!reuse_lp_string(&frame,receipt->coverage_version ? "ultracache-mutation-response-v2" : "ultracache-mutation-response-v1") ||
+        !reuse_lp_string(&frame,request_proof)) goto done;
+    if (receipt->coverage_version && (!reuse_u32(&frame,1) || !reuse_lp_string(&frame,receipt->coverage_policy) ||
+        !reuse_lp_string(&frame,receipt->coverage_qualified ? "qualified" : "unknown"))) goto done;
+    if (!reuse_lp_string(&frame,state) || !reuse_u32(&frame,receipt->count)) goto done;
     for (i = 0; i < receipt->count; ++i)
         if (!reuse_lp_string(&frame,ordered[i]->tag) || !reuse_lp_string(&frame,ordered[i]->transaction)) goto done;
     valid = delivery_hmac_sha256(key,32,frame.bytes,frame.length,output);
 done:
     free(ordered); delivery_reuse_frame_free(frame.bytes,frame.length); return valid;
 }
-int delivery_mutation_receipt_verify(const unsigned char key[32], const char *request_proof,
+static int mutation_receipt_verify(const unsigned char key[32], const char *request_proof, const char *coverage_policy,
     const char *header, size_t length, struct delivery_mutation_receipt **output) {
     struct delivery_mutation_receipt *receipt = NULL;
     struct reader reader = {NULL,0,0};
@@ -193,7 +230,7 @@ int delivery_mutation_receipt_verify(const unsigned char key[32], const char *re
     size_t i;
     if (!output) return 0;
     *output = NULL;
-    if (!key || !request_proof || !reuse_hex64((struct text){request_proof,strlen(request_proof)}) ||
+    if ((coverage_policy && !mutation_hex(coverage_policy,64)) || !key || !request_proof || !reuse_hex64((struct text){request_proof,strlen(request_proof)}) ||
         (!header && length) || !base64_body((struct text){header,length},(unsigned char **)&reader.buffer,&reader.length)) return 0;
     receipt = calloc(1,sizeof(*receipt));
     if (!receipt || !take(&reader,'{')) goto done;
@@ -205,10 +242,17 @@ int delivery_mutation_receipt_verify(const unsigned char key[32], const char *re
         else if (equal(name,"state")) bit = 2;
         else if (equal(name,"transactions")) bit = 4;
         else if (equal(name,"mac")) bit = 8;
+        else if (coverage_policy && equal(name,"coverageVersion")) bit = 16;
+        else if (coverage_policy && equal(name,"coveragePolicy")) bit = 32;
+        else if (coverage_policy && equal(name,"coverage")) bit = 64;
         else goto done;
         if (seen & bit) goto done;
         seen |= bit;
-        if (bit == 1) { uint64_t version; if (!number(&reader,&version) || version != 1) goto done; }
+        if (bit == 1 || bit == 16) {
+            uint64_t version;
+            if (!number(&reader,&version) || version != (bit == 16 ? 1 : coverage_policy ? 2 : 1)) goto done;
+            if (bit == 16) receipt->coverage_version = 1;
+        }
         else if (bit == 4) { if (!mutation_read_pairs(&reader,receipt)) goto done; }
         else {
             if (!string(&reader,&value)) goto done;
@@ -217,16 +261,21 @@ int delivery_mutation_receipt_verify(const unsigned char key[32], const char *re
                 else if (equal(value,"dirty")) receipt->state = MUTATION_DIRTY;
                 else if (equal(value,"scope")) receipt->state = MUTATION_SCOPE;
                 else goto done;
+            } else if (bit == 64) {
+                if (equal(value,"qualified")) receipt->coverage_qualified = 1;
+                else if (!equal(value,"unknown")) goto done;
             } else {
                 if (!reuse_hex64(value)) goto done;
-                memcpy(actual,value.data,64);
+                memcpy(bit == 32 ? receipt->coverage_policy : actual,value.data,64);
             }
         }
         if (take(&reader,'}')) break;
         if (!take(&reader,',')) goto done;
     }
     whitespace(&reader);
-    if (seen != 15 || reader.offset != reader.length ||
+    if (seen != (coverage_policy ? 127 : 15) || reader.offset != reader.length ||
+        (coverage_policy && (strcmp(coverage_policy,receipt->coverage_policy) ||
+            (receipt->state == MUTATION_SCOPE && receipt->coverage_qualified))) ||
         (receipt->state == MUTATION_DIRTY ? !receipt->count : receipt->count != 0) ||
         !mutation_receipt_mac(key,request_proof,receipt,expected)) goto done;
     for (i = 0; i < 64; ++i) difference |= (unsigned char)actual[i] ^ (unsigned char)expected[i];
@@ -236,4 +285,13 @@ done:
     if (valid) *output = receipt;
     else delivery_mutation_receipt_free(receipt);
     return valid;
+}
+
+int delivery_mutation_receipt_verify(const unsigned char key[32], const char *request_proof,
+    const char *header, size_t length, struct delivery_mutation_receipt **output) {
+    return mutation_receipt_verify(key,request_proof,NULL,header,length,output);
+}
+int delivery_mutation_receipt_verify_v2(const unsigned char key[32], const char *request_proof,
+    const char *coverage_policy, const char *header, size_t length, struct delivery_mutation_receipt **output) {
+    return coverage_policy && mutation_receipt_verify(key,request_proof,coverage_policy,header,length,output);
 }

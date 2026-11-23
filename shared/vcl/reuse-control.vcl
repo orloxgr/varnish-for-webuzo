@@ -1,6 +1,15 @@
 # Experimental metadata operations only, inside the existing authenticated
 # adapter control gate. This does not advertise or enable cached delivery reuse.
 sub scp_reuse_negotiate {
+    std.collect(req.http.X-UltraCache-Public-Selection-Coverage-Version);
+    std.collect(req.http.X-UltraCache-Public-Selection-Coverage-Policy);
+    if ((req.http.X-UltraCache-Public-Selection-Coverage-Version || req.http.X-UltraCache-Public-Selection-Coverage-Policy) &&
+        (req.http.X-UltraCache-Public-Selection-Coverage-Version != "1" ||
+         req.http.X-UltraCache-Public-Selection-Coverage-Policy !~ "^[0-9a-f]{64}$" ||
+         req.http.X-UltraCache-Public-Selection-Reuse-Version != "1" ||
+         req.http.X-UltraCache-Public-Selection-Reuse-Policy !~ "^[0-9a-f]{64}$")) {
+        return (synth(400,"Invalid mutation coverage declaration"));
+    }
     if (req.http.X-UltraCache-Public-Selection-Enabled == "0") {
         if (cookie_handoff.delivery_reuse_available()) {
             if (cookie_handoff.reuse_register(req.http.X-SCP-Site,req.http.host,
@@ -17,7 +26,8 @@ sub scp_reuse_negotiate {
         if (!cookie_handoff.reuse_register(req.http.X-SCP-Site,req.http.host,
             req.http.X-SCP-Selection-Scope,req.http.X-SCP-Selection-Native-Policy,
             cookie_handoff.selection_wordpress_policy(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope),
-            req.http.X-UltraCache-Public-Selection-Reuse-Policy,true)) {
+            req.http.X-UltraCache-Public-Selection-Reuse-Policy,true,
+            req.http.X-UltraCache-Public-Selection-Coverage-Policy)) {
             return (synth(400,"Private authority declaration rejected"));
         }
     }

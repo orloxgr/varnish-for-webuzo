@@ -139,6 +139,15 @@ sub vcl_synth {
         if (req.http.X-UltraCache-Operation == "capabilities" && req.http.X-SCP-Profile == "ultracache" &&
             cookie_handoff.delivery_reuse_available()) {
             set resp.http.X-UltraCache-VCL-Private-Authority-Version = "1";
+            if (resp.status == 200) {
+                set resp.http.X-UltraCache-VCL-Public-Selection-Coverage-Policy = cookie_handoff.reuse_coverage_policy(
+                    req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
+                if (resp.http.X-UltraCache-VCL-Public-Selection-Coverage-Policy ~ "^[0-9a-f]{64}$") {
+                    set resp.http.X-UltraCache-VCL-Public-Selection-Coverage-Version = "1";
+                } else {
+                    unset resp.http.X-UltraCache-VCL-Public-Selection-Coverage-Policy;
+                }
+            }
         }
         set resp.http.Cache-Control = "no-store";
         if (resp.status >= 200 && resp.status < 300) {

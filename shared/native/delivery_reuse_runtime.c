@@ -110,7 +110,7 @@ static int delivery_reuse_record_current(const struct continuation *d, const str
     const char *fields[12];
     size_t i;
     double now = VTIM_real();
-    if (!scope || !scope->ready || scope->lost_execution_context || !record ||
+    if (!scope || !reuse_scope_ready(scope) || scope->lost_execution_context || !record ||
         record->valid_until <= now || d->public_deadline <= now || record->recipe->occurrences != d->occurrences ||
         strcmp(record->binding,d->reuse_binding) || strcmp(record->recipe->digest,d->reuse_recipe)) return 0;
     fields[0] = d->site; fields[1] = d->host; fields[2] = scope->scope; fields[3] = public_registry_epoch;
@@ -191,7 +191,7 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     pthread_mutex_lock(&lock);
     declaration = public_declaration_for_url(d->site,d->host,d->url);
     scope = declaration ? reuse_scope_find(d->site,d->host,declaration->scope) : NULL;
-    if (!scope || !scope->enabled || !scope->ready || strcmp(native_policy,scope->native_policy) ||
+    if (!scope || !scope->enabled || !reuse_scope_ready(scope) || strcmp(native_policy,scope->native_policy) ||
         strcmp(declaration->wordpress_policy,scope->wordpress_policy) || !(discovery = delivery_reuse_discovery(scope,d)) ||
         discovery->recipe->occurrences != d->occurrences) goto unlock;
     page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,

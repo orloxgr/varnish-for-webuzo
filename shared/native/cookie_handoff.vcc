@@ -271,7 +271,7 @@ $Restrict vcl_recv vcl_deliver vcl_synth
 Experimental resolver build capability, not negotiated producer reuse support.
 False unless the exact engine-source build receipt was explicitly supplied.
 
-$Function BOOL reuse_register(STRING site, STRING host, STRING scope, STRING native_policy, STRING wordpress_policy, STRING reuse_policy, BOOL enabled)
+$Function BOOL reuse_register(STRING site, STRING host, STRING scope, STRING native_policy, STRING wordpress_policy, STRING reuse_policy, BOOL enabled, STRING coverage_policy = "")
 $Restrict vcl_recv
 
 Authenticated capabilities only. New authority starts UNBOUND. Disabling and
@@ -329,3 +329,5 @@ $Function BOOL delivery_reuse_response(PRIV_TASK)
 $Restrict vcl_backend_response
 
 Capture metadata from that source into the existing private native namespace.
+
+$Function STRING reuse_coverage_policy(STRING site, STRING host, STRING scope)
