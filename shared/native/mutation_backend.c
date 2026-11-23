@@ -92,7 +92,7 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
         /* Native-owned publication-only recovery and prepared private virtual
          * sources do not execute an application/provider. Client headers alone
          * cannot enter either phase or create a skip grant. */
-        if (delivery && (delivery->phase == D_RECOVERY ||
+        if (delivery && (delivery->phase == D_RECOVERY || delivery->phase == D_FINALIZE ||
             (delivery->phase == D_DELIVERED && fragment && fragment->cache_key && fragment->cache_ttl))) goto done;
     }
     /* Until authenticated personal identity maps are wired, this opt-in actor

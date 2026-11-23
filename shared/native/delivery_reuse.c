@@ -145,7 +145,8 @@ VCL_INT vmod_delivery_reuse_resolve(VRT_CTX, struct vmod_priv *priv) {
         !http_GetHdr(ctx->http_req,H_Host,&host) || strcmp(host,d->host) ||
         strcmp(ctx->http_req->hd[HTTP_HDR_URL].b,d->url) ||
         strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") ||
-        ctx->req->restarts != d->restart+(d->selection_entry ? 1 : 2)) return -1;
+        ctx->req->restarts != (d->reuse_done ? d->reuse_final_restart :
+            d->restart+(d->reuse_fast ? 0 : d->selection_entry ? 1 : 2))) return -1;
     if (!d->reuse_plan) {
         d->reuse_plan = calloc(1,sizeof(*d->reuse_plan));
         if (!d->reuse_plan) return -1;
@@ -162,7 +163,8 @@ VCL_INT vmod_delivery_reuse_resolve(VRT_CTX, struct vmod_priv *priv) {
             pin->object = delivery_reuse_lookup(ctx,d,fragment);
             if (!pin->object) continue;
             pin->deadline = fmin(pin->object->t_origin+pin->object->ttl,
-                d->prepare_response_time+(double)fragment->cache_ttl);
+                fragment->cache_deadline > 0 ? fragment->cache_deadline :
+                    d->prepare_response_time+(double)fragment->cache_ttl);
             if (!isfinite(pin->deadline) || pin->deadline <= VTIM_real()) {
                 (void)HSH_DerefObjCore(ctx->req->wrk,&pin->object); continue;
             }
@@ -245,7 +247,7 @@ static double delivery_fragment_deadline(const struct continuation *d, const str
     if (d->reuse_plan && d->reuse_plan->materialized)
         for (pin = d->reuse_plan->pins; pin; pin = pin->next)
             if (pin->fragment == f && pin->state == REUSE_HIT) return pin->deadline;
-    return d->prepare_response_time+(double)f->cache_ttl;
+    return f->cache_deadline > 0 ? f->cache_deadline : d->prepare_response_time+(double)f->cache_ttl;
 }
 #else
 static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *d) { (void)ctx; (void)d; return 0; }

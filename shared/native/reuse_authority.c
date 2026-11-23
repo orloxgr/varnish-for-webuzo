@@ -8,6 +8,12 @@
 #include "delivery_reuse_inputs.h"
 
 struct reuse_scope;
+struct reuse_discovery {
+    struct reuse_discovery *next;
+    char publication[65], representation[65], revision[65];
+    double deadline;
+    struct delivery_reuse_recipe *recipe;
+};
 struct mutation_execution {
     struct mutation_execution *next;
     struct reuse_scope *scope;
@@ -42,6 +48,8 @@ struct reuse_scope {
     unsigned enabled, ready;
     unsigned lost_execution_context;
     struct mutation_execution *executions;
+    struct reuse_discovery **discoveries; /* declarations only; cached record is authority */
+    size_t discovery_capacity, discovery_count;
     struct reuse_tag **tags;
     size_t tag_capacity, tag_count;
 };
@@ -69,6 +77,11 @@ static void reuse_registry_free(void) {
             struct mutation_execution *next = scope->executions->next;
             mutation_execution_free(scope->executions); scope->executions = next;
         }
+        for (i = 0; i < scope->discovery_capacity; ++i) while (scope->discoveries[i]) {
+            struct reuse_discovery *value = scope->discoveries[i];
+            scope->discoveries[i] = value->next; delivery_reuse_recipe_free(value->recipe); free(value);
+        }
+        free(scope->discoveries);
         for (i = 0; i < scope->tag_capacity; ++i) {
             struct reuse_tag *tag = scope->tags[i];
             while (tag) { struct reuse_tag *next = tag->next; reuse_tag_free(tag); tag = next; }
@@ -285,15 +298,14 @@ done:
     (void)ctx; (void)d; (void)wire; (void)length;
 #endif
 }
-VCL_STRING vmod_delivery_reuse_finalize_context(VRT_CTX, struct vmod_priv *priv) {
 #ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
-    struct continuation *d = priv->priv;
+static char *delivery_reuse_make_finalize(VRT_CTX, struct continuation *d) {
     struct delivery_reuse_finalize_context context;
     struct reuse_scope *scope;
     unsigned char *frame = NULL, *effective = NULL;
     size_t length = 0, effective_length = 0;
     char binding[65], evidence[65], *header = NULL;
-    const char *out = NULL;
+    char *out = NULL;
     if (ctx->req->esi_level || !d || d->phase != D_READY || d->failed || !d->reuse_candidate ||
         !delivery_reuse_capture_parent(ctx,d) ||
         delivery_reuse_input_projection(d->reuse_candidate->recipe->inputs,
@@ -317,13 +329,23 @@ VCL_STRING vmod_delivery_reuse_finalize_context(VRT_CTX, struct vmod_priv *priv)
         if (delivery_reuse_identity_mac(scope->reuse_key,&context.page,frame,length,evidence) &&
             !strcmp(evidence,context.input_evidence) &&
             delivery_reuse_input_mac(scope->reuse_key,&context.page,frame,length,binding) &&
-            delivery_reuse_finalize_header(scope->reuse_key,"GET",d->url,&context,&header))
-            out = WS_Copy(ctx->ws,header,-1);
+            delivery_reuse_finalize_header(scope->reuse_key,"GET",d->url,&context,&header) &&
+            delivery_reuse_metadata_key(&context.page,binding,d->reuse_metadata_key)) {
+            memcpy(d->reuse_binding,binding,65);
+            out = header; header = NULL;
+        }
     }
     pthread_mutex_unlock(&lock);
 done:
     delivery_mutation_header_free(header); delivery_reuse_frame_free(frame,length);
     delivery_reuse_frame_free(effective,effective_length); return out;
+ }
+#endif
+VCL_STRING vmod_delivery_reuse_finalize_context(VRT_CTX, struct vmod_priv *priv) {
+#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+    char *header = delivery_reuse_make_finalize(ctx,priv->priv);
+    const char *out = header ? WS_Copy(ctx->ws,header,-1) : NULL;
+    delivery_mutation_header_free(header); return out;
 #else
     (void)ctx; (void)priv; return NULL;
 #endif

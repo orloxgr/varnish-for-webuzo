@@ -314,3 +314,18 @@ $Restrict vcl_deliver
 Experimental signed compact context from the actual owned candidate/selected
 parent and original input evidence. NULL declines only this optimization; it
 does not install admission or grant a full composed HIT.
+
+$Function BOOL delivery_reuse_pending(PRIV_TOP)
+$Restrict vcl_miss
+
+True only for an actual owned metadata lookup; preserves the existing handoff.
+
+$Function BOOL delivery_reuse_backend(PRIV_TASK)
+$Restrict vcl_backend_fetch
+
+Authenticate the actual owned finalization source before the normal origin fetch.
+
+$Function BOOL delivery_reuse_response(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Capture metadata from that source into the existing private native namespace.

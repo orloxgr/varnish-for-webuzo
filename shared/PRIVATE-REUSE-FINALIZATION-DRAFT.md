@@ -449,3 +449,35 @@ Independent Python frame/header vectors are in
 `tests/fixtures/private_reuse_finalize_v1.json`; C generates byte-identical headers.
 The actual URI includes tracking/query bytes unchanged. An authenticated compact
 context alone is still not a CLEAN grant or completed reusable delivery.
+
+## Owned experimental native implementation status
+
+The opt-in matching-engine consumer now implements the actual late finalization
+phase, metadata storage in the existing HSH namespace, non-authoritative hashed
+recipe discovery, input-bound metadata lookup, and all-private-object pin/copy
+before the final scope/tag revision/generation barrier. Default builds and public
+capability responses still do not advertise general delivery reuse.
+
+`tests/test_reuse_full_runtime.py` qualifies this engine flow with an explicitly
+MOCK trusted producer: complete composed HIT has zero origin/prepare/finalizer
+calls; unrelated Shared input does not split it; a missing required private HSH
+object and tag revocation both require ordinary fill. This is not evidence of
+actual WordPress identity, provider persistence/drain or cookie-work closure.
+Those proofs must come from the real producer before general acceptance.
+
+The original response's genuine repeated provider cookies survive an optional
+finalization decline; protocol-only cookies are never replayed. Metadata failure
+cannot change completed original provider work. Exactly two added, owned restart
+transitions preserve the original request's recovery headroom; they add no global
+request timeout or application lifetime cap.
+
+`cookieWork.none` covers lifecycle work REQUIRED by the actual cached document /
+recipe and its providers, with their real renewal/expiry bounds. It is not a
+blanket prohibition of unrelated Shared tracking issuers. Native does not infer
+none from missing Set-Cookie, synthesize an issuer value or silently substitute
+an effective consumed-cookie projection for the original evidence.
+
+Generic revoke-only personal maps / targeted execution fencing and actual
+external mutation/content invalidation coverage remain separately tracked gates.
+Unknown execution still invalidates only its own scope; a mapping or Shared
+policy cannot infer known-empty/full arbitrary cross-route actor coverage.

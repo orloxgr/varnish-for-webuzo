@@ -7,6 +7,7 @@
 #include "vrt_obj.h"
 #include "delivery_envelope.h"
 #include "delivery_reuse_wire.h"
+#include "delivery_mutation_wire.h"
 
 /* Separate top-request eligibility storage does not create a continuation. */
 static const char guest_top_token;
@@ -93,7 +94,8 @@ VCL_STRING vmod_guest_issuer_authorization(VRT_CTX, VCL_STRING credential, VCL_S
 
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
-    D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY, D_FAILED };
+    D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY,
+    D_FINALIZE_QUEUED, D_FINALIZE, D_FINALIZE_RETURN, D_FAILED };
 struct delivery_reuse_plan;
 static void delivery_reuse_release(VRT_CTX, struct delivery_reuse_plan *);
 struct continuation {
@@ -136,6 +138,12 @@ struct continuation {
     char reuse_epoch[65], reuse_incarnation[65], reuse_native_policy[65], reuse_wp_policy[65], reuse_policy[65];
     unsigned reuse_negotiated;
     struct delivery_reuse_candidate *reuse_candidate;
+    char reuse_binding[65], reuse_metadata_key[65];
+    char *reuse_finalize_header, *reuse_metadata_uri;
+    unsigned reuse_final_restart, reuse_done, reuse_failed, reuse_fetched;
+    unsigned reuse_fast;
+    char reuse_discovery_revision[65];
+    struct delivery_reuse_record *reuse_record;
     struct fields *public_headers;
     struct fields *document_headers;
 };
@@ -145,6 +153,10 @@ static int public_selection_vcl_event(enum vcl_event_e);
 static void reuse_registry_free(void);
 static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *);
 static void delivery_reuse_candidate_capture(VRT_CTX, struct continuation *, const char *, size_t);
+static int delivery_reuse_schedule(VRT_CTX, struct vmod_priv *, struct continuation *);
+static int delivery_reuse_recv(VRT_CTX, struct continuation *);
+static int delivery_reuse_finish(VRT_CTX, struct continuation *);
+static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *, struct continuation *);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -205,6 +217,8 @@ static void delivery_fini(VRT_CTX, void *value) {
     close_owner(&d->association);
     delivery_reuse_release(ctx,d->reuse_plan);
     delivery_reuse_candidate_free(d->reuse_candidate); free(d->reuse_scope);
+    delivery_mutation_header_free(d->reuse_finalize_header); free(d->reuse_metadata_uri);
+    delivery_reuse_record_free(d->reuse_record);
     free(d->guest_policy); free(d->guest_epoch); free(d->guest_key); free(d->guest_canonical);
     free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
@@ -379,11 +393,11 @@ static enum vfp_status delivery_filter_pull(struct vfp_ctx *vc, struct vfp_entry
     d = entry ? entry->delivery : NULL;
     if (!d) failed = 1;
     else if (status == VFP_ERROR || *lp < 0 ||
-        !delivery_buffer_growth(d->length,d->capacity,(size_t)*lp,&needed,&capacity)) d->failed = failed = 1;
+        !delivery_buffer_growth(d->length,d->capacity,(size_t)*lp,&needed,&capacity)) failed = 1;
     else {
         if (needed > d->capacity) {
             char *body = realloc(d->body,capacity);
-            if (!body) d->failed = failed = 1;
+            if (!body) failed = 1;
             else { d->body = body; d->capacity = capacity; }
         }
         if (!failed) {
@@ -391,6 +405,10 @@ static enum vfp_status delivery_filter_pull(struct vfp_ctx *vc, struct vfp_entry
             d->length += (size_t)*lp; d->body[d->length] = '\0';
             if (status == VFP_END) d->complete = 1;
         }
+    }
+    if (failed && d) {
+        if (d->phase == D_FINALIZE) d->reuse_failed = 1;
+        else d->failed = 1;
     }
     pthread_mutex_unlock(&lock);
     if (failed) return VFP_Error(vc,"UltraCache delivery capture failed");
@@ -509,6 +527,8 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
     const char *url;
     unsigned i;
     if (!d) return 0;
+    if (!ctx->req->esi_level && (d->phase == D_FINALIZE_QUEUED || d->phase == D_FINALIZE_RETURN))
+        return delivery_reuse_recv(ctx,d);
     if (ctx->req->esi_level > 0) {
         const struct delivery_fragment *f;
         /* A genuine non-protocol response retains ordinary ESI routing. It
@@ -580,10 +600,13 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
     phase = (d->phase == D_RESELECT_QUEUED && d->reselect_attempted && ctx->req->restarts == d->restart+2) ||
         (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
         (d->phase == D_RETURN && ctx->req->restarts == d->restart+(d->selection_entry ? 1 : 2)) ||
+        ((d->phase == D_FINALIZE_QUEUED || d->phase == D_FINALIZE_RETURN) &&
+            ctx->req->restarts == d->reuse_final_restart) ||
         (d->phase == D_RECOVERY_QUEUED && ctx->req->restarts == d->recovery_restart);
     valid = phase && !d->failed && method && !strcmp(method,"GET") &&
         d->site && !strcmp(d->site,site) && host && !strcmp(d->host,host) &&
-        url && !strcmp(d->url,url);
+        url && (!strcmp(d->url,url) || (d->phase == D_FINALIZE_RETURN &&
+            d->reuse_metadata_uri && !strcmp(d->reuse_metadata_uri,url)));
     pthread_mutex_unlock(&lock);
     return valid;
 }
@@ -804,6 +827,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     struct continuation *d = priv->priv;
     unsigned i;
     if (ctx->req->esi_level > 0) return 0;
+    if (d && d->phase == D_FINALIZE) return delivery_reuse_finish(ctx,d);
     if (!d) {
         struct handoff *entry;
         int cookie_delivery;
@@ -840,6 +864,9 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->cookie_delivery = (unsigned)cookie_delivery;
         d->parent = ctx->req->objcore;
         (void)delivery_reuse_capture_parent(ctx,d);
+        if (delivery_reuse_try_hit(ctx,priv,d)) {
+            d->phase = D_DELIVERED; d->outcome = 1; return 0;
+        }
         d->phase = D_QUEUED;
         return 1;
     }
@@ -924,6 +951,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) ||
             !delivery_restore(ctx,d)) { d->phase = D_FAILED; return -1; }
         /* Before the first ESI child runs, append authentic provider headers. */
+        if (d->phase == D_READY && !d->reuse_done && delivery_reuse_schedule(ctx,priv,d)) return 1;
         if (!delivery_append_cookies(ctx,d)) { d->phase = D_FAILED; return -1; }
         d->phase = D_DELIVERED;
         return 0;
@@ -1013,3 +1041,4 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 #include "public_selection_registry.c"
 #include "reuse_authority.c"
 #include "mutation_backend.c"
+#include "delivery_reuse_runtime.c"

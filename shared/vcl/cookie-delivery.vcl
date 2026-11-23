@@ -8,7 +8,7 @@ sub scp_private_delivery {
 # Real provider fields are detached before storage and returned only to the
 # client task that caused this fetch. No cookie value is stored in the object.
 sub scp_cookie_miss {
-    if (req.esi_level == 0) {
+    if (req.esi_level == 0 && !cookie_handoff.delivery_reuse_pending()) {
         if (req.http.X-SCP-Profile == "ultracache" && req.restarts == 0 &&
             req.http.X-SCP-Selection-Eligible == "1") {
             set req.http.X-SCP-Selection-Operation = "cold-begin";

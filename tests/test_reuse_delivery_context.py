@@ -31,6 +31,15 @@ def canonical_origin_hooks(source):
     return source.replace('set beresp.http.X-Cache-Object-Host = bereq.http.host;',
         'set beresp.http.X-Cache-Object-Host = regsub(bereq.http.host, ":[0-9]+$", "");',1)
 
+def exact_authority_origin_hooks(source):
+    """Strict owned Lab routing only; production panel hostname policy unchanged."""
+    source=all_origin_hooks(source)
+    normal='set req.http.host = std.tolower(regsub(req.http.host, ":[0-9]+$", ""));'
+    if source.count(normal)!=1:raise AssertionError('Expected one production host normalization')
+    source=source.replace(normal,'set req.http.host = std.tolower(req.http.host);',1)
+    if 'req.http.host == "127.0.0.1"' not in source:raise AssertionError('Expected explicit owned Lab site')
+    return source.replace('req.http.host == "127.0.0.1"','req.http.host == "127.0.0.1:38751"')
+
 
 def signed_context(test,headers,path,method):
     value=headers.get('X-UltraCache-Mutation-Context')
@@ -166,6 +175,29 @@ class NativeDeliveryReuseContext(unittest.TestCase):
             self.assertEqual(status,200)
             self.assertIn('private:canonical-owner',body)
             self.assertEqual(len(seen),1)
+
+    def test_exact_lab_authority_matches_actual_home_without_site_origin_override(self):
+        holder={};seen=[]
+        def origin(path,headers):
+            self.assertEqual(headers['Host'],'127.0.0.1:38751')
+            self.assertEqual(headers['X-Forwarded-Proto'],'http')
+            if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
+                signed=signed_context(self,headers,path,'GET')
+                self.assertEqual(signed['canonicalHost'],'127.0.0.1:38751')
+                context=self.context(holder['get'],signed,delivery_id=headers['X-UltraCache-Delivery-Request'],original=path)
+                self.assertEqual(context['canonicalHost'],'127.0.0.1:38751');seen.append(context)
+                return envelope(headers,'actual-authority'),[('Cache-Control','private, no-store')]
+            return (BODY,META) if path==PARENT else ('ordinary',[('Cache-Control','private, no-store')])
+        settings={'domain':'127.0.0.1','names':['127.0.0.1']}
+        with proxy('ultracache',origin,transform=exact_authority_origin_hooks,site_settings=settings) as original:
+            def get(path,cookie=None,extra=None):
+                headers={'Host':'127.0.0.1:38751','X-Forwarded-Proto':'http'};headers.update(extra or {})
+                return original(path,cookie,headers)
+            get.endpoint=original.endpoint
+            get.request_headers=dict(original.request_headers,Host='127.0.0.1:38751',**{'X-Forwarded-Proto':'http'})
+            holder['get']=get;get(PARENT);self.register(get)
+            status,_,body=get(PARENT,'_fbp=actual-authority')
+            self.assertEqual(status,200);self.assertIn('private:actual-authority',body);self.assertEqual(len(seen),1)
 
 
 if __name__=='__main__':unittest.main()

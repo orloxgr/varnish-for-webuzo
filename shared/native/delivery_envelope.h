@@ -13,6 +13,7 @@ struct delivery_fragment {
     char *cache_tags;
     uint64_t cache_ttl;
     uint64_t occurrences; /* exact authenticated renderer coverage */
+    double cache_deadline; /* optional actual absolute body deadline, never slid */
 };
 struct delivery_public_parent {
     char generation[65];

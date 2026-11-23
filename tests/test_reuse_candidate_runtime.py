@@ -10,7 +10,7 @@ import os
 import shutil
 import unittest
 import test_reuse_authority as authority
-from test_cookie_delivery import proxy
+from test_cookie_delivery import proxy,cookies
 from test_delivery_continuation import BODY,META,PARENT,PRIVATE,ADAPTIVE,envelope
 from test_reuse_delivery_context import all_origin_hooks,signed_context
 from test_reuse_cookie_inputs import declaration,seal_recipe,lp
@@ -33,10 +33,20 @@ class NativeReuseCandidate(unittest.TestCase):
     observe=authority.NativeReuseAuthority.observe
     call=authority.NativeReuseAuthority.call
     def test_native_candidate_joins_original_and_actual_parent_with_failure_isolation(self):
-        holder={};seen=[];mode=['valid']
+        holder={};seen=[];finalized=[];mode=['valid']
         recipe=seal_recipe(dict(inputs=declaration(['owner']),fragments=[
             dict(url=PRIVATE,provider='cart',occurrences=2),dict(url=ADAPTIVE,provider='nonce',occurrences=1)]))
         def origin(path,headers):
+            if headers.get('X-UltraCache-Delivery-Phase')=='reuse-finalize':
+                self.assertEqual(path,PARENT)
+                self.assertIsNone(headers.get('Cookie'))
+                self.assertIsNone(headers.get('X-UltraCache-Mutation-Context'))
+                self.assertEqual(headers.get('X-UltraCache-Delivery-Authorization'),'b'*64)
+                context=json.loads(base64.b64decode(headers['X-UltraCache-Delivery-Reuse-Context'],validate=True))
+                self.assertEqual(context['requestId'],seen[-1][0]['requestId'])
+                finalized.append(context)
+                return 204,b'',[('Cache-Control','private, no-store'),('X-UltraCache-Delivery-Reuse-Outcome','declined'),
+                    ('Set-Cookie','wrong-finalizer-cookie=never; Path=/')]
             if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
                 self.assertEqual(headers.get('X-UltraCache-Delivery-Reuse-Candidate-Version'),'1')
                 signed=signed_context(self,headers,path,'GET')
@@ -58,7 +68,7 @@ class NativeReuseCandidate(unittest.TestCase):
                 for f in body['renderedFragments']:f['cache']=dict(key=hashlib.sha256(f['url'].encode()).hexdigest(),ttl=120,tags='fixture')
                 body['reuseCandidate']=candidate
                 seen.append((control,frame,evidence))
-                return json.dumps(body),[('Cache-Control','private, no-store')]
+                return json.dumps(body),[('Cache-Control','private, no-store'),('Set-Cookie','actual-provider-cookie=current; Path=/; HttpOnly')]
             if path==PARENT:return BODY,META
             return 'cold',[('Cache-Control','private, no-store')]
         with proxy('ultracache',origin,transform=hooks) as get:
@@ -69,6 +79,7 @@ class NativeReuseCandidate(unittest.TestCase):
                 mode[0]=setting
                 status,headers,body=get(PARENT,'owner=actual; _fbp=unrelated')
                 self.assertEqual(status,200);self.assertIn('private:owner',body)
+                self.assertEqual(cookies(headers),['actual-provider-cookie=current; Path=/; HttpOnly'])
                 header=dict(headers).get('X-Owned-Finalization-Context')
                 if setting!='valid':self.assertFalse(header);continue
                 self.assertTrue(header)
@@ -83,5 +94,6 @@ class NativeReuseCandidate(unittest.TestCase):
                 page=('siteId','canonicalHost','scope','epoch','nativePolicy','wordpressPolicy','reusePolicy','publicationDigest','representation','recipeDigest')
                 self.assertEqual(context['binding'],hmac.new(KEY,lp('ultracache-delivery-reuse-binding-v1')+
                     b''.join(lp(c[n]) for n in page)+lp(seen[-1][1]),'sha256').hexdigest())
+            self.assertEqual(len(finalized),1,'Only the valid request-owned candidate enters finalization')
 
 if __name__=='__main__':unittest.main()

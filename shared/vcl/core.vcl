@@ -56,6 +56,18 @@ sub scp_init {
     unset req.http.X-SCP-Private-Lookup;
     unset req.http.X-SCP-Site;
     unset req.http.X-UltraCache-Delivery-Authorization;
+    unset req.http.X-UltraCache-Delivery-Reuse-Candidate-Version;
+    unset req.http.X-UltraCache-Delivery-Reuse-Context;
+    unset req.http.X-UltraCache-Delivery-Reuse-Version;
+    if (req.method != "PURGE" || req.url != "/__ultracache-vcl-contract-v2") {
+        # These selectors also belong to the separately authenticated native
+        # control protocol; ordinary/browser application requests cannot set them.
+        unset req.http.X-UltraCache-Delivery-Reuse-Recipe;
+        unset req.http.X-UltraCache-Private-Request-Id;
+        unset req.http.X-UltraCache-Private-Challenge;
+    }
+    unset req.http.X-UltraCache-Mutation-Context;
+    unset req.http.X-UltraCache-Mutation-Receipt;
     unset req.http.X-UltraCache-Delivery-Manifest;
     unset req.http.X-UltraCache-Delivery-Recovery-Version;
     unset req.http.X-UltraCache-Delivery-Request-Snapshot-Version;
@@ -290,6 +302,7 @@ sub scp_backend_response {
         unset beresp.http.X-SCP-Guest-Complete;
     }
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_private_backend_response; }
+    unset beresp.http.X-SCP-Reuse-Metadata;
     unset beresp.http.X-SCP-Delivery-Public-Snapshot;
     unset beresp.http.X-SCP-Personal-Delivery;
     unset beresp.http.X-SCP-Public-Fragment;
