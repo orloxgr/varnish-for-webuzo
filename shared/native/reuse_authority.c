@@ -50,6 +50,7 @@ struct reuse_scope {
     unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
     unsigned enabled, ready;
     unsigned lost_execution_context;
+    struct reuse_transaction *scope_mutations; /* real unknown-owner writers, never fake tags */
     struct mutation_execution *executions;
     struct reuse_discovery **discoveries; /* declarations only; cached record is authority */
     size_t discovery_capacity, discovery_count;
@@ -82,6 +83,10 @@ static void reuse_registry_free(void) {
         struct reuse_scope *scope = reuse_scopes;
         size_t i;
         reuse_scopes = scope->next;
+        while (scope->scope_mutations) {
+            struct reuse_transaction *next = scope->scope_mutations->next;
+            free(scope->scope_mutations); scope->scope_mutations = next;
+        }
         while (scope->executions) {
             struct mutation_execution *next = scope->executions->next;
             mutation_execution_free(scope->executions); scope->executions = next;
@@ -175,21 +180,27 @@ static size_t reuse_scope_active(const struct reuse_scope *scope) {
     }
     return count;
 }
-static struct reuse_transaction *reuse_transaction_find(struct reuse_tag *tag, const char *id) {
+static struct reuse_transaction *reuse_transaction_lookup(struct reuse_transaction *list, const char *id) {
     struct reuse_transaction *transaction;
-    for (transaction = tag->transactions; transaction; transaction = transaction->next)
+    for (transaction = list; transaction; transaction = transaction->next)
         if (!strcmp(transaction->id,id)) return transaction;
     return NULL;
+}
+static struct reuse_transaction *reuse_transaction_find(struct reuse_tag *tag, const char *id) {
+    return reuse_transaction_lookup(tag->transactions,id);
+}
+static struct reuse_transaction *reuse_transaction_new(const char *id) {
+    struct reuse_transaction *transaction = calloc(1,sizeof(*transaction));
+    if (!transaction || !reuse_random_id(transaction->lease)) { free(transaction); return NULL; }
+    memcpy(transaction->id,id,65); transaction->active = 1;
+    return transaction;
 }
 static struct reuse_transaction *reuse_transaction_begin(struct reuse_tag *tag, const char *id) {
     struct reuse_transaction *transaction = reuse_transaction_find(tag,id);
     char revision[65];
     if (transaction) return transaction; /* active or completed retry: never reopen */
-    transaction = calloc(1,sizeof(*transaction));
-    if (!transaction || !reuse_random_id(transaction->lease) || !reuse_random_id(revision)) {
-        free(transaction); return NULL;
-    }
-    memcpy(transaction->id,id,65); transaction->active = 1;
+    transaction = reuse_transaction_new(id);
+    if (!transaction || !reuse_random_id(revision)) { free(transaction); return NULL; }
     transaction->next = tag->transactions; tag->transactions = transaction;
     memcpy(tag->revision,revision,65); tag->clean = 0; tag->generation[0] = 0;
     return transaction;
@@ -430,6 +441,19 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
             }
             VSB_putc(json,']');
         }
+        VSB_cat(json,",\"scopeMutations\":[");
+        {
+            const struct reuse_transaction *writer;
+            for (writer = scope->scope_mutations; writer; writer = writer->next) {
+                if (writer != scope->scope_mutations) VSB_putc(json,',');
+                VSB_cat(json,"{\"transaction\":"); reuse_json(json,writer->id);
+                reuse_json_field(json,"lease",writer->lease);
+                VSB_printf(json,",\"active\":%s",writer->active ? "true" : "false");
+                if (!writer->active) reuse_json_field(json,"committedRevision",writer->completed_revision);
+                VSB_putc(json,'}');
+            }
+        }
+        VSB_putc(json,']');
         if (scope->lost_execution_context) VSB_cat(json,",\"lostExecutionContext\":true");
     }
     if (tag) {
@@ -440,6 +464,7 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
         if (reuse_tag_clean(scope,tag)) reuse_json_field(json,"generation",tag->generation);
     }
     if (transaction) {
+        if (!tag) reuse_json_field(json,"transactionKind","scope");
         reuse_json_field(json,"transaction",transaction->id); reuse_json_field(json,"lease",transaction->lease);
         VSB_printf(json,",\"active\":%s",transaction->active ? "true" : "false");
         if (!transaction->active) reuse_json_field(json,"committedRevision",transaction->completed_revision);
@@ -569,8 +594,58 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         *position = execution->next; drained = execution;
         status = 200; reason = "execution-drained"; goto reply;
     }
+    if (!strcmp(operation,"private-scope-mutation-begin") ||
+        !strcmp(operation,"private-scope-mutation-commit") ||
+        !strcmp(operation,"private-scope-mutation-ack")) {
+        const char *transaction_id = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Transaction"));
+        const char *lease = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Lease"));
+        char revision[65];
+        /* A real scope writer has no inferred cookie identity or placeholder
+         * tag. Count, not reuse_single, also rejects empty/duplicate tags. */
+        if (http_CountHdr(ctx->http_req,HDR("X-UltraCache-Private-Tag")) || !public_policy(transaction_id)) goto reply;
+        transaction = reuse_transaction_lookup(scope->scope_mutations,transaction_id);
+        if (!strcmp(operation,"private-scope-mutation-begin")) {
+            if (!public_policy(expected_scope)) goto reply;
+            if (transaction) { status = 200; reason = "scope-mutation-recorded"; goto reply; }
+            if (!expected_scope || strcmp(expected_scope,scope->revision)) {
+                status = 409; reason = "scope-revision-changed"; goto reply;
+            }
+            transaction = reuse_transaction_new(transaction_id);
+            if (!transaction || !reuse_random_id(revision)) {
+                free(transaction); transaction = NULL; reuse_scope_unbind(scope);
+                status = 503; reason = "authority-memory-or-identity"; goto reply;
+            }
+            transaction->next = scope->scope_mutations; scope->scope_mutations = transaction;
+            scope->ready = 0; memcpy(scope->revision,revision,65);
+            status = 200; reason = "scope-mutation-recorded"; goto reply;
+        }
+        if (!transaction || !lease || strcmp(lease,transaction->lease)) {
+            transaction = NULL; status = 409; reason = "unknown-lease"; goto reply;
+        }
+        if (!strcmp(operation,"private-scope-mutation-commit")) {
+            if (!delivery_header_equals(ctx->http_req,HDR("X-UltraCache-Private-Drained"),"1")) goto reply;
+            if (transaction->active) {
+                if (!reuse_random_id(revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
+                transaction->active = 0; scope->ready = 0; memcpy(scope->revision,revision,65);
+                memcpy(transaction->completed_revision,revision,65);
+            }
+            status = 200; reason = "scope-mutation-committed"; goto reply;
+        }
+        if (transaction->active) { status = 409; reason = "mutation-active"; goto reply; }
+        {
+            struct reuse_transaction **position = &scope->scope_mutations;
+            /* The producer durably records the actual native commit ACK before
+             * this request. Fence delayed begin frames before forgetting ID. */
+            if (!reuse_random_id(revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
+            scope->ready = 0; memcpy(scope->revision,revision,65);
+            while (*position && *position != transaction) position = &(*position)->next;
+            *position = transaction->next; free(transaction); transaction = NULL;
+            status = 200; reason = "scope-mutation-acknowledged"; goto reply;
+        }
+    }
     if (!strcmp(operation,"private-authority-recover")) {
         if (!expected_scope || strcmp(expected_scope,scope->revision)) { status = 409; reason = "scope-revision-changed"; goto reply; }
+        if (scope->scope_mutations) { status = 409; reason = "scope-mutation-unsettled"; goto reply; }
         if (reuse_scope_active(scope)) { status = 409; reason = "mutation-active"; goto reply; }
         if (scope->executions || scope->lost_execution_context) { status = 409; reason = "execution-unsettled"; goto reply; }
         /* Explicit authenticated producer recovery, after durable intent/drain

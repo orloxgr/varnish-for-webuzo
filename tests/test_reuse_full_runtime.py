@@ -51,7 +51,10 @@ class NativeFullReuse(unittest.TestCase):
     def test_mixed_personal_cart_and_anonymous_nonce_compose_without_origin_or_fake_owner_map(self):
         self.run_full_actor(anonymous_nonce=True)
 
-    def run_full_actor(self,anonymous_nonce=False):
+    def test_scope_writer_suspends_complete_mixed_hit_until_drained_and_fresh_finalized(self):
+        self.run_full_actor(anonymous_nonce=True,scope_fence=True)
+
+    def run_full_actor(self,anonymous_nonce=False,scope_fence=False):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
         nonce_inputs=declaration(['wordpress_logged_in_mock']) if anonymous_nonce else declaration(['owner'])
@@ -86,6 +89,8 @@ class NativeFullReuse(unittest.TestCase):
                 self.call(holder['get'],'private-execution-drained',current,tag=None,extra={
                     'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
                     'X-UltraCache-Private-Drained':'1'})
+                if self.observe(holder['get'])['scopeMutations']:
+                    return 204,'',[('Cache-Control','private, no-store')]
                 self.recover(holder['get'],self.observe(holder['get']))
                 owner_tag=OWNER if owner=='A' else hashlib.sha256(('mock-owner-'+owner).encode()).hexdigest()
                 observed=self.call(holder['get'],'private-authority-context',tag=owner_tag)
@@ -131,6 +136,23 @@ class NativeFullReuse(unittest.TestCase):
             status,headers,body2=get(PARENT,'owner=A; _fbp=second')
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
+            if scope_fence:
+                current=self.observe(get)
+                writer=self.call(get,'private-scope-mutation-begin',current,tag=None,
+                    extra={'X-UltraCache-Private-Transaction':'7'*64})
+                status,_,fresh=get(PARENT,'owner=A')
+                self.assertEqual(status,200);self.assertIn('private:A-generation1',fresh)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],
+                    'A retained scope writer must suspend otherwise-complete native admission')
+                self.assertEqual(self.observe(get)['scopeState'],'unbound')
+                done=self.call(get,'private-scope-mutation-commit',writer,tag=None,extra={
+                    'X-UltraCache-Private-Transaction':writer['transaction'],
+                    'X-UltraCache-Private-Lease':writer['lease'],'X-UltraCache-Private-Drained':'1'})
+                self.call(get,'private-scope-mutation-ack',done,tag=None,extra={
+                    'X-UltraCache-Private-Transaction':done['transaction'],'X-UltraCache-Private-Lease':done['lease']})
+                calls.clear();self.assertEqual(get(PARENT,'owner=A')[0],200)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
+                calls.clear();self.assertEqual(get(PARENT,'owner=A')[0],200);self.assertEqual(calls,[])
             self.assertEqual(exchange(get,'PURGE',PRIVATE,cache_key(PRIVATE,'A'),'b'*64)[0],200)
             self.assertEqual(get(PARENT,'owner=A')[0],200)
             self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],

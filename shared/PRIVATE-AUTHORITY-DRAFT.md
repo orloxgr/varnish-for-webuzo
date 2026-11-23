@@ -182,11 +182,12 @@ pre-dispatch identity fences and complete cached-delivery admission remain
 separate integration gates.
 
 
-## Proposed scope-wide writer fencing for unknown owners (not implemented)
+## Scope-wide writer fencing for unknown owners (experimental implementation)
 
-This extension is a design, not a currently supported operation/capability.
-The pinned mixed-delivery fixture `2b85cc2` is unchanged. Positive delivery
-qualification does not cover unsigned writers or control-channel outages.
+This additive extension uses the existing opt-in experimental authority owner.
+Default builds do not enable it. The pinned mixed-delivery fixture `2b85cc2`
+remains unchanged and predates these operations. Positive delivery qualification
+alone does not cover unsigned writers or control-channel outages.
 
 ### Existing signed HTTP coverage and the separate CLI gap
 
@@ -213,7 +214,7 @@ Use the same authenticated `PURGE /__ultracache-vcl-contract-v2`, scope registry
 lock, epoch/incarnation checks, producer durable journal and transaction/lease
 lifecycle. Add a scope-owned transaction list to the existing `reuse_scope`;
 reuse transaction machinery instead of creating a second authority/datastore.
-Proposed literal operations:
+Literal operations:
 
 * `private-scope-mutation-begin`: exact registered scope, epoch/incarnation,
   `X-UltraCache-Private-Scope-Revision`, and producer random64
@@ -242,7 +243,14 @@ Each writer has its own lease; one writer cannot retire another. All three
 operations reject tag headers, stale epoch/incarnation, foreign scope and wrong
 lease. Same-site sibling/nested application scopes remain distinct. Scope-only
 context includes the typed outstanding scope writers so recovery cannot confuse
-them with personal tags or native backend executions.
+them with personal tags or native backend executions. The authenticated context
+always contains `scopeMutations:[]` or the actual retained records:
+`{transaction,lease,active,committedRevision?}`. A top-level scope transaction reply
+also contains `transactionKind:"scope"`. Accepted operation reasons are
+`scope-mutation-recorded`, `scope-mutation-committed` and
+`scope-mutation-acknowledged`; recovery refuses retained records with
+`scope-mutation-unsettled`. Begin always requires a valid scope-revision field,
+but a retained idempotent retry can use its original now-stale revision.
 
 Existing `private-authority-recover` must additionally reject every retained
 scope writer until its explicit drain/commit/durable ACK lifecycle completes,

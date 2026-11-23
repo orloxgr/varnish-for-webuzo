@@ -23,7 +23,7 @@ sub scp_reuse_negotiate {
     }
 }
 sub scp_reuse_control {
-    if (req.http.X-UltraCache-Operation ~ "^(private-authority-context|private-authority-recover|private-execution-drained|private-mutation-begin|private-mutation-commit|private-mutation-ack|private-generation-publish|private-tag-retire|delivery-reuse-context)$") {
+    if (req.http.X-UltraCache-Operation ~ "^(private-authority-context|private-authority-recover|private-execution-drained|private-mutation-begin|private-mutation-commit|private-mutation-ack|private-scope-mutation-begin|private-scope-mutation-commit|private-scope-mutation-ack|private-generation-publish|private-tag-retire|delivery-reuse-context)$") {
         set req.http.X-SCP-Selection-Operation = "actions";
         call scp_selection_context;
         unset req.http.X-SCP-Selection-Operation;
