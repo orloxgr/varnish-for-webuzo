@@ -3,7 +3,7 @@
   "syntheticSecret": "owned-cookie-frame-secret-v1",
   "provenance": {
     "scope": "Actual PHP parser and production projection helper. Synthetic cookies only. No native admission/authorization proof.",
-    "sourceSha256": "2f7152262cf2d892531bd72d8cd82a545b6919c73ef8703aaec7bccaea964772",
+    "sourceSha256": "417319b624691801c08ec1d6e3ee2c507a208185a9d4392aae3d998020525fef",
     "runtime": "actual PHP-FPM 8.3.37; synthetic inputs only"
   },
   "vectors": [
@@ -1066,6 +1066,41 @@
         "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
       },
       "binding": null
+    },
+    {
+      "name": "empty-base-unmatched",
+      "cookieHeader": "[owned_input=discarded-by-native-php",
+      "inputs": {
+        "cookieNames": [
+          "_owned_input"
+        ],
+        "cookiePrefixes": [],
+        "phpMaxInputVars": 4000
+      },
+      "projection": {
+        "inputs": {
+          "cookieNames": [
+            "_owned_input"
+          ],
+          "cookiePrefixes": [],
+          "phpMaxInputVars": 4000
+        },
+        "groups": [],
+        "frameHex": "0000001b756c74726163616368652d636f6f6b69652d696e707574732d763100000fa0000000010000000c5f6f776e65645f696e7075740000000000000000"
+      },
+      "context": {
+        "siteId": "owned-site",
+        "canonicalHost": "owned.example",
+        "scope": "/",
+        "epoch": "1111111111111111111111111111111111111111111111111111111111111111",
+        "nativePolicy": "2222222222222222222222222222222222222222222222222222222222222222",
+        "wordpressPolicy": "3333333333333333333333333333333333333333333333333333333333333333",
+        "reusePolicy": "4444444444444444444444444444444444444444444444444444444444444444",
+        "publicationDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "representation": "6666666666666666666666666666666666666666666666666666666666666666",
+        "recipeDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "binding": "098988b20dd21740e057bb9bbe9cf76226c4fb98700b193a472ce8313eb69870"
     },
     {
       "name": "other-native-epoch",

@@ -115,7 +115,7 @@ Those protocol decisions still need joint producer/consumer vectors and review.
 
 `tests/fixtures/private_reuse_cookie_inputs_v1.json` contains only synthetic
 inputs from an actual PHP-FPM 8.3.37 parser plus production projection/binding
-helper run. All 28 cases match in native C: exact binary frame for qualified
+helper run. All 29 cases match in native C: exact binary frame for qualified
 cases, actual PHP MACs, and the same ambiguous-input eligibility result for the
 negative cases, including consumed input beyond the actual parsing budget.
 Independent Python HMAC agrees as well. The earlier 21-case pre-budget frame is
@@ -131,3 +131,10 @@ The negotiated recipe must carry the producer's actual effective runtime
 metadata and its accepted policy identity. The primitive does not obtain or
 advertise those values itself, publish a cache admission, or replace producer
 identity/state validation. A matching frame/MAC alone cannot authorize reuse.
+
+The producer combines renderer declarations with the inputs actually consumed
+by identity/cache-claim validation, including absent inputs. For example, a
+provider may depend on an authentication cookie even when its old rendering
+transport used only a session prefix. Those provider-specific declarations stay
+in the application owner. The native implementation remains generic and does
+not insert a cookie-name override or alter terminal Private choices.
