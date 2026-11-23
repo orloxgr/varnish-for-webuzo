@@ -3,6 +3,44 @@
  */
 #include "delivery_reuse_wire.h"
 
+/* Optional evidence for the already compiled complete guest publication.
+ * Reuses the existing canonical recipe, including PHP parser context. Invalid
+ * evidence affects Shared-cookie reuse only, never the legacy no-Cookie body. */
+static struct delivery_reuse_recipe *guest_inputs_read(const char *json, size_t length, uint64_t resolved) {
+    struct reader r;
+    struct delivery_reuse_recipe *recipe = NULL;
+    uint64_t version = 0, occurrences = 0;
+    size_t start = 0, size = 0;
+    unsigned seen = 0;
+    if (!reuse_reader(json,length,&r)) return NULL;
+    if (!take(&r,'{')) goto done;
+    for (;;) {
+        struct text key;
+        unsigned bit;
+        if (!string(&r,&key) || !take(&r,':')) goto done;
+        if (equal(key,"version")) bit = 1;
+        else if (equal(key,"privateOccurrences")) bit = 2;
+        else if (equal(key,"recipe")) bit = 4;
+        else goto done;
+        if (seen & bit) goto done;
+        seen |= bit;
+        if (bit == 1) { if (!number(&r,&version) || version != 1) goto done; }
+        else if (bit == 2) { if (!number(&r,&occurrences) || occurrences > resolved) goto done; }
+        else {
+            start = r.offset;
+            if (!reuse_skip_value(&r)) goto done;
+            size = r.offset-start;
+        }
+        if (take(&r,'}')) break;
+        if (!take(&r,',')) goto done;
+    }
+    whitespace(&r);
+    if (seen == 7 && r.offset == length)
+        (void)delivery_reuse_recipe_parse(json+start,size,occurrences,&recipe);
+done:
+    free(r.buffer); return recipe;
+}
+
 /* Generic value boundaries only, used to remove the optional extension before
  * the unchanged strict legacy parser. An explicit stack avoids recursive JSON
  * parsing and introduces no product nesting/byte limit. */

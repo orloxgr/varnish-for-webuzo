@@ -361,3 +361,50 @@ forged guest markers, exact subfolder/host scope, policy overrides, duplicates,
 malformed bindings/digests, genuine nonce rollover, ordinary local clear/Warm,
 publication replacement and same-build registry restart/autoregistration. Public
 cache must contain no issuer fields, visitor values or request-owned fragments.
+# Optional Shared-cookie input evidence (version 1)
+
+The native capabilities response and authenticated application-selection upstream
+advertise `X-UltraCache-VCL-Guest-Inputs-Version: 1`. A supporting producer may
+append `guestPublic.guestInputs` without changing the original no-Cookie guest
+ingress or legacy envelope:
+
+```json
+{"version":1,"privateOccurrences":0,"recipe":{"digest":"<canonical SHA-256>","inputs":{"cookieNames":[],"cookiePrefixes":[],"phpMaxInputVars":1000},"fragments":[]}}
+```
+
+`recipe` is the existing private-reuse canonical wire, including actual PHP
+parser context, actual provider exact/prefix selectors, descriptor identity and
+expanded private occurrence multiplicity. The producer binds `recipe.digest`
+as `guestInputsDigest` in the same signed guest manifest. `privateOccurrences`
+must equal the recipe total and cannot exceed `resolvedOccurrences`, which also
+counts public includes. An empty recipe describes a truly empty expanded private
+closure; missing/unknown claims cannot be treated as empty. Malformed or duplicate
+optional declarations disable this extension while retaining an otherwise valid
+legacy no-Cookie guest publication. Older producers can omit it entirely.
+
+Only requests whose original Cookie pairs all have an explicit effective Shared
+action may look up the existing guest namespace as candidates. Before delivery,
+native matches the actual cached object's complete marker and manifest digest,
+the existing site/host/scope/policy/epoch owner, and its remaining publication
+lifetime. Its ORIGINAL Cookie is projected through the publication's actual typed
+provider inputs and must equal the original empty-guest projection. An unrelated
+Shared analytics cookie can reuse the complete body immediately. A Shared Woo,
+authentication or other provider input that changes presence/value retains the
+stateful route; present-empty is not absence. Private, Variant and unclassified
+cookies do not enter this extended candidate namespace.
+
+Evidence is hash-indexed publication metadata under the existing declaration
+owner, keyed by the guest namespace and actual manifest digest, not visitor values
+or identities. Identical authenticated registration preserves it; changed policy,
+scope, epoch, object provenance or expiry prevents its use. No full recipe is put
+in an HTTP metadata header. No additional service, per-HIT PHP operation, cookie
+issuance, TTL/resource setting or manual configuration is introduced.
+
+A candidate MISS, missing evidence or unequal input projection takes one exact
+request-owned native restart into ordinary stateful selection. It never forwards
+a Cookie-bearing request to the legacy no-Cookie guest producer and never removes
+the original Cookie. Only that original site/host/URL/method can resume across the
+existing adapter gateway. An unproven candidate cannot expose guest headers/body.
+
+Native mock transport tests cover this contract and remain distinct from actual
+WordPress/provider/browser acceptance with the matching producer.

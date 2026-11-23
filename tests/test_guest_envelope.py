@@ -7,6 +7,10 @@ import hmac
 import json
 import unittest
 import test_public_selection as selection
+from test_reuse_cookie_inputs import seal_recipe
+
+class ExtendedSelection(ctypes.Structure):
+    _fields_=selection.Selection._fields_+[('source_only',ctypes.c_uint),('resolved',ctypes.c_void_p),('guest_inputs',ctypes.c_void_p)]
 
 POLICY='a'*64
 WP='b'*64
@@ -45,7 +49,8 @@ class GuestEnvelope(unittest.TestCase):
             if not ok:return None
             p=result.contents.parent.contents
             return dict(guest=result.contents.guest,body=ctypes.string_at(p.body,p.length),
-                ttl=p.fresh_remaining,privateCount=result.contents.occurrences)
+                ttl=p.fresh_remaining,privateCount=result.contents.occurrences,
+                guestInputs=bool(ctypes.cast(result,ctypes.POINTER(ExtendedSelection)).contents.guest_inputs))
         finally:self.lib.delivery_selection_free(result)
     def test_hmac_rfc4231_vectors_and_independent_block_boundary_inputs(self):
         vectors=[(b'\x0b'*20,b'Hi There','b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7'),
@@ -61,6 +66,38 @@ class GuestEnvelope(unittest.TestCase):
         self.assertEqual(out['guest'],1);self.assertEqual(out['ttl'],1234)
         self.assertEqual(out['privateCount'],0)
         self.assertEqual(out['body'],base64.b64decode(s['guestPublic']['publicParent']['bodyBase64']))
+
+    def test_optional_exact_recipe_includes_expanded_private_multiplicity_not_public_count(self):
+        recipe=seal_recipe(dict(inputs=dict(cookieNames=['actual_session'],cookiePrefixes=['auth_'],phpMaxInputVars=1000),
+            fragments=[dict(url='/nested?token=€',provider='actual-provider',occurrences=6)]))
+        v=sample();v['guestPublic']['guestInputs']=dict(version=1,privateOccurrences=6,recipe=recipe)
+        self.assertTrue(self.parse(v)['guestInputs']) # six private within thirteen total
+        self.assertTrue(self.parse(json.dumps(v,ensure_ascii=True).encode())['guestInputs'])
+        v['guestPublic']['guestInputs']['privateOccurrences']=7
+        self.assertFalse(self.parse(v)['guestInputs'])
+
+    def test_empty_actual_closure_and_malformed_extension_preserve_legacy_guest(self):
+        recipe=seal_recipe(dict(inputs=dict(cookieNames=[],cookiePrefixes=[],phpMaxInputVars=321),fragments=[]))
+        valid=dict(version=1,privateOccurrences=0,recipe=recipe)
+        v=sample();v['guestPublic']['guestInputs']=valid
+        self.assertTrue(self.parse(v)['guestInputs'])
+        for bad in (None,True,[],{},dict(valid,version=2),dict(valid,privateOccurrences=14),
+                    dict(valid,recipe=dict(recipe,digest='0'*64))):
+            v=sample();v['guestPublic']['guestInputs']=bad
+            with self.subTest(bad=bad):
+                out=self.parse(v);self.assertIsNotNone(out);self.assertFalse(out['guestInputs'])
+        raw=json.dumps(sample()).encode().replace(b'"cookieDelivery": "deferred"',
+            b'"cookieDelivery":"deferred","guestInputs":'+json.dumps(valid).encode()+
+            b',"guestInputs":'+json.dumps(valid).encode())
+        self.assertFalse(self.parse(raw)['guestInputs'])
+
+    def test_extended_candidate_requires_every_active_name_explicitly_shared(self):
+        self.lib.delivery_selection_all_shared.argtypes=[ctypes.c_char_p,ctypes.c_char_p]
+        self.lib.delivery_selection_all_shared.restype=ctypes.c_int
+        rules=b'shared\tprefix\tmetric_\nvariant\texact\tcurrency\nprivate\texact\tauth\n'
+        for raw,expected in ((b'metric_a=1; metric_b=2',1),(b'unknown=1',0),
+            (b'metric_a=1; currency=EUR',0),(b'auth=1',0),(b'',0),(b'metric_a',0)):
+            self.assertEqual(self.lib.delivery_selection_all_shared(raw,rules),expected)
     def test_all_owner_bindings_are_exact(self):
         for name in ('request','url','policy','wordpress','guest','epoch','scope'):
             with self.subTest(name=name):self.assertIsNone(self.parse(sample(),**{name:'different'}))

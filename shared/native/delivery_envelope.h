@@ -63,6 +63,7 @@ struct delivery_public_selection {
     struct delivery_fragment *fragments;
     unsigned source_only; /* explicit public parent role, never private completion */
     struct delivery_public_projection *resolved;
+    struct delivery_reuse_recipe *guest_inputs; /* optional negotiated complete guest closure */
 };
 enum delivery_projected_role {
     DELIVERY_PROJECTED_PERSONAL, DELIVERY_PROJECTED_PARENT, DELIVERY_PROJECTED_RESOLVER
@@ -92,6 +93,7 @@ int delivery_selection_scope_valid(const char *scope);
 int delivery_selection_scope_matches(const char *scope, const char *url);
 /* 0 Shared (including existing fallback), 1 Variant, 2 Private; -1 bad rules. */
 int delivery_cookie_action(const char *rules, const char *name, size_t length);
+int delivery_selection_all_shared(const char *original, const char *rules);
 char *delivery_selection_projection(const char *candidate, const char *rules);
 int delivery_selection_digest(const unsigned char *body, size_t length, char digest[65]);
 int delivery_hmac_sha256(const unsigned char *key, size_t key_length,

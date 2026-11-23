@@ -280,10 +280,30 @@ $Restrict vcl_recv
 
 Capture original absent Cookie/Authorization before normalization; no continuation.
 
-$Function VOID guest_select(STRING site, STRING policy)
+$Function VOID guest_select(STRING site, STRING policy, STRING rules)
 $Restrict vcl_recv vcl_miss
 
 Select registered complete guest namespace for the native-owned first-visit predicate.
+
+$Function BOOL guest_shared_pending()
+$Restrict vcl_hit vcl_miss vcl_deliver
+
+Current Shared-only request is a guest cache candidate, never an origin guest request.
+
+$Function BOOL guest_shared_hit(STRING key, STRING manifest, BOOL complete)
+$Restrict vcl_hit
+
+Prove this actual cached guest publication has the identical provider input projection.
+
+$Function BOOL guest_fallback()
+$Restrict vcl_hit vcl_miss vcl_deliver
+
+Authorize one request-owned restart to ordinary stateful selection, preserving inputs.
+
+$Function BOOL guest_fallback_ready()
+$Restrict vcl_recv vcl_miss
+
+Only that exact original request may enter selection after a guest-candidate fallback.
 
 $Function BOOL guest_warm_parent(STRING site, STRING policy, STRING credential)
 $Restrict vcl_recv vcl_miss

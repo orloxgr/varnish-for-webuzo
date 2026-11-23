@@ -13,6 +13,9 @@
 static const char guest_top_token;
 struct guest_request {
     unsigned captured, eligible, disabled;
+    unsigned shared_candidate, shared_proved, fallback_restart;
+    char *original_cookie, *site, *host, *url;
+    char shared_manifest[65];
     unsigned warm_requested, warm_single, warm_checked, warm_valid;
     char *warm_projection, *warm_authorization;
     char *key, *policy, *wordpress_policy, *epoch, *scope;
@@ -21,6 +24,7 @@ static void guest_fini(VRT_CTX, void *value) {
     struct guest_request *g = value;
     (void)ctx;
     free(g->warm_projection); free(g->warm_authorization);
+    free(g->original_cookie); free(g->site); free(g->host); free(g->url);
     free(g->key); free(g->policy); free(g->wordpress_policy); free(g->epoch); free(g->scope); free(g);
 }
 static const struct vmod_priv_methods guest_methods = {
@@ -41,6 +45,13 @@ VCL_VOID vmod_guest_ingress(VRT_CTX) {
     if (!g) { VRT_fail(ctx,"Guest ingress state unavailable"); return; }
     g->captured = 1;
     g->eligible = !http_CountHdr(ctx->http_req,H_Cookie) && !http_CountHdr(ctx->http_req,H_Authorization);
+    if (!http_CountHdr(ctx->http_req,H_Authorization) && http_CountHdr(ctx->http_req,H_Cookie) == 1) {
+        const char *cookie;
+        if (http_GetHdr(ctx->http_req,H_Cookie,&cookie)) {
+            g->original_cookie = strdup(cookie);
+            if (!g->original_cookie) { free(g); VRT_fail(ctx,"Guest original input unavailable"); return; }
+        }
+    }
     p->priv = g; p->methods = &guest_methods;
     {
         const hdr_t projection = HDR("X-UltraCache-Warm-Projection");
@@ -62,6 +73,26 @@ VCL_STRING vmod_guest_key(VRT_CTX) {
     if (ctx->req->esi_level) return NULL;
     g = guest_context(ctx);
     return g && !g->disabled && g->key ? WS_Copy(ctx->ws,g->key,-1) : NULL;
+}
+VCL_BOOL vmod_guest_shared_pending(VRT_CTX) {
+    struct guest_request *g = guest_context(ctx);
+    return !ctx->req->esi_level && g && g->shared_candidate && !g->disabled;
+}
+VCL_BOOL vmod_guest_fallback(VRT_CTX) {
+    struct guest_request *g = guest_context(ctx);
+    if (!vmod_guest_shared_pending(ctx) || ctx->req->restarts >= ctx->req->max_restarts) return 0;
+    g->disabled = 1; g->shared_proved = 0;
+    g->fallback_restart = ctx->req->restarts+1;
+    return 1;
+}
+VCL_BOOL vmod_guest_fallback_ready(VRT_CTX) {
+    struct guest_request *g = guest_context(ctx);
+    const char *host;
+    return !ctx->req->esi_level && g && g->disabled && g->shared_candidate &&
+        g->fallback_restart && g->fallback_restart == ctx->req->restarts && g->url && g->host &&
+        !strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") &&
+        !strcmp(ctx->http_req->hd[HTTP_HDR_URL].b,g->url) &&
+        http_GetHdr(ctx->http_req,H_Host,&host) && !strcmp(host,g->host);
 }
 
 VCL_BOOL vmod_guest_warm_parent_result(VRT_CTX) {
@@ -567,7 +598,10 @@ VCL_BOOL vmod_guest_result(VRT_CTX) {
     struct guest_request *g;
     if (ctx->req->esi_level) return 0;
     g = guest_context(ctx);
-    return g && !g->disabled && g->key && guest_object_matches(ctx,g->key,NULL);
+    const char *manifest;
+    return g && !g->disabled && g->key && guest_object_matches(ctx,g->key,NULL) &&
+        (!g->shared_candidate || (g->shared_proved &&
+            http_GetHdr(ctx->http_resp,h_guest_object_manifest,&manifest) && !strcmp(manifest,g->shared_manifest)));
 }
 
 static int delivery_conflict(VRT_CTX, const struct continuation *d) {
@@ -700,6 +734,10 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
     const struct continuation *d = priv->priv;
     const char *host = NULL, *url, *method;
     int phase, valid;
+    if (!d) {
+        const struct guest_request *g = guest_context(ctx);
+        return g && site && g->site && !strcmp(site,g->site) && vmod_guest_fallback_ready(ctx);
+    }
     if (!d || ctx->req->esi_level != 0 || !site || !*site || !ctx->req->restarts) return 0;
     if (!http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
     url = ctx->http_req->hd[HTTP_HDR_URL].b;

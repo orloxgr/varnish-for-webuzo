@@ -93,6 +93,7 @@ sub scp_selection_capabilities {
         set resp.http.X-UltraCache-VCL-Public-Selection-Canonical-Host = req.http.host;
         set resp.http.X-UltraCache-VCL-Publication-Reselect-Version = "1";
         set resp.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
+        set resp.http.X-UltraCache-VCL-Guest-Inputs-Version = "1";
         unset resp.http.X-UltraCache-VCL-Guest-Publication-Policy;
         set resp.http.X-UltraCache-VCL-Guest-Publication-Policy = cookie_handoff.selection_guest_policy(req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
         if (resp.http.X-UltraCache-VCL-Guest-Publication-Policy !~ "^[0-9a-f]{64}$") {
@@ -136,7 +137,7 @@ sub scp_selection_recv {
         req.http.X-SCP-Query ~ "(^|&)ultracache_esi_probe(_fragment|_private|_private_fragment)?=[^&]+(&|$)") {
         return;
     }
-    if (req.restarts == 0 &&
+    if ((req.restarts == 0 || cookie_handoff.guest_fallback_ready()) &&
         (req.http.Accept ~ "(?i)(^|,)[[:blank:]]*(text/html|application/xhtml[+]xml)([[:blank:];,]|$)" ||
          ((!req.http.Accept || req.http.Accept ~ "(^|,)[[:blank:]]*[*]/[*]([[:blank:];,]|$)") &&
           (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$")))) {
@@ -165,6 +166,7 @@ sub scp_selection_origin {
     # authenticated capabilities request, not these request fields.
     set bereq.http.X-UltraCache-VCL-Public-Selection-Version = "1";
     set bereq.http.X-UltraCache-VCL-Guest-Publication-Version = "1";
+    set bereq.http.X-UltraCache-VCL-Guest-Inputs-Version = "1";
     set bereq.http.X-UltraCache-VCL-Delivery-Outcome-Version = "1";
     set bereq.http.X-UltraCache-VCL-Cookie-Delivery-Version = "1";
     set bereq.http.X-UltraCache-VCL-Public-Selection-Epoch = cookie_handoff.selection_epoch();

@@ -1,20 +1,52 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Included by delivery_continuation.c. Registry contains declarations only:
  * site/host/application scope, resolver names and WP identity, never values.
+ * Optional input recipes belong to their exact complete guest publication.
  */
 #include "vrnd.h"
+
+struct guest_input_publication {
+    struct guest_input_publication *next;
+    char key[65], manifest[65];
+    double deadline;
+    struct delivery_reuse_recipe *recipe;
+    unsigned char *empty_projection;
+    size_t empty_length;
+};
+static size_t guest_input_bucket(const char *key, const char *manifest) {
+    size_t i, bucket = 0;
+    for (i = 0; i < 64; ++i) bucket = (bucket*33+(unsigned char)key[i]+(unsigned char)manifest[i]) % BUCKETS;
+    return bucket;
+}
+static void guest_input_publication_free(struct guest_input_publication *p) {
+    delivery_reuse_recipe_free(p->recipe);
+    delivery_reuse_frame_free(p->empty_projection,p->empty_length); free(p);
+}
+static void guest_input_publications_prune(struct guest_input_publication **head, double now) {
+    while (*head) {
+        struct guest_input_publication *p = *head;
+        if (p->deadline <= now) { *head = p->next; guest_input_publication_free(p); }
+        else head = &p->next;
+    }
+}
 
 struct public_declaration {
     struct public_declaration *next;
     char *site, *host, *scope, *wordpress_policy, *names, *guest_policy;
     unsigned public_source;
     unsigned public_projection;
+    struct guest_input_publication *guest_inputs[BUCKETS]; /* publication metadata, no visitor state */
 };
 static struct public_declaration *public_declarations;
 static unsigned public_selection_vcls;
 static char public_registry_epoch[65];
 
 static void public_declaration_free(struct public_declaration *p) {
+    size_t i;
+    for (i = 0; i < BUCKETS; ++i) while (p->guest_inputs[i]) {
+        struct guest_input_publication *next = p->guest_inputs[i]->next;
+        guest_input_publication_free(p->guest_inputs[i]); p->guest_inputs[i] = next;
+    }
     free(p->guest_policy); free(p->site); free(p->host); free(p->scope); free(p->wordpress_policy); free(p->names); free(p);
 }
 static int public_selection_vcl_event(enum vcl_event_e event) {
@@ -153,6 +185,14 @@ VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     while (*p && (strcmp((*p)->site,site) || strcmp((*p)->host,host) || strcmp((*p)->scope,scope))) p = &(*p)->next;
     if (*p) {
         struct public_declaration *old = *p;
+        /* Authenticated readvertisement of the same policy is idempotent.
+         * An actual policy/owner change drops the associated input evidence. */
+        if (next && !strcmp(old->wordpress_policy,next->wordpress_policy) &&
+            !strcmp(old->names,next->names) && !strcmp(old->guest_policy,next->guest_policy) &&
+            old->public_source == next->public_source && old->public_projection == next->public_projection) {
+            memcpy(next->guest_inputs,old->guest_inputs,sizeof(old->guest_inputs));
+            memset(old->guest_inputs,0,sizeof(old->guest_inputs));
+        }
         *p = old->next; public_declaration_free(old);
     }
     if (next) { next->next = public_declarations; public_declarations = next; }
@@ -236,12 +276,14 @@ VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL
     return 1;
 }
 
-VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy) {
+VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRING rules) {
     struct guest_request *g = guest_context(ctx);
     struct public_declaration *p;
     const char *host = NULL, *identity;
     char digest[65];
-    if (!g || !g->eligible || g->disabled || g->key || ctx->req->esi_level ||
+    int shared = g && !g->eligible && g->original_cookie &&
+        delivery_selection_all_shared(g->original_cookie,rules);
+    if (!g || (!g->eligible && !shared) || g->disabled || g->key || ctx->req->esi_level ||
         !site || !public_policy(policy) || !http_GetHdr(ctx->http_req,H_Host,&host)) return;
     pthread_mutex_lock(&lock);
     p = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
@@ -251,10 +293,72 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy) {
     }
     pthread_mutex_unlock(&lock);
     if (!g->policy) return;
-    if (!g->wordpress_policy || !g->scope || !g->epoch) { VRT_fail(ctx,"Guest policy snapshot unavailable"); return; }
+    g->site = strdup(site); g->host = strdup(host); g->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b);
+    g->shared_candidate = shared;
+    if (!g->wordpress_policy || !g->scope || !g->epoch || !g->site || !g->host || !g->url) {
+        VRT_fail(ctx,"Guest policy snapshot unavailable"); return;
+    }
     identity = WS_Printf(ctx->ws,"guest-v1|%s|%s|%s|%s|%s|%s|%s",site,host,policy,g->wordpress_policy,g->policy,g->epoch,g->scope);
     if (!identity || !delivery_selection_digest((const unsigned char *)identity,strlen(identity),digest) ||
         !(g->key = strdup(digest))) VRT_fail(ctx,"Guest namespace unavailable");
+}
+
+/* Attach evidence to the authenticated complete publication owner. A cache
+ * MISS can never create this from a Shared visitor's request or strip cookies. */
+static void guest_inputs_remember(VRT_CTX, struct continuation *d, struct delivery_public_selection *s) {
+    struct public_declaration *owner;
+    struct guest_input_publication *p, **slot;
+    size_t bucket;
+    char manifest[65];
+    if (!d->guest_complete || !s->guest_inputs || d->public_deadline <= ctx->now ||
+        !delivery_selection_digest((const unsigned char *)d->manifest,strlen(d->manifest),manifest)) return;
+    p = calloc(1,sizeof(*p));
+    if (!p) return; /* Optional evidence failure retains legacy no-Cookie service. */
+    if (delivery_reuse_input_projection(s->guest_inputs->inputs,NULL,0,
+        &p->empty_projection,&p->empty_length) != DELIVERY_REUSE_INPUT_OK) { free(p); return; }
+    memcpy(p->key,d->guest_key,65); memcpy(p->manifest,manifest,65); p->deadline = d->public_deadline;
+    bucket = guest_input_bucket(p->key,p->manifest);
+    pthread_mutex_lock(&lock);
+    owner = public_declaration(d->site,d->host,d->selection_scope);
+    if (!owner || strcmp(owner->wordpress_policy,d->wordpress_policy) ||
+        strcmp(owner->guest_policy,d->guest_policy) || strcmp(public_registry_epoch,d->guest_epoch)) {
+        pthread_mutex_unlock(&lock); guest_input_publication_free(p); return;
+    }
+    guest_input_publications_prune(&owner->guest_inputs[bucket],ctx->now);
+    slot = &owner->guest_inputs[bucket];
+    while (*slot && (strcmp((*slot)->key,p->key) || strcmp((*slot)->manifest,p->manifest))) slot = &(*slot)->next;
+    if (*slot) { struct guest_input_publication *old = *slot; *slot = old->next; guest_input_publication_free(old); }
+    p->recipe = s->guest_inputs; s->guest_inputs = NULL;
+    p->next = owner->guest_inputs[bucket]; owner->guest_inputs[bucket] = p;
+    pthread_mutex_unlock(&lock);
+}
+VCL_BOOL vmod_guest_shared_hit(VRT_CTX, VCL_STRING key, VCL_STRING manifest, VCL_BOOL complete) {
+    struct guest_request *g = guest_context(ctx);
+    struct public_declaration *owner;
+    struct guest_input_publication *p;
+    unsigned char *actual = NULL;
+    size_t actual_length = 0;
+    size_t bucket;
+    int valid = 0;
+    if (!vmod_guest_shared_pending(ctx) || !complete || !key || !manifest ||
+        !public_policy(manifest) || strcmp(key,g->key)) return 0;
+    bucket = guest_input_bucket(key,manifest);
+    pthread_mutex_lock(&lock);
+    owner = public_declaration(g->site,g->host,g->scope);
+    if (!owner || strcmp(owner->wordpress_policy,g->wordpress_policy) ||
+        strcmp(owner->guest_policy,g->policy) || strcmp(public_registry_epoch,g->epoch)) goto done;
+    guest_input_publications_prune(&owner->guest_inputs[bucket],ctx->now);
+    for (p = owner->guest_inputs[bucket]; p; p = p->next)
+        if (!strcmp(p->key,key) && !strcmp(p->manifest,manifest)) break;
+    if (!p) goto done;
+    valid = delivery_reuse_input_projection(p->recipe->inputs,(const unsigned char *)g->original_cookie,
+        strlen(g->original_cookie),&actual,&actual_length) == DELIVERY_REUSE_INPUT_OK &&
+        actual_length == p->empty_length && !memcmp(actual,p->empty_projection,actual_length);
+    if (valid) { g->shared_proved = 1; memcpy(g->shared_manifest,manifest,65); }
+done:
+    pthread_mutex_unlock(&lock);
+    delivery_reuse_frame_free(actual,actual_length);
+    return valid;
 }
 VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {
     char *canonical = names && *names ? public_names(names) : NULL;
@@ -277,12 +381,14 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     struct guest_request *g = guest_context(ctx);
     unsigned i;
     if ((reselect ? (!d || d->phase != D_RESELECT_READY || !d->reselect_attempted || d->failed ||
-            d->selection_entry || ctx->req->restarts != d->restart+2) : (d || ctx->req->restarts)) ||
+            d->selection_entry || ctx->req->restarts != d->restart+2) :
+            (d || (ctx->req->restarts && !vmod_guest_fallback_ready(ctx)))) ||
         ctx->req->esi_level || !method || strcmp(method,"GET") ||
         !site || !*site || !public_policy(policy) ||
         !http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
     if (reselect && (!d->site || strcmp(d->site,site) || !d->host || strcmp(d->host,host) ||
         !d->url || strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b))) return -1;
+    if (!reselect && g && g->shared_candidate && !g->disabled) return 0; /* lookup only, never guest origin */
     pthread_mutex_lock(&lock); declaration = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
     found = declaration != NULL;
     if (found) {
@@ -363,6 +469,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     pthread_mutex_unlock(&lock);
     snprintf(d->request_id,sizeof(d->request_id),"%" PRIu64,entry->key);
     d->restart = ctx->req->restarts; d->phase = D_PREPARE;
+    if (g && g->disabled) g->fallback_restart = 0;
     http_ForceHeader(ctx->http_req,h_key,d->request_id);
     http_Unset(ctx->http_req,H_Accept_Encoding);
     /* This is the actual application route, which may be a ranged download.
@@ -428,6 +535,7 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
         d->source_stage = SOURCE_COMPLETE;
     }
     d->cookie_delivery = s->cookie_delivery;
+    guest_inputs_remember(ctx,d,s);
     d->snapshot_ready = d->recovery_ready = 1;
     return 1;
 }

@@ -94,6 +94,12 @@ if (req.http.Accept-Encoding) {
 # An explicitly opted-in composition request needs an origin-approved parent.
 # This is the ESI application contract, not another cookie classification list.
 sub scp_ultracache_hit {
+if (cookie_handoff.guest_shared_pending() &&
+    !cookie_handoff.guest_shared_hit(obj.http.X-SCP-Guest-Key,obj.http.X-SCP-Guest-Manifest,
+        obj.http.X-SCP-Guest-Complete == "1" && obj.ttl > 0s)) {
+    if (cookie_handoff.guest_fallback()) { return (restart); }
+    return (synth(503, "Guest input proof unavailable"));
+}
 if (cookie_handoff.guest_key() &&
     (obj.http.X-SCP-Guest-Key != cookie_handoff.guest_key() || obj.http.X-SCP-Guest-Complete != "1")) {
     return (synth(503, "Complete guest object unavailable"));

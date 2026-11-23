@@ -1,6 +1,7 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    unset req.http.X-UltraCache-VCL-Guest-Inputs-Version;
     unset req.http.X-UltraCache-Delivery-Public-Source-Version;
     unset req.http.X-UltraCache-Delivery-Public-Source-Role;
     unset req.http.X-UltraCache-Delivery-Public-Source-Outcome;
@@ -244,6 +245,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Version;
     unset bereq.http.X-UltraCache-Delivery-Guest-Publication-Policy;
     unset bereq.http.X-UltraCache-VCL-Guest-Publication-Version;
+    unset bereq.http.X-UltraCache-VCL-Guest-Inputs-Version;
     unset bereq.http.X-UltraCache-VCL-Guest-Publication-Policy;
     unset bereq.http.X-UltraCache-Guest-Publication;
     unset bereq.http.X-SCP-Guest-Key;
@@ -440,6 +442,11 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    if (cookie_handoff.guest_shared_pending() && !cookie_handoff.guest_result()) {
+        if (cookie_handoff.guest_fallback()) { return (restart); }
+        return (synth(503, "Guest delivery proof unavailable"));
+    }
+    unset resp.http.X-UltraCache-VCL-Guest-Inputs-Version;
     unset resp.http.X-SCP-Warm-Projection-Supported;
     unset resp.http.X-UltraCache-Warm-Projection;
     unset resp.http.X-UltraCache-Warm-Projection-Authorization;

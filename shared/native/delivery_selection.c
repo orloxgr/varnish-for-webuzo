@@ -5,6 +5,10 @@
 #include <errno.h>
 #include <ctype.h>
 #include "selection_digest.c"
+#include "delivery_reuse_inputs.h"
+
+static int reuse_skip_value(struct reader *);
+static struct delivery_reuse_recipe *guest_inputs_read(const char *, size_t, uint64_t);
 
 /* Application routing metadata, not a cookie decision. Compare the literal
  * frontend path; never decode a query or confuse /shop/ with /shopper/. */
@@ -36,7 +40,8 @@ void delivery_selection_free(struct delivery_public_selection *s) {
         while (u) { struct delivery_cookie_update *n = u->next; free(u->name); free(u->value); free(u); u = n; }
         while (h) { struct delivery_header *n = h->next; free(h->line); free(h); h = n; }
         free(s->manifest); free(s->target); delivery_public_parent_free(s->parent);
-        delivery_free_fragments(s->fragments); delivery_public_projection_free(s->resolved); free(s);
+        delivery_free_fragments(s->fragments); delivery_public_projection_free(s->resolved);
+        delivery_reuse_recipe_free(s->guest_inputs); free(s);
     }
 }
 
@@ -499,9 +504,10 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
     struct delivery_public_selection *s = calloc(1,sizeof(*s));
     struct text text;
     unsigned seen = 0;
-    uint64_t count;
+    uint64_t count = 0;
     char digest[65], *source_manifest = NULL;
-    size_t i;
+    size_t i, inputs_start = 0, inputs_length = 0;
+    unsigned inputs_duplicate = 0;
     if (!s || !take(r,'{')) goto invalid;
     for (;;) {
         struct text key;
@@ -519,8 +525,10 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
         else if (equal(key,"publicParent")) bit = 512;
         else if (equal(key,"headers")) bit = 1024;
         else if (equal(key,"cookieDelivery")) bit = 2048;
+        else if (equal(key,"guestInputs")) bit = 4096;
         else goto invalid;
-        if (seen&bit) goto invalid;
+        if ((seen&bit) && bit != 4096) goto invalid;
+        if ((seen&bit) && bit == 4096) inputs_duplicate = 1;
         seen |= bit;
         if (bit <= 16 || bit == 128 || bit == 2048) {
             if (!string(r,&text)) goto invalid;
@@ -536,14 +544,29 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
         else if (bit == 64) { if (!guest_token(r,&source_manifest)) goto invalid; }
         else if (bit == 256) { if (!number(r,&count)) goto invalid; }
         else if (bit == 512) { if (!public_parent(r,&s->parent)) goto invalid; }
+        else if (bit == 4096) {
+            /* Boundary scanning must not mutate escaped recipe strings before
+             * the existing canonical recipe parser receives their raw JSON. */
+            struct reader scan = *r;
+            scan.buffer = malloc(r->length+1);
+            if (!scan.buffer) goto invalid;
+            memcpy(scan.buffer,r->buffer,r->length+1);
+            inputs_start = r->offset;
+            int valid = reuse_skip_value(&scan);
+            inputs_length = scan.offset-inputs_start;
+            r->offset = scan.offset; free(scan.buffer);
+            if (!valid) goto invalid;
+        }
         else if (!selection_headers(r,s)) goto invalid;
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if (seen != 4095 || !guest_headers(s) || !delivery_selection_digest(s->parent->body,s->parent->length,digest) ||
+    if ((seen & ~4096U) != 4095 || !guest_headers(s) || !delivery_selection_digest(s->parent->body,s->parent->length,digest) ||
         strcmp(digest,s->parent->generation)) goto invalid;
     for (i = 0; i+5 <= s->parent->length; ++i)
         if (selection_case((const char *)s->parent->body+i,5,"<esi:")) goto invalid;
+    if (inputs_length && !inputs_duplicate)
+        s->guest_inputs = guest_inputs_read(r->buffer+inputs_start,inputs_length,count);
     s->target = copy((struct text){s->manifest,strlen(s->manifest)}); if (!s->target) goto invalid;
     s->guest = 1; *output = s; free(source_manifest); return 1;
 invalid:
@@ -589,9 +612,9 @@ done:
     return ok;
 }
 
-int delivery_cookie_action(const char *rules, const char *name, size_t length) {
+static int selection_cookie_action(const char *rules, const char *name, size_t length, int fallback) {
     const char *p = rules;
-    if (!p) return 0;
+    if (!p) return fallback;
     while (*p) {
         const char *end = strchr(p,'\n'), *action = strchr(p,'\t'), *kind = action ? strchr(action+1,'\t') : NULL;
         size_t n;
@@ -610,7 +633,25 @@ int delivery_cookie_action(const char *rules, const char *name, size_t length) {
         }
         p = *end ? end+1 : end;
     }
-    return 0;
+    return fallback;
+}
+int delivery_cookie_action(const char *rules, const char *name, size_t length) {
+    return selection_cookie_action(rules,name,length,0);
+}
+int delivery_selection_all_shared(const char *original, const char *rules) {
+    const char *p = original;
+    unsigned pairs = 0;
+    if (!p || !*p) return 0;
+    while (*p) {
+        const char *end = strchr(p,';'), *equals;
+        if (!end) end = p+strlen(p);
+        while (p < end && (*p == ' ' || *p == '\t')) ++p;
+        equals = memchr(p,'=',(size_t)(end-p));
+        if (!equals || !delivery_cookie_name(p,(size_t)(equals-p)) ||
+            selection_cookie_action(rules,p,(size_t)(equals-p),-1) != 0) return 0;
+        ++pairs; p = *end ? end+1 : end;
+    }
+    return pairs != 0;
 }
 int delivery_selection_candidate(const struct delivery_public_selection *s,
     const char *original, const char *rules, char **candidate) {
