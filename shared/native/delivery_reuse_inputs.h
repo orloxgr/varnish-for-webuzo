@@ -57,4 +57,11 @@ int delivery_reuse_input_binding(const unsigned char *site_secret, size_t secret
 int delivery_reuse_identity_binding(const unsigned char *site_secret, size_t secret_length,
     const struct delivery_reuse_context *context,
     const unsigned char *identity_projection, size_t projection_length, char mac[65]);
+/* Native cache lookup retains only this purpose-separated key, not the site
+ * credential. These produce the identical frozen MACs without deriving twice. */
+int delivery_reuse_key_derive(const unsigned char *site_secret, size_t secret_length, unsigned char key[32]);
+int delivery_reuse_input_mac(const unsigned char key[32], const struct delivery_reuse_context *context,
+    const unsigned char *projection, size_t projection_length, char mac[65]);
+int delivery_reuse_identity_mac(const unsigned char key[32], const struct delivery_reuse_context *context,
+    const unsigned char *projection, size_t projection_length, char mac[65]);
 #endif

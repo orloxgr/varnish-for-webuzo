@@ -5,6 +5,7 @@
  */
 #include "vsb.h"
 #include "delivery_mutation_wire.h"
+#include "delivery_reuse_inputs.h"
 
 struct reuse_scope;
 struct mutation_execution {
@@ -37,6 +38,7 @@ struct reuse_scope {
     char *site, *host, *scope;
     char incarnation[65], revision[65];
     char native_policy[65], wordpress_policy[65], policy[65];
+    unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
     unsigned enabled, ready;
     unsigned lost_execution_context;
     struct mutation_execution *executions;
@@ -44,6 +46,7 @@ struct reuse_scope {
     size_t tag_capacity, tag_count;
 };
 static struct reuse_scope *reuse_scopes;
+static const char *reuse_single(const struct http *, hdr_t);
 
 static int reuse_random_id(char output[65]) {
     unsigned char bytes[32];
@@ -69,6 +72,10 @@ static void reuse_registry_free(void) {
         for (i = 0; i < scope->tag_capacity; ++i) {
             struct reuse_tag *tag = scope->tags[i];
             while (tag) { struct reuse_tag *next = tag->next; reuse_tag_free(tag); tag = next; }
+        }
+        {
+            volatile unsigned char *wipe = scope->reuse_key;
+            for (i = 0; i < sizeof(scope->reuse_key); ++i) wipe[i] = 0;
         }
         free(scope->tags); free(scope->site); free(scope->host); free(scope->scope); free(scope);
     }
@@ -165,6 +172,9 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     VCL_STRING native_policy, VCL_STRING wordpress_policy, VCL_STRING policy, VCL_BOOL enabled) {
     struct reuse_scope *value;
     struct public_declaration *declaration;
+    unsigned char key[32] = {0};
+    const char *credential;
+    size_t i;
     int valid = 0;
     (void)ctx;
 #ifndef UC_EXPERIMENTAL_PRIVATE_REUSE
@@ -173,10 +183,16 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
 #endif
     if (!site || !*site || !host || !*host || !delivery_selection_scope_valid(scope) ||
         (enabled && (!public_policy(native_policy) || !public_policy(wordpress_policy) || !public_policy(policy)))) return 0;
+    credential = reuse_single(ctx->http_req,HDR("X-UltraCache-Token"));
+    if (enabled && (!credential || !delivery_reuse_key_derive((const unsigned char *)credential,strlen(credential),key))) return 0;
     pthread_mutex_lock(&lock);
     value = reuse_scope_find(site,host,scope);
     if (!enabled) {
-        if (value) { value->enabled = 0; reuse_scope_unbind(value); }
+        if (value) {
+            volatile unsigned char *wipe = value->reuse_key;
+            value->enabled = 0; reuse_scope_unbind(value);
+            for (i = 0; i < sizeof(value->reuse_key); ++i) wipe[i] = 0;
+        }
         valid = 1; goto done;
     }
     declaration = public_declaration(site,host,scope);
@@ -192,16 +208,125 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
         value->next = reuse_scopes; reuse_scopes = value;
     }
     if (!value->enabled || strcmp(value->native_policy,native_policy) ||
-        strcmp(value->wordpress_policy,wordpress_policy) || strcmp(value->policy,policy)) reuse_scope_unbind(value);
+        strcmp(value->wordpress_policy,wordpress_policy) || strcmp(value->policy,policy) ||
+        memcmp(value->reuse_key,key,sizeof(key))) reuse_scope_unbind(value);
     memcpy(value->native_policy,native_policy,65); memcpy(value->wordpress_policy,wordpress_policy,65);
     memcpy(value->policy,policy,65); value->enabled = 1; valid = 1;
+    memcpy(value->reuse_key,key,sizeof(key));
 done:
-    pthread_mutex_unlock(&lock); return valid;
+    pthread_mutex_unlock(&lock);
+    {
+        volatile unsigned char *wipe = key;
+        for (i = 0; i < sizeof(key); ++i) wipe[i] = 0;
+    }
+    return valid;
 }
 
 static const char *reuse_single(const struct http *http, hdr_t header) {
     const char *value;
     return http_CountHdr(http,header) == 1 && http_GetHdr(http,header,&value) ? value : NULL;
+}
+#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+static struct reuse_scope *delivery_reuse_current_scope(const struct continuation *d) {
+    struct reuse_scope *scope;
+    const struct public_declaration *declaration;
+    if (!d || !d->reuse_negotiated || !d->reuse_scope) return NULL;
+    scope = reuse_scope_find(d->site,d->host,d->reuse_scope);
+    declaration = public_declaration_for_url(d->site,d->host,d->url);
+    if (!scope || !scope->enabled || !declaration || strcmp(declaration->scope,scope->scope) ||
+        strcmp(declaration->wordpress_policy,scope->wordpress_policy) ||
+        strcmp(public_registry_epoch,d->reuse_epoch) || strcmp(scope->incarnation,d->reuse_incarnation) ||
+        strcmp(scope->native_policy,d->reuse_native_policy) || strcmp(scope->wordpress_policy,d->reuse_wp_policy) ||
+        strcmp(scope->policy,d->reuse_policy)) return NULL;
+    return scope;
+}
+#endif
+static void delivery_reuse_candidate_capture(VRT_CTX, struct continuation *d, const char *wire, size_t length) {
+#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+    struct delivery_reuse_candidate *candidate = NULL;
+    const struct delivery_reuse_descriptor *descriptor;
+    const struct delivery_fragment *fragment;
+    struct delivery_reuse_context context;
+    struct reuse_scope *scope;
+    unsigned char *frame = NULL;
+    size_t frame_length = 0, expected = 0, actual = 0;
+    char evidence[65];
+    int valid = 0;
+    (void)ctx;
+    if (!delivery_reuse_candidate_parse(wire,length,d->occurrences,&candidate) ||
+        strcmp(candidate->request_id,d->reuse_origin_request) || strcmp(candidate->challenge,d->reuse_origin_challenge) ||
+        (*d->reuse_recipe && strcmp(candidate->recipe->digest,d->reuse_recipe))) goto done;
+    for (descriptor = candidate->recipe->fragments; descriptor; descriptor = descriptor->next) {
+        fragment = delivery_fragment_named(d,descriptor->url);
+        if (!fragment || fragment->occurrences != descriptor->occurrences || !fragment->cache_key ||
+            !fragment->cache_ttl || !fragment->cache_tags) goto done;
+        ++expected;
+    }
+    for (fragment = d->fragments; fragment; fragment = fragment->next) ++actual;
+    if (expected != actual || delivery_reuse_input_projection(candidate->recipe->inputs,
+        (const unsigned char *)(d->cookie ? d->cookie : ""),d->cookie ? strlen(d->cookie) : 0,
+        &frame,&frame_length) != DELIVERY_REUSE_INPUT_OK) goto done;
+    pthread_mutex_lock(&lock);
+    scope = delivery_reuse_current_scope(d);
+    if (scope) {
+        context = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
+            scope->native_policy,scope->wordpress_policy,scope->policy,NULL,NULL,NULL};
+        valid = delivery_reuse_identity_mac(scope->reuse_key,&context,frame,frame_length,evidence) &&
+            !strcmp(evidence,candidate->input_evidence);
+        if (valid) {
+            delivery_reuse_candidate_free(d->reuse_candidate); d->reuse_candidate = candidate; candidate = NULL;
+            memcpy(d->reuse_recipe,d->reuse_candidate->recipe->digest,65);
+        }
+    }
+    pthread_mutex_unlock(&lock);
+done:
+    delivery_reuse_frame_free(frame,frame_length); delivery_reuse_candidate_free(candidate);
+#else
+    (void)ctx; (void)d; (void)wire; (void)length;
+#endif
+}
+VCL_STRING vmod_delivery_reuse_finalize_context(VRT_CTX, struct vmod_priv *priv) {
+#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+    struct continuation *d = priv->priv;
+    struct delivery_reuse_finalize_context context;
+    struct reuse_scope *scope;
+    unsigned char *frame = NULL, *effective = NULL;
+    size_t length = 0, effective_length = 0;
+    char binding[65], evidence[65], *header = NULL;
+    const char *out = NULL;
+    if (ctx->req->esi_level || !d || d->phase != D_READY || d->failed || !d->reuse_candidate ||
+        !delivery_reuse_capture_parent(ctx,d) ||
+        delivery_reuse_input_projection(d->reuse_candidate->recipe->inputs,
+            (const unsigned char *)(d->cookie ? d->cookie : ""),d->cookie ? strlen(d->cookie) : 0,
+            &frame,&length) != DELIVERY_REUSE_INPUT_OK) goto done;
+    /* Original evidence does not authorize another projection after issuance.
+     * Unrelated Shared updates can differ while consumed inputs stay identical. */
+    if (d->selection_entry && (delivery_reuse_input_projection(d->reuse_candidate->recipe->inputs,
+        (const unsigned char *)(d->candidate ? d->candidate : ""),d->candidate ? strlen(d->candidate) : 0,
+        &effective,&effective_length) != DELIVERY_REUSE_INPUT_OK || effective_length != length ||
+        memcmp(effective,frame,length))) goto done;
+    pthread_mutex_lock(&lock);
+    scope = delivery_reuse_current_scope(d);
+    if (scope) {
+        context.page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
+            scope->native_policy,scope->wordpress_policy,scope->policy,d->reuse_publication,d->reuse_representation,d->reuse_recipe};
+        context.incarnation = scope->incarnation; context.scope_revision = scope->revision;
+        context.request_id = d->reuse_origin_request; context.challenge = d->reuse_origin_challenge;
+        context.delivery_request_id = d->request_id; context.binding = binding;
+        context.input_evidence = d->reuse_candidate->input_evidence;
+        if (delivery_reuse_identity_mac(scope->reuse_key,&context.page,frame,length,evidence) &&
+            !strcmp(evidence,context.input_evidence) &&
+            delivery_reuse_input_mac(scope->reuse_key,&context.page,frame,length,binding) &&
+            delivery_reuse_finalize_header(scope->reuse_key,"GET",d->url,&context,&header))
+            out = WS_Copy(ctx->ws,header,-1);
+    }
+    pthread_mutex_unlock(&lock);
+done:
+    delivery_mutation_header_free(header); delivery_reuse_frame_free(frame,length);
+    delivery_reuse_frame_free(effective,effective_length); return out;
+#else
+    (void)ctx; (void)priv; return NULL;
+#endif
 }
 static void reuse_json(struct vsb *json, const char *value) {
     const unsigned char *p = (const unsigned char *)value;

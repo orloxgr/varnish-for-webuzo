@@ -189,8 +189,8 @@ failed:
         reuse_descriptors_free(row); return 0;
     }
 }
-int delivery_reuse_recipe_parse(const char *json, size_t length,
-    uint64_t expected_occurrences, struct delivery_reuse_recipe **output) {
+static int reuse_recipe_read(const char *json, size_t length,
+    const uint64_t *expected_occurrences, struct delivery_reuse_recipe **output) {
     struct reader reader;
     struct delivery_reuse_recipe *recipe;
     unsigned seen = 0;
@@ -220,7 +220,8 @@ int delivery_reuse_recipe_parse(const char *json, size_t length,
         if (!take(&reader,',')) goto finished;
     }
     whitespace(&reader);
-    valid = seen == 7 && reader.offset == reader.length && recipe->occurrences == expected_occurrences;
+    valid = seen == 7 && reader.offset == reader.length &&
+        (!expected_occurrences || recipe->occurrences == *expected_occurrences);
     if (valid) {
         char expected[65];
         valid = delivery_reuse_recipe_digest(recipe,expected) && !strcmp(recipe->digest,expected);
@@ -230,6 +231,10 @@ finished:
     if (valid) *output = recipe;
     else delivery_reuse_recipe_free(recipe);
     return valid;
+}
+int delivery_reuse_recipe_parse(const char *json, size_t length,
+    uint64_t expected_occurrences, struct delivery_reuse_recipe **output) {
+    return reuse_recipe_read(json,length,&expected_occurrences,output);
 }
 
 static int reuse_append(struct reuse_frame *frame, const void *bytes, size_t length) {
@@ -440,38 +445,50 @@ finished:
     free(pairs); delivery_reuse_frame_free(frame.bytes,frame.length); return result;
 }
 
-static int reuse_context_binding(const unsigned char *secret, size_t secret_length,
+int delivery_reuse_key_derive(const unsigned char *secret, size_t secret_length, unsigned char key[32]) {
+    static const unsigned char purpose[] = "ultracache-delivery-reuse-key-v1";
+    char key_hex[65];
+    size_t i;
+    volatile unsigned char *wipe = (unsigned char *)key_hex;
+    if (!secret || !secret_length || !key || !delivery_hmac_sha256(secret,secret_length,purpose,sizeof(purpose)-1,key_hex)) return 0;
+    for (i = 0; i < 32; ++i)
+        key[i] = (unsigned char)(hex_digit((unsigned char)key_hex[2*i])*16+hex_digit((unsigned char)key_hex[2*i+1]));
+    for (i = 0; i < sizeof(key_hex); ++i) wipe[i] = 0;
+    return 1;
+}
+static int reuse_context_mac(const unsigned char key[32],
     const struct delivery_reuse_context *context, const char *domain, size_t field_count, const unsigned char *projection,
     size_t projection_length, char mac[65]) {
     struct reuse_frame message = {NULL,0,0};
-    unsigned char key[32];
-    char key_hex[65];
     const char *fields[10];
     size_t i;
     int valid = 0;
-    static const unsigned char purpose[] = "ultracache-delivery-reuse-key-v1";
     if (mac) mac[0] = 0;
-    if (!secret || !secret_length || !context || !mac || (!projection && projection_length)) return 0;
+    if (!key || !context || !mac || (!projection && projection_length)) return 0;
     fields[0] = context->site_id; fields[1] = context->canonical_host; fields[2] = context->scope;
     fields[3] = context->epoch; fields[4] = context->native_policy; fields[5] = context->wordpress_policy;
     fields[6] = context->reuse_policy; fields[7] = context->publication_digest;
     fields[8] = context->representation; fields[9] = context->recipe_digest;
     for (i = 0; i < field_count; ++i) if (!fields[i] || !*fields[i]) return 0;
-    if (!delivery_hmac_sha256(secret,secret_length,purpose,sizeof(purpose)-1,key_hex)) return 0;
-    for (i = 0; i < sizeof(key); ++i)
-        key[i] = (unsigned char)(hex_digit((unsigned char)key_hex[2*i])*16+hex_digit((unsigned char)key_hex[2*i+1]));
     if (!reuse_lp_string(&message,domain)) goto finished;
     for (i = 0; i < field_count; ++i) if (!reuse_lp_string(&message,fields[i])) goto finished;
     if (!reuse_lp(&message,projection,projection_length)) goto finished;
-    valid = delivery_hmac_sha256(key,sizeof(key),message.bytes,message.length,mac);
+    valid = delivery_hmac_sha256(key,32,message.bytes,message.length,mac);
 finished:
-    {
-        volatile unsigned char *wipe = key;
-        for (i = 0; i < sizeof(key); ++i) wipe[i] = 0;
-        wipe = (unsigned char *)key_hex;
-        for (i = 0; i < sizeof(key_hex); ++i) wipe[i] = 0;
-    }
     delivery_reuse_frame_free(message.bytes,message.length); return valid;
+}
+static int reuse_context_binding(const unsigned char *secret, size_t secret_length,
+    const struct delivery_reuse_context *context, const char *domain, size_t field_count, const unsigned char *projection,
+    size_t projection_length, char mac[65]) {
+    unsigned char key[32];
+    volatile unsigned char *wipe = key;
+    size_t i;
+    int valid;
+    if (mac) mac[0] = 0;
+    if (!delivery_reuse_key_derive(secret,secret_length,key)) return 0;
+    valid = reuse_context_mac(key,context,domain,field_count,projection,projection_length,mac);
+    for (i = 0; i < sizeof(key); ++i) wipe[i] = 0;
+    return valid;
 }
 int delivery_reuse_input_binding(const unsigned char *secret, size_t secret_length,
     const struct delivery_reuse_context *context, const unsigned char *projection,
@@ -484,4 +501,12 @@ int delivery_reuse_identity_binding(const unsigned char *secret, size_t secret_l
     size_t projection_length, char mac[65]) {
     return reuse_context_binding(secret,secret_length,context,"ultracache-private-identity-binding-v1",7,
         projection,projection_length,mac);
+}
+int delivery_reuse_input_mac(const unsigned char key[32], const struct delivery_reuse_context *context,
+    const unsigned char *projection, size_t length, char mac[65]) {
+    return reuse_context_mac(key,context,"ultracache-delivery-reuse-binding-v1",10,projection,length,mac);
+}
+int delivery_reuse_identity_mac(const unsigned char key[32], const struct delivery_reuse_context *context,
+    const unsigned char *projection, size_t length, char mac[65]) {
+    return reuse_context_mac(key,context,"ultracache-private-identity-binding-v1",7,projection,length,mac);
 }

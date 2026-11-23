@@ -74,6 +74,9 @@ class ReuseCookieInputs(unittest.TestCase):
         cls.lib.delivery_reuse_input_binding.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.POINTER(Context),
             ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p]
         cls.lib.delivery_reuse_identity_binding.argtypes=cls.lib.delivery_reuse_input_binding.argtypes
+        cls.lib.delivery_reuse_key_derive.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p]
+        cls.lib.delivery_reuse_input_mac.argtypes=[ctypes.c_void_p,ctypes.POINTER(Context),ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p]
+        cls.lib.delivery_reuse_identity_mac.argtypes=cls.lib.delivery_reuse_input_mac.argtypes
         cls.lib.delivery_reuse_recipe_parse.argtypes=[ctypes.c_char_p,ctypes.c_size_t,ctypes.c_uint64,
             ctypes.POINTER(ctypes.POINTER(Recipe))]
         cls.lib.delivery_reuse_recipe_free.argtypes=[ctypes.POINTER(Recipe)]
@@ -161,6 +164,19 @@ class ReuseCookieInputs(unittest.TestCase):
         self.assertNotEqual(self.identity_binding(context,bytes.fromhex(absent['projection']['frameHex']))[1],baseline)
         self.assertNotEqual(self.identity_binding(context,frame,b'other-secret')[1],baseline)
         self.assertNotEqual(self.binding(context,frame),baseline,'Page-admission and identity domains must differ')
+
+    def test_retained_purpose_key_produces_the_exact_original_php_bindings_without_double_derivation(self):
+        secret=VECTORS['syntheticSecret'].encode();key=ctypes.create_string_buffer(32)
+        self.assertEqual(self.lib.delivery_reuse_key_derive(secret,len(secret),key),1)
+        self.assertEqual(key.raw,hmac.digest(secret,b'ultracache-delivery-reuse-key-v1','sha256'))
+        for row in VECTORS['vectors']:
+            if row['projection'].get('error'):continue
+            frame=bytes.fromhex(row['projection']['frameHex']);context=Context(*(row['context'][k].encode() for k in FIELDS))
+            page=ctypes.create_string_buffer(65);identity=ctypes.create_string_buffer(65)
+            self.assertEqual(self.lib.delivery_reuse_input_mac(key,ctypes.byref(context),frame,len(frame),page),1)
+            self.assertEqual(self.lib.delivery_reuse_identity_mac(key,ctypes.byref(context),frame,len(frame),identity),1)
+            self.assertEqual(page.value.decode(),row['binding'])
+            self.assertEqual(identity.value.decode(),self.identity_binding(row['context'],frame)[1])
 
     def test_all_accepted_context_dimensions_and_secret_change_mac(self):
         row=next(r for r in VECTORS['vectors'] if r['name']=='exact')

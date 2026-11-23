@@ -9,11 +9,13 @@ real MISS/refill whose original application execution has actually drained.
 
 ## Envelope position and complete shape
 
-Retain the existing delivery envelope `schemaVersion:1`, `requestId`,
-`originalUrl`, complete rendered fragments and existing cache/HTML fields. Add
-optional **top-level `reuse`** only on the negotiated authenticated finalization
-response. An ordinary prepare can retain a candidate in its existing owner;
-candidate data cannot install reusable admission or personal provenance.
+The ordinary prepare retains its existing `schemaVersion:1`, `requestId`,
+`originalUrl`, complete rendered fragments and existing cache/HTML fields.
+The separate protocol-only finalization returns a metadata-only envelope with
+exactly `schemaVersion:1`, `requestId`, `originalUrl`, and **top-level `reuse`**
+whose object is shown below. It does not repeat rendered HTML. An ordinary
+prepare can retain a candidate in its existing owner; candidate data cannot
+install reusable admission or personal provenance.
 
 ```json
 {
@@ -296,3 +298,154 @@ body/state. This late finalization API/storage step remains an integration gate.
 Native publication-only recovery and prepared private virtual sources do not
 execute the application and cannot recursively create mutation contexts. That
 exclusion uses actual owned phases/source claims, never an incoming skip header.
+
+## Protocol-only finalization phase/interface
+
+This interface is frozen for parallel producer/consumer implementation; the
+native phase/cache-publication state machine is not yet enabled or advertised.
+It is an internal phase of the **existing delivery owner**, not a new REST route,
+browser request, service or private body store. The actual origin method is GET
+and the URI is the original application URI, preserving the existing delivery
+semantics and early handler path. Existing generated adapter authorization is
+used. The producer must recognize the authenticated phase before normal static
+page delivery, canonical redirect, provider bootstrap, sessions or issuers.
+
+```text
+X-UltraCache-Delivery-Version: 1
+X-UltraCache-Delivery-Phase: reuse-finalize
+X-UltraCache-Delivery-Authorization: <existing per-site protocol credential>
+X-UltraCache-Delivery-Request: <current native delivery id>
+X-UltraCache-Delivery-Original-URL: <actual original URI>
+X-UltraCache-Delivery-Public-Selection-Scope: <exact registered scope>
+X-UltraCache-Delivery-Reuse-Version: 1
+X-UltraCache-Delivery-Reuse-Recipe: <sealed canonical recipe64>
+X-UltraCache-Private-Request-Id: <original signed backend execution64>
+X-UltraCache-Private-Challenge: <original signed backend challenge64>
+```
+
+No new `X-UltraCache-Mutation-Context` is issued for this actual native-owned
+phase. No raw Cookie/frame is sent to or persisted by the finalization owner.
+The original execution IDs identify the retained SQL candidate; the delivery ID
+identifies the still-owned native front request. They are distinct identities.
+The handler proves original PHP/provider drain and settles the actual intent /
+native execution records; response/header completion never substitutes for it.
+It snapshots actual native revisions **before** independent committed-provider
+reads, compares actual persisted fingerprints with original body/claim evidence,
+then publishes exact dependency generations by revision CAS. Unchanged CLEAN
+generation publication is idempotent. A changed fingerprint, pending original
+execution, stale CAS or incomplete no-cookie-work closure declines this attempt.
+CLI/cron/native auth writes outside the signed HTTP owner still require their
+own observation/invalidation integration; hook registration alone is not proof.
+
+On acceptance, respond 200 with:
+
+```text
+Content-Type: application/vnd.ultracache.reuse+json
+Cache-Control: private, no-store
+X-UltraCache-Delivery-Reuse-Outcome: finalized
+X-UltraCache-Delivery-Reuse-Fresh-Remaining: <positive actual remaining seconds>
+```
+
+There must be no Set-Cookie/Set-Cookie2 or unrelated provider/bootstrap output.
+`Fresh-Remaining` is the floor of the actual minimum admission/cookie-work/body /
+identity/dependency deadline minus current time, not a new configured TTL. The
+controlled native metadata-cache phase can cache this private namespace using
+that explicit lifetime, while the origin's no-store prevents an upstream HTTP
+cache from storing protocol JSON under the ordinary public URI. Body absolute
+deadlines and actual HSH expiry remain mandatory checks, never reset by the
+relative header. The response body is exactly:
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "<current native delivery id>",
+  "originalUrl": "<original URI, echoed for this owner only>",
+  "reuse": {"version": 1, "context": {}, "recipe": {}, "admission": {}}
+}
+```
+
+The placeholders use the full strict objects defined above. Request ID/URI bind
+the first response to its owner; later native cache reads validate the reusable
+inner context/publication/representation/recipe/input binding rather than
+requiring another request's serial or replacing the incoming URI. They do not
+rewrite browser URLs or discard tracking functionality.
+
+On an unavailable/pending/changed candidate, respond 204, empty body,
+`Cache-Control: private, no-store` and
+`X-UltraCache-Delivery-Reuse-Outcome: declined`. Unexpected protocol errors also
+create no admission. This is an optional cache-publication attempt: a failure
+must preserve the already-produced original application body/status/Set-Cookie,
+not turn a successful business action into a cache exception. Retained durable
+work is reconciled from actual evidence, never silently expired.
+
+Typed metadata is mapped into the existing native private-object namespace:
+
+```text
+metadataKey = SHA256(
+    LP("ultracache-private-admission-object-v1")
+    LP(siteId) LP(canonicalHost) LP(scope) LP(epoch)
+    LP(nativePolicy) LP(wordpressPolicy) LP(reusePolicy)
+    LP(publicationDigest) LP(representation) LP(recipeDigest) LP(binding)
+)
+metadataURI = "/__ultracache-native/reuse-v1/" + metadataKey
+HSH parts = "ultracache-private-v1", siteId, canonicalHost, metadataURI, metadataKey
+```
+
+Use the existing engine `HSH_AddString` plus null separator convention for those
+five parts, exactly as private fragment objects already do. Only an actual owned
+native metadata phase can populate/read that namespace; external requests or
+spoofed headers do not select it. Require the normal private-object marker and
+an additional typed metadata marker, no Set-Cookie, actual freshness and full
+inner context/authority/deadline validation. Registry discovery retains only
+non-authoritative recipe/input declarations and revoke provenance, never HTML.
+This cache-key definition freezes lookup/write agreement; actual publication
+and full pre-header composed-HIT actors remain implementation gates.
+
+## Original optional candidate and compact finalization proof
+
+The original authenticated prepare/public-selection may add exactly this top-level
+member only when native issued `X-UltraCache-Delivery-Reuse-Candidate-Version: 1`:
+
+```json
+{"reuseCandidate":{"version":1,"requestId":"<original mutation64>",
+"challenge":"<original challenge64>","recipe":"<complete recipe object>",
+"inputEvidence":"<seven-field full recipe-input MAC>"}}
+```
+
+`inputEvidence` covers the original incoming raw Cookie wire, before application
+slashing. It does not sign an inferred future/effective cookie value. Issuance or
+updates that alter consumed inputs need separate producer proof; original evidence
+is never silently substituted. Candidate mismatch discards only the optional
+optimization. It grants no admission or personal provenance.
+
+The native-owned protocol-only request adds
+`X-UltraCache-Delivery-Reuse-Context` containing standard base64 of JSON:
+
+```json
+{"version":1,"requestId":"<original64>","challenge":"<original64>",
+"deliveryRequestId":"<native serial>","context":"<12-field context object>",
+"binding":"<full page-input MAC64>","inputEvidence":"<original evidence64>",
+"proof":"<lowerhex HMAC64>"}
+```
+
+The strings standing for objects above are illustrative placeholders, not wire
+string types. The context has the exact 12 fields in the initial grammar order.
+No raw Cookie/frame/HTML or full recipe is put in this header. `scopeRevision`
+is the pre-settlement observation; final metadata uses the actual settled native
+revision. Epoch/incarnation, ten binding dimensions and recipe stay unchanged.
+
+```text
+proof = lowercase_hex(HMAC-SHA256(reuseKey,
+    LP("ultracache-private-finalize-context-v1") LP("GET") LP(actualOriginalURI)
+    LP(requestId) LP(challenge) LP(deliveryRequestId)
+    LP(siteId) LP(canonicalHost) LP(scope) LP(epoch) LP(incarnation) LP(scopeRevision)
+    LP(nativePolicy) LP(wordpressPolicy) LP(reusePolicy)
+    LP(publicationDigest) LP(representation) LP(recipeDigest)
+    LP(binding) LP(inputEvidence)
+))
+```
+
+Independent Python frame/header vectors are in
+`tests/fixtures/private_reuse_finalize_v1.json`; C generates byte-identical headers.
+The actual URI includes tracking/query bytes unchanged. An authenticated compact
+context alone is still not a CLEAN grant or completed reusable delivery.

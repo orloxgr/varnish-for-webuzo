@@ -12,6 +12,7 @@ struct delivery_fragment {
     char *cache_key; /* optional authenticated application claim, never public */
     char *cache_tags;
     uint64_t cache_ttl;
+    uint64_t occurrences; /* exact authenticated renderer coverage */
 };
 struct delivery_public_parent {
     char generation[65];

@@ -307,3 +307,10 @@ $Restrict vcl_deliver
 
 Copy reserved HIT bytes into the existing owner for selective context/replay,
 preserving native absolute expiry. Production VCL does not call these methods.
+
+$Function STRING delivery_reuse_finalize_context(PRIV_TOP)
+$Restrict vcl_deliver
+
+Experimental signed compact context from the actual owned candidate/selected
+parent and original input evidence. NULL declines only this optimization; it
+does not install admission or grant a full composed HIT.

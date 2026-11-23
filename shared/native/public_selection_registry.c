@@ -294,6 +294,8 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         d->parent = NULL; d->occurrences = 0;
         d->reuse_publication[0] = d->reuse_representation[0] = d->reuse_recipe[0] = 0;
         d->reuse_origin_request[0] = d->reuse_origin_challenge[0] = 0;
+        delivery_reuse_candidate_free(d->reuse_candidate); d->reuse_candidate = NULL;
+        free(d->reuse_scope); d->reuse_scope = NULL; d->reuse_negotiated = 0;
         cold = !has_variant;
     }
     d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;

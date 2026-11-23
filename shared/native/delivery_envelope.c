@@ -275,6 +275,7 @@ static int fragment(struct reader *r, uint64_t remaining,
     if (!f->url || !f->html || ((seen&8) && (!f->cache_key || !f->cache_tags))) {
         delivery_free_fragments(f); return 0;
     }
+    f->occurrences = n;
     f->next = *output; *output = f; *occurrences = n;
     return 1;
 }
@@ -495,3 +496,5 @@ int delivery_cookie_envelope_parse(const char *body, size_t length,
 #include "delivery_selection.c"
 #include "delivery_reuse_inputs.c"
 #include "delivery_mutation_wire.c"
+#include "delivery_reuse_wire.c"
+#include "delivery_reuse_metadata.c"

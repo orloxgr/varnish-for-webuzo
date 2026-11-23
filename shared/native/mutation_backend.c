@@ -67,6 +67,7 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     int valid = 0;
     http_Unset(ctx->http_bereq,h_mutation_context);
     http_Unset(ctx->http_bereq,h_mutation_receipt);
+    http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Reuse-Candidate-Version"));
 #ifndef UC_EXPERIMENTAL_PRIVATE_REUSE
     (void)priv; (void)site; (void)native_policy; (void)credential;
     return 0;
@@ -113,6 +114,12 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
             execution->delivery_key = task->key;
             memcpy(delivery->reuse_origin_request,execution->request_id,65);
             memcpy(delivery->reuse_origin_challenge,execution->challenge,65);
+            free(delivery->reuse_scope); delivery->reuse_scope = strdup(scope->scope);
+            memcpy(delivery->reuse_epoch,public_registry_epoch,65);
+            memcpy(delivery->reuse_incarnation,scope->incarnation,65);
+            memcpy(delivery->reuse_native_policy,scope->native_policy,65);
+            memcpy(delivery->reuse_wp_policy,scope->wordpress_policy,65);
+            memcpy(delivery->reuse_policy,scope->policy,65);
         }
     }
     memcpy(execution->epoch,public_registry_epoch,65); memcpy(execution->incarnation,scope->incarnation,65);
@@ -133,6 +140,14 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     memcpy(execution->header+sizeof(prefix)-1,header,length+1);
     execution->next = scope->executions; scope->executions = execution; task->mutation = execution;
     http_SetHeader(ctx->http_bereq,execution->header);
+    if (execution->delivery_key) {
+        struct handoff *entry = delivery_entry(execution->delivery_key);
+        struct continuation *delivery = entry ? entry->delivery : NULL;
+        if (delivery && delivery->reuse_scope && ctx->http_bereq->nhd < ctx->http_bereq->shd) {
+            http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Reuse-Candidate-Version"),"1");
+            delivery->reuse_negotiated = 1;
+        }
+    }
     execution = NULL; valid = 1;
 done:
     pthread_mutex_unlock(&lock);

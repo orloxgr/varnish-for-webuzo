@@ -6,6 +6,7 @@
 #include "cache/cache_filter.h"
 #include "vrt_obj.h"
 #include "delivery_envelope.h"
+#include "delivery_reuse_wire.h"
 
 /* Separate top-request eligibility storage does not create a continuation. */
 static const char guest_top_token;
@@ -131,6 +132,10 @@ struct continuation {
     struct delivery_public_selection *selection;
     char reuse_origin_request[65], reuse_origin_challenge[65], reuse_recipe[65];
     char reuse_publication[65], reuse_representation[65];
+    char *reuse_scope;
+    char reuse_epoch[65], reuse_incarnation[65], reuse_native_policy[65], reuse_wp_policy[65], reuse_policy[65];
+    unsigned reuse_negotiated;
+    struct delivery_reuse_candidate *reuse_candidate;
     struct fields *public_headers;
     struct fields *document_headers;
 };
@@ -139,6 +144,7 @@ static int public_selection_parse(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
 static void reuse_registry_free(void);
 static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *);
+static void delivery_reuse_candidate_capture(VRT_CTX, struct continuation *, const char *, size_t);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -198,6 +204,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     /* The table lock excludes an aborting backend filter before freeing d. */
     close_owner(&d->association);
     delivery_reuse_release(ctx,d->reuse_plan);
+    delivery_reuse_candidate_free(d->reuse_candidate); free(d->reuse_scope);
     free(d->guest_policy); free(d->guest_epoch); free(d->guest_key); free(d->guest_canonical);
     free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
@@ -244,9 +251,19 @@ static int delivery_restore(VRT_CTX, const struct continuation *d) {
 }
 
 static int delivery_parse(VRT_CTX, struct continuation *d) {
-    if (d->selection_entry) return public_selection_parse(ctx,d);
-    int ok = delivery_cookie_envelope_parse(d->body,d->length,d->request_id,d->url,
-        d->occurrences,(int)d->cookie_delivery,&d->fragments,&d->public_parent,&d->document);
+    char *legacy = NULL, *candidate = NULL;
+    size_t legacy_length = 0, candidate_length = 0;
+    int ok;
+    if (d->reuse_negotiated && delivery_reuse_envelope_split(d->body,d->length,
+        &legacy,&legacy_length,&candidate,&candidate_length)) {
+        free(d->body); d->body = legacy; d->length = legacy_length; d->capacity = legacy_length+1;
+    }
+    ok = d->selection_entry ? public_selection_parse(ctx,d) :
+        delivery_cookie_envelope_parse(d->body,d->length,d->request_id,d->url,
+            d->occurrences,(int)d->cookie_delivery,&d->fragments,&d->public_parent,&d->document);
+    if (ok && candidate && !d->document && !d->guest_complete)
+        delivery_reuse_candidate_capture(ctx,d,candidate,candidate_length);
+    free(candidate);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
     return ok;
 }
