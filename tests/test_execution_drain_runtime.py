@@ -1,5 +1,5 @@
 """Actual native dispatch owner; MOCK metadata worker/drain, no real PHP claim."""
-import copy,json,os,shutil,unittest
+import copy,http.client,json,os,shutil,subprocess,threading,time,unittest
 import test_mutation_backend as backend
 import test_mutation_coverage_runtime as coverage
 import test_reuse_authority as authority
@@ -98,5 +98,60 @@ class NativeExecutionDrain(unittest.TestCase):
                 'X-UltraCache-Public-Selection-Execution-Drain-Version':'2'})
             self.assertEqual(status,400)
             self.assertEqual(len(seen),1);self.assertEqual(self.observe(get)['temporaryHolds'],1)
+
+    def test_ten_millisecond_sender_disconnect_does_not_cancel_started_native_metadata_fetch(self):
+        # Actual native lifecycle/network actor. Application/independent drain
+        # are MOCKED; this does not establish PHP shutdown or SQL termination.
+        holder={};seen=[];failures=[];timed_out=[]
+        entered=threading.Event();sender_closed=threading.Event();original_returned=threading.Event();completed=threading.Event()
+        def origin(path,headers):
+            if headers.get('X-UltraCache-Delivery-Phase')=='execution-drain':
+                try:
+                    entered.set()
+                    self.assertTrue(original_returned.wait(5),'Original mock application did not return')
+                    self.assertTrue(sender_closed.is_set())
+                    self.ended(holder['get'])
+                    self.drain(holder['get'],seen[0])
+                    completed.set()
+                    return 204,'',[('X-UltraCache-Execution-Drain-Version','1'),('X-UltraCache-Execution-Drain-Outcome','settled')]
+                except BaseException as error:
+                    failures.append(error);completed.set();return 500,'worker failure',[]
+            c=coverage.context(self,headers,'POST',path);seen.append(c)
+            value=signed(for_execution(c,target=PATH),coverage.KEY)
+            client=http.client.HTTPConnection(*holder['get'].endpoint,timeout=.01)
+            request=dict(holder['get'].request_headers,**{
+                'X-UltraCache-Contract':'2','X-UltraCache-Operation':'private-execution-drain-dispatch',
+                'X-UltraCache-Token':'b'*64,'X-UltraCache-Public-Selection-Scope':'/',
+                'X-UltraCache-Delivery-Execution-Drain-Context':json_header(value).decode()})
+            try:
+                client.request('PURGE','/__ultracache-vcl-contract-v2',headers=request)
+                client.getresponse()
+                failures.append(AssertionError('Worker returned before the original mock application ended'))
+            except TimeoutError:
+                timed_out.append(True)
+            finally:
+                client.close();sender_closed.set()
+            # Keep the original callback alive after the sender has closed.
+            # This is actor synchronization, not a product timeout/drain proof.
+            if not entered.wait(5):failures.append(AssertionError('Native metadata worker did not start'))
+            original_returned.set()
+            return 'original unchanged body',[('Cache-Control','private, no-store'),coverage.response_receipt(c)]
+        with proxy('ultracache',origin,allow_post=True) as get:
+            holder['get']=get;self.register(get);old=self.ready(get)
+            response=backend.post(get,PATH)
+            self.assertEqual(response[0],200);self.assertEqual(response[2],b'original unchanged body')
+            self.assertTrue(completed.wait(5),'Metadata did not finish after sender disconnected')
+            self.assertEqual(failures,[]);self.assertEqual(timed_out,[True])
+            current=self.observe(get)
+            self.assertEqual((current['scopeState'],current.get('temporaryHolds',0),current['scopeRevision']),
+                             ('ready',0,old['scopeRevision']))
+            if shutil.which('varnishlog'):
+                deadline=time.monotonic()+5
+                while True:
+                    trace=subprocess.run(['varnishlog','-n',str(get.instance),'-d','-g','raw',
+                        '-i','BereqMethod,BerespStatus,FetchError,Error'],capture_output=True,text=True,check=True).stdout
+                    if any('BerespStatus' in line and line.rstrip().endswith('204') for line in trace.splitlines()):break
+                    if time.monotonic()>=deadline:self.fail('Native did not observe the late metadata HTTP 204')
+                    time.sleep(.01)
 
 if __name__=='__main__':unittest.main()
