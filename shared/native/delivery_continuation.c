@@ -1042,4 +1042,5 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 #include "reuse_authority.c"
 #include "private_identity_map.c"
 #include "mutation_backend.c"
+#include "execution_drain.c"
 #include "delivery_reuse_runtime.c"

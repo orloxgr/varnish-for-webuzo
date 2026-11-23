@@ -50,7 +50,7 @@ struct reuse_scope {
     char incarnation[65], revision[65];
     char native_policy[65], wordpress_policy[65], policy[65], coverage_policy[65];
     unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
-    unsigned enabled, ready, revision_pending;
+    unsigned enabled, ready, revision_pending, execution_drain;
     unsigned lost_execution_context;
     struct reuse_transaction *scope_mutations; /* real unknown-owner writers, never fake tags */
     struct mutation_execution *executions;
@@ -256,7 +256,7 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     if (!enabled) {
         if (value) {
             volatile unsigned char *wipe = value->reuse_key;
-            value->enabled = 0; value->coverage_policy[0] = 0; reuse_scope_unbind(value);
+            value->enabled = 0; value->coverage_policy[0] = 0; value->execution_drain = 0; reuse_scope_unbind(value);
             for (i = 0; i < sizeof(value->reuse_key); ++i) wipe[i] = 0;
         }
         valid = 1; goto done;
@@ -280,6 +280,8 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     memcpy(value->policy,policy,65);
     snprintf(value->coverage_policy,sizeof(value->coverage_policy),"%s",coverage_policy); value->enabled = 1; valid = 1;
     memcpy(value->reuse_key,key,sizeof(key));
+    value->execution_drain = *coverage_policy && delivery_header_equals(ctx->http_req,
+        HDR("X-UltraCache-Public-Selection-Execution-Drain-Version"),"1");
 done:
     pthread_mutex_unlock(&lock);
     {
@@ -296,6 +298,15 @@ VCL_STRING vmod_reuse_coverage_policy(VRT_CTX, VCL_STRING site, VCL_STRING host,
     scope = reuse_scope_find(site,host,application_scope);
     if (scope && scope->enabled && *scope->coverage_policy) out = WS_Copy(ctx->ws,scope->coverage_policy,-1);
     pthread_mutex_unlock(&lock); return out;
+}
+VCL_BOOL vmod_execution_drain_available(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING application_scope) {
+    struct reuse_scope *scope;
+    int available;
+    (void)ctx;
+    pthread_mutex_lock(&lock);
+    scope = reuse_scope_find(site,host,application_scope);
+    available = scope && scope->enabled && *scope->coverage_policy && scope->execution_drain;
+    pthread_mutex_unlock(&lock); return available;
 }
 static const char *reuse_single(const struct http *http, hdr_t header) {
     const char *value;

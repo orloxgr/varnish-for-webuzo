@@ -53,6 +53,27 @@ Validate a receipt against this exact backend
 execution, revoke authority before browser headers, strip its transport fields.
 Never grant CLEAN or change application status, body or Set-Cookie on failure.
 
+$Function BOOL execution_drain_available(STRING site, STRING host, STRING scope)
+$Restrict vcl_synth
+
+Accepted execution-drain dispatch negotiation for this exact application scope.
+
+$Function INT execution_drain_authorize(PRIV_TASK, STRING site, STRING native_policy, STRING credential)
+$Restrict vcl_recv
+
+Authenticate a strict producer dispatch and bind it to the existing client owner.
+Returns HTTP status, never an execution completion or cache admission.
+
+$Function INT execution_drain_backend(PRIV_TASK, STRING credential)
+$Restrict vcl_backend_fetch
+
+Return 1 for an owned metadata backend, 0 for ordinary, -1 for unavailable owner.
+
+$Function INT execution_drain_response(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Return 1 for valid diagnostic 204, 0 for ordinary, -1 for invalid metadata reply.
+
 $Function INT delivery_recv(PRIV_TOP)
 $Restrict vcl_recv
 

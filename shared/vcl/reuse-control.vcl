@@ -1,6 +1,12 @@
 # Experimental metadata operations only, inside the existing authenticated
 # adapter control gate. This does not advertise or enable cached delivery reuse.
 sub scp_reuse_negotiate {
+    std.collect(req.http.X-UltraCache-Public-Selection-Execution-Drain-Version);
+    if (req.http.X-UltraCache-Public-Selection-Execution-Drain-Version &&
+        (req.http.X-UltraCache-Public-Selection-Execution-Drain-Version != "1" ||
+         req.http.X-UltraCache-Public-Selection-Coverage-Version != "1")) {
+        return (synth(400,"Invalid execution drain declaration"));
+    }
     std.collect(req.http.X-UltraCache-Public-Selection-Coverage-Version);
     std.collect(req.http.X-UltraCache-Public-Selection-Coverage-Policy);
     if ((req.http.X-UltraCache-Public-Selection-Coverage-Version || req.http.X-UltraCache-Public-Selection-Coverage-Policy) &&
@@ -33,6 +39,15 @@ sub scp_reuse_negotiate {
     }
 }
 sub scp_reuse_control {
+    if (req.http.X-UltraCache-Operation == "private-execution-drain-dispatch") {
+        set req.http.X-SCP-Selection-Operation = "actions";
+        call scp_selection_context;
+        unset req.http.X-SCP-Selection-Operation;
+        set req.http.X-SCP-Reuse-Control-Status = cookie_handoff.execution_drain_authorize(
+            req.http.X-SCP-Site,req.http.X-SCP-Selection-Native-Policy,req.http.X-UltraCache-Token);
+        if (req.http.X-SCP-Reuse-Control-Status == "200") { return (pass); }
+        return (synth(std.integer(req.http.X-SCP-Reuse-Control-Status,503),"Execution drain dispatch rejected"));
+    }
     if (req.http.X-UltraCache-Operation ~ "^(private-authority-context|private-authority-recover|private-execution-drained|private-mutation-begin|private-mutation-commit|private-mutation-ack|private-scope-mutation-begin|private-scope-mutation-commit|private-scope-mutation-ack|private-generation-publish|private-tag-retire|delivery-reuse-context)$") {
         set req.http.X-SCP-Selection-Operation = "actions";
         call scp_selection_context;

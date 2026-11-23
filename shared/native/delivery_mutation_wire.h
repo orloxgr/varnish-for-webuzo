@@ -19,6 +19,17 @@ struct delivery_mutation_receipt {
     unsigned coverage_version, coverage_qualified;
     char coverage_policy[65];
 };
+struct delivery_execution_drain {
+    char *dispatch_id, *target, *site_id, *host, *scope, *epoch, *incarnation;
+    char *native_policy, *wordpress_policy, *reuse_policy, *coverage_policy;
+    char *request_id, *challenge;
+    char *header;
+};
+int delivery_execution_drain_proof(const unsigned char key[32],
+    const struct delivery_execution_drain *, char proof[65]);
+int delivery_execution_drain_verify(const unsigned char key[32],
+    const char *header, size_t length, struct delivery_execution_drain **output);
+void delivery_execution_drain_free(struct delivery_execution_drain *);
 int delivery_mutation_key(const unsigned char *secret, size_t length, unsigned char key[32]);
 int delivery_mutation_request_proof(const unsigned char key[32],
     const struct delivery_mutation_context *context, char proof[65]);

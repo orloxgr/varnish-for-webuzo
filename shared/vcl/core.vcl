@@ -1,6 +1,12 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    # Only the authenticated native dispatch may create this backend phase.
+    if (req.http.X-UltraCache-Delivery-Phase == "execution-drain") {
+        return (synth(400,"Invalid execution drain ingress"));
+    }
+    unset req.http.X-UltraCache-VCL-Execution-Drain-Version;
+    unset req.http.X-UltraCache-VCL-Public-Selection-Execution-Drain-Version;
     # Completed classification scratch must release its header slots before
     # adding the continuation reuse marker, including a full browser request.
     unset req.http.X-SCP-Admin-Remaining;
@@ -60,6 +66,8 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-Reuse-Context;
     unset req.http.X-UltraCache-Delivery-Reuse-Version;
     if (req.method != "PURGE" || req.url != "/__ultracache-vcl-contract-v2") {
+        unset req.http.X-UltraCache-Delivery-Execution-Drain-Context;
+        unset req.http.X-UltraCache-Public-Selection-Execution-Drain-Version;
         # These selectors also belong to the separately authenticated native
         # control protocol; ordinary/browser application requests cannot set them.
         unset req.http.X-UltraCache-Delivery-Reuse-Recipe;
@@ -195,6 +203,15 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Private-Coverage-Policy;
     unset bereq.http.X-UltraCache-Private-Coverage-Version;
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
+    call scp_delivery_authorization;
+    set bereq.http.X-SCP-Execution-Drain = cookie_handoff.execution_drain_backend(bereq.http.X-UltraCache-Delivery-Authorization);
+    if (bereq.http.X-SCP-Execution-Drain == "-1") { return (abandon); }
+    if (bereq.http.X-SCP-Execution-Drain == "1") {
+        unset bereq.http.X-SCP-Execution-Drain;
+        return;
+    }
+    unset bereq.http.X-SCP-Execution-Drain;
+    unset bereq.http.X-UltraCache-Delivery-Authorization;
     call scp_mutation_backend_fetch;
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-UltraCache-Guest-Issuer-Version;
@@ -307,6 +324,18 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Warm-Projection-Supported;
 }
 sub scp_backend_response {
+    set beresp.http.X-SCP-Execution-Drain = cookie_handoff.execution_drain_response();
+    if (beresp.http.X-SCP-Execution-Drain == "-1") { return (abandon); }
+    if (beresp.http.X-SCP-Execution-Drain == "1") {
+        unset beresp.http.X-SCP-Execution-Drain;
+        set beresp.uncacheable = true;
+        set beresp.ttl = 0s;
+        set beresp.do_esi = false;
+        set beresp.http.Cache-Control = "no-store";
+        set beresp.http.Surrogate-Control = "no-store";
+        return (deliver);
+    }
+    unset beresp.http.X-SCP-Execution-Drain;
     if (cookie_handoff.mutation_backend_response()) {}
     unset beresp.http.X-UltraCache-Guest-Issuer-Version;
     unset beresp.http.X-UltraCache-Guest-Issuer-Canonical-URL;

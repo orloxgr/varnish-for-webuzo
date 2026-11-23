@@ -295,3 +295,121 @@ int delivery_mutation_receipt_verify_v2(const unsigned char key[32], const char 
     const char *coverage_policy, const char *header, size_t length, struct delivery_mutation_receipt **output) {
     return coverage_policy && mutation_receipt_verify(key,request_proof,coverage_policy,header,length,output);
 }
+
+/* Same portable mutation codec, separate dispatch purpose; never a completion
+ * proof, admission or an inference that the original application ended. */
+int delivery_execution_drain_proof(const unsigned char key[32],
+    const struct delivery_execution_drain *d, char proof[65]) {
+    struct reuse_frame frame = {NULL,0,0};
+    const char *fields[11];
+    size_t i;
+    int valid = 0;
+    if (proof) proof[0] = 0;
+    if (!key || !d || !proof || !mutation_hex(d->dispatch_id,64) ||
+        !mutation_hex(d->site_id,32) || !mutation_visible(d->host) ||
+        !mutation_visible(d->target) || d->target[0] != '/' || d->target[1] == '/' ||
+        strchr(d->target,'#') || strchr(d->target,'\\') ||
+        !mutation_visible(d->scope) || d->scope[0] != '/' ||
+        d->scope[strlen(d->scope)-1] != '/' || strchr(d->scope,'?') || strchr(d->scope,'#') ||
+        !mutation_hex(d->coverage_policy,64) || !mutation_hex(d->request_id,64) || !mutation_hex(d->challenge,64)) return 0;
+    fields[0] = "GET"; fields[1] = d->target; fields[2] = d->dispatch_id;
+    fields[3] = d->site_id; fields[4] = d->host; fields[5] = d->scope;
+    fields[6] = d->epoch; fields[7] = d->incarnation; fields[8] = d->native_policy;
+    fields[9] = d->wordpress_policy; fields[10] = d->reuse_policy;
+    for (i = 6; i < 11; ++i) if (!mutation_hex(fields[i],64)) return 0;
+    if (!reuse_lp_string(&frame,"ultracache-execution-drain-dispatch-v1")) goto done;
+    for (i = 0; i < 11; ++i) if (!reuse_lp_string(&frame,fields[i])) goto done;
+    if (!reuse_u32(&frame,1) || !reuse_lp_string(&frame,d->coverage_policy) ||
+        !reuse_lp_string(&frame,d->request_id) || !reuse_lp_string(&frame,d->challenge)) goto done;
+    valid = delivery_hmac_sha256(key,32,frame.bytes,frame.length,proof);
+done:
+    delivery_reuse_frame_free(frame.bytes,frame.length); return valid;
+}
+void delivery_execution_drain_free(struct delivery_execution_drain *d) {
+    if (!d) return;
+    free(d->dispatch_id); free(d->target); free(d->site_id); free(d->host); free(d->scope);
+    free(d->epoch); free(d->incarnation); free(d->native_policy); free(d->wordpress_policy);
+    free(d->reuse_policy); free(d->coverage_policy); free(d->request_id); free(d->challenge);
+    delivery_mutation_header_free(d->header); free(d);
+}
+static int execution_drain_fields(struct reader *r, const char * const *names,
+    char ***destinations, size_t count, int coverage) {
+    uint32_t seen = 0, expected = ((uint32_t)1 << (count+coverage))-1;
+    if (!take(r,'{')) return 0;
+    for (;;) {
+        struct text name,value;
+        size_t i;
+        if (!string(r,&name) || !take(r,':')) return 0;
+        if (coverage && equal(name,"coverageVersion")) {
+            uint64_t n;
+            if ((seen & ((uint32_t)1<<count)) || !number(r,&n) || n != 1) return 0;
+            seen |= (uint32_t)1<<count;
+        } else {
+            for (i = 0; i < count; ++i) if (equal(name,names[i])) break;
+            if (i == count || (seen & ((uint32_t)1<<i)) || !string(r,&value) ||
+                memchr(value.data,0,value.length) || !(*destinations[i] = copy(value))) return 0;
+            seen |= (uint32_t)1<<i;
+        }
+        if (take(r,'}')) return seen == expected;
+        if (!take(r,',')) return 0;
+    }
+}
+int delivery_execution_drain_verify(const unsigned char key[32], const char *header,
+    size_t length, struct delivery_execution_drain **output) {
+    static const char * const names[] = {"siteId","canonicalHost","scope","epoch","incarnation",
+        "nativePolicy","wordpressPolicy","reusePolicy","coveragePolicy"};
+    static const char * const executions[] = {"requestId","challenge"};
+    struct reader r = {NULL,0,0};
+    struct delivery_execution_drain *d = NULL;
+    char expected[65], *actual = NULL;
+    unsigned seen = 0, difference = 0;
+    size_t i;
+    int valid = 0;
+    if (!output) return 0;
+    *output = NULL;
+    if (!key || !header || !length ||
+        !base64_body((struct text){header,length},(unsigned char **)&r.buffer,&r.length)) return 0;
+    d = calloc(1,sizeof(*d));
+    if (!d || !take(&r,'{')) goto done;
+    for (;;) {
+        struct text name,value;
+        unsigned bit;
+        if (!string(&r,&name) || !take(&r,':')) goto done;
+        if (equal(name,"schemaVersion")) bit = 1;
+        else if (equal(name,"dispatchId")) bit = 2;
+        else if (equal(name,"target")) bit = 4;
+        else if (equal(name,"context")) bit = 8;
+        else if (equal(name,"execution")) bit = 16;
+        else if (equal(name,"proof")) bit = 32;
+        else goto done;
+        if (seen & bit) goto done;
+        seen |= bit;
+        if (bit == 1) {
+            uint64_t n;
+            if (!number(&r,&n) || n != 1) goto done;
+        } else if (bit == 8) {
+            char **destinations[] = {&d->site_id,&d->host,&d->scope,&d->epoch,&d->incarnation,
+                &d->native_policy,&d->wordpress_policy,&d->reuse_policy,&d->coverage_policy};
+            if (!execution_drain_fields(&r,names,destinations,9,1)) goto done;
+        } else if (bit == 16) {
+            char **destinations[] = {&d->request_id,&d->challenge};
+            if (!execution_drain_fields(&r,executions,destinations,2,0)) goto done;
+        } else {
+            char **destination = bit == 2 ? &d->dispatch_id : bit == 4 ? &d->target : &actual;
+            if (!string(&r,&value) || memchr(value.data,0,value.length) || !(*destination = copy(value))) goto done;
+        }
+        if (take(&r,'}')) break;
+        if (!take(&r,',')) goto done;
+    }
+    whitespace(&r);
+    if (seen != 63 || r.offset != r.length || !mutation_hex(actual,64) ||
+        !delivery_execution_drain_proof(key,d,expected)) goto done;
+    for (i = 0; i < 64; ++i) difference |= (unsigned char)actual[i] ^ (unsigned char)expected[i];
+    if (difference || !(d->header = malloc(length+1))) goto done;
+    memcpy(d->header,header,length); d->header[length] = 0; valid = 1;
+done:
+    free(actual); free(r.buffer);
+    if (valid) *output = d;
+    else delivery_execution_drain_free(d);
+    return valid;
+}

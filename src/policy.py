@@ -116,6 +116,10 @@ sub vcl_recv {
             ' if (req.http.X-WV-Disabled || req.esi_level > 0 || local.socket != "public" || (req.http.X-Webuzo-Varnish-Token != '+quoted(site['token'])+' &&\n'+
             ' req.http.X-UltraCache-Token != '+quoted(site['token'])+')) { return (synth(403)); }\n'+
             ' if (req.method == "UC-PRIVATE-GET") { call scp_private_lookup; }\n'+
+            ' if (req.http.X-UltraCache-Operation == "private-execution-drain-dispatch") {\n'+
+            ' if (req.http.X-UltraCache-Token != '+quoted(site['token'])+') { return (synth(403)); }\n'+
+            ' if (req.http.X-Forwarded-Proto == "https") { set req.backend_hint = secure; } else { set req.backend_hint = plain; }\n'+
+            ' set req.http.X-WV-Origin = '+quoted(origin_secret)+'; }\n'+
             ' if (req.http.X-UltraCache-Token == '+quoted(site['token'])+') { call wvw_http_control; }\n'+
             ' if (req.method != "PURGE") { return (synth(403)); }\n'+
             ' ban("obj.http.X-WV-Site == '+site['id']+'"); return (synth(200, "Site cache cleared")); }\n }')

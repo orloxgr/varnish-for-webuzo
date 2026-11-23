@@ -73,6 +73,7 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     http_Unset(ctx->http_bereq,h_mutation_context);
     http_Unset(ctx->http_bereq,h_mutation_receipt);
     http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Reuse-Candidate-Version"));
+    http_Unset(ctx->http_bereq,HDR("X-UltraCache-VCL-Execution-Drain-Version"));
 #ifndef UC_NATIVE_PRIVATE_REUSE
     (void)priv; (void)site; (void)native_policy; (void)credential;
     return 0;
@@ -151,6 +152,8 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     memcpy(execution->header+sizeof(prefix)-1,header,length+1);
     execution->next = scope->executions; scope->executions = execution; task->mutation = execution;
     http_SetHeader(ctx->http_bereq,execution->header);
+    if (scope->execution_drain && execution->hold)
+        http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-VCL-Execution-Drain-Version"),"1");
     if (execution->delivery_key) {
         struct handoff *entry = delivery_entry(execution->delivery_key);
         struct continuation *delivery = entry ? entry->delivery : NULL;
