@@ -80,6 +80,17 @@ $Restrict vcl_recv
 UltraCache only: 1 prepare PASS, 2 prepared fragment synth, -1 abort, 0 ordinary.
 The phase is request-owned, never inferred from client headers.
 
+$Function INT delivery_held_miss(PRIV_TOP)
+$Restrict vcl_miss
+
+Only the same top-request's owned held-read lookup may return 1 to restart.
+Returns 0 for ordinary misses and -1 for an invalid held-read reservation.
+
+$Function INT delivery_held_waiters()
+$Restrict vcl_synth vcl_deliver
+
+Read-only count of owned requests actually on the engine HSH waiting list.
+
 $Function BOOL delivery_guard(PRIV_TOP)
 $Restrict vcl_recv vcl_pass vcl_miss
 

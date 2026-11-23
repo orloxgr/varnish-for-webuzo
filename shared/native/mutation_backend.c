@@ -113,6 +113,10 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
         reuse_scope_unbind(scope); scope->lost_execution_context = 1; goto done;
     }
     execution->scope = scope; execution->live = execution->awaiting_receipt = 1;
+    if (scope->execution_sequence == UINT64_MAX) {
+        reuse_scope_unbind(scope); scope->lost_execution_context = 1; goto done;
+    }
+    execution->sequence = ++scope->execution_sequence;
     execution->hold = *scope->coverage_policy != 0; execution->unknown = !execution->hold;
     memcpy(execution->scope_revision,scope->revision,65);
     if (execution->hold) memcpy(execution->coverage_policy,scope->coverage_policy,65);
@@ -194,6 +198,7 @@ VCL_BOOL vmod_mutation_backend_response(VRT_CTX, struct vmod_priv *priv) {
                 mutation_unknown(execution); valid = 0; break;
             }
         }
+        delivery_held_notify(execution->scope);
     }
 done:
     pthread_mutex_unlock(&lock);

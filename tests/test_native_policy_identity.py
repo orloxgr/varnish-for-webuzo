@@ -15,7 +15,8 @@ class NativePolicyIdentity(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='native-policy-identity-') as folder:
             root = Path(folder)
             names = ('native_build.py', 'native/cookie_handoff.c', 'native/execution_drain.c',
-                'native/reuse_authority.c', 'native/engine/exact/cache_objhead.h', 'native/engine/exact/engine.json')
+                'native/reuse_authority.c', 'native/delivery_held.c', 'native/engine/exact/cache_objhead.h',
+                'native/engine/exact/cache_pool.h', 'native/engine/exact/VSC_main.h', 'native/engine/exact/engine.json')
             for name in names:
                 path = root/name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(name.encode())
             with patch.object(cookie_catalogue, '__file__', str(root/'cookie_catalogue.py')):

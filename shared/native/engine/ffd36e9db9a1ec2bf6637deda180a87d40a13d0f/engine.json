@@ -1,10 +1,28 @@
 {
   "installedHeaders": {
     "cache/cache.h": "1494164fdf99ada25d5f3bb6f5818ad8bfa05a372779bd458020f44c9e9dc5d4",
-    "cache/cache_int.h": "7b047c68e3aa5b23880e381acc518c223224c4f246eab6d1c78d0467c50c7d7f"
+    "cache/cache_int.h": "7b047c68e3aa5b23880e381acc518c223224c4f246eab6d1c78d0467c50c7d7f",
+    "waiter/waiter.h": "b9dae61734f29d1d07e0ba4c3128c9986eef24bd17e81d0d2330e9b55cbbe45d"
   },
   "objheadSha256": "a203692652a438a161bd821de424327b2697e9f18d0295cdbfe2fa447e51fa14",
   "revision": "ffd36e9db9a1ec2bf6637deda180a87d40a13d0f",
   "sourceUrl": "https://raw.githubusercontent.com/varnish/varnish/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f/bin/vinyld/cache/cache_objhead.h",
-  "upstreamGitBlob": "2c617e88b4b4e736d51c6967239471d5dc067f8f"
+  "upstreamGitBlob": "2c617e88b4b4e736d51c6967239471d5dc067f8f",
+  "poolHeader": {
+    "sha256": "0eeb4047a99990d5f07b7fd997772fe173dd28e0556c1cd8ff948a215c35a18e",
+    "upstreamGitBlob": "fbb1a869b3cc4181de892578a35325eb2ad1abfa",
+    "sourceUrl": "https://raw.githubusercontent.com/varnish/varnish/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f/bin/vinyld/cache/cache_pool.h"
+  },
+  "counterHeader": {
+    "sha256": "d0c5d7549139cd7a1eac83f0908c143ca55e0372263aa39f87db0f3fb0527f38",
+    "generatedBy": "vsctool.py -h VSC_main.vsc",
+    "sourceVscSha256": "c958384b6cc3ee12b4a9d6375615bbe0beaa0932799d8205ae664a758cba0b5b",
+    "generatorSha256": "a3cb3172158eda97ddff28fa1074d92f20b5b464085e238b2defde4e1a63fffa",
+    "sourceBaseUrl": "https://raw.githubusercontent.com/varnish/varnish/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f/lib/libvsc/"
+  },
+  "transportHeader": {
+    "sha256": "8805476855497bc485586e075b70af6e5ef96a61e95ce4ed7e81b3fc7f684bb9",
+    "upstreamGitBlob": "54f770b251e28cb9aa4aee37c74542ac48f4e1c9",
+    "sourceUrl": "https://raw.githubusercontent.com/varnish/varnish/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f/bin/vinyld/cache/cache_transport.h"
+  }
 }

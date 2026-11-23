@@ -134,7 +134,7 @@ static int delivery_reuse_record_current(const struct continuation *d, const str
     const char *fields[12];
     size_t i;
     double now = VTIM_real();
-    if (!scope || !reuse_scope_ready(scope) || scope->lost_execution_context || !record ||
+    if (!scope || !delivery_reuse_scope_ready(d,scope) || scope->lost_execution_context || !record ||
         record->valid_until <= now || d->public_deadline <= now || record->recipe->occurrences != d->occurrences ||
         strcmp(record->binding,d->reuse_binding) || strcmp(record->recipe->digest,d->reuse_recipe)) return 0;
     fields[0] = d->site; fields[1] = d->host; fields[2] = scope->scope; fields[3] = public_registry_epoch;
@@ -162,7 +162,8 @@ static int delivery_reuse_record_current(const struct continuation *d, const str
         if (!i) return 0;
         for (a = f->authority; a; a = a->next) {
             const struct reuse_tag *tag = reuse_tag_find((struct reuse_scope *)scope,a->tag,0);
-            if (!tag || !reuse_tag_clean(scope,tag) || reuse_active(tag) || strcmp(tag->revision,a->revision) ||
+            if (!tag || !tag->clean || strcmp(tag->bound_scope_revision,scope->revision) ||
+                reuse_active(tag) || strcmp(tag->revision,a->revision) ||
                 strcmp(tag->generation,a->generation)) return 0;
         }
     }
@@ -212,27 +213,26 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     size_t length = 0;
     const char *native_policy = reuse_single(ctx->http_req,HDR("X-SCP-Selection-Native-Policy"));
     char uri[sizeof("/__ultracache-native/reuse-v1/")+64];
-    int found = 0, valid = 0;
+    int valid = 0, outcome = REUSE_PLAN_MISS;
     if (!*d->reuse_publication || !*d->reuse_representation || !native_policy) return 0;
     pthread_mutex_lock(&lock);
     declaration = public_declaration_for_url(d->site,d->host,d->url);
     scope = declaration ? reuse_scope_find(d->site,d->host,declaration->scope) : NULL;
-    if (!scope || !scope->enabled || !reuse_scope_ready(scope) || strcmp(native_policy,scope->native_policy) ||
+    if (!scope || !scope->enabled || !scope->ready || scope->revision_pending || strcmp(native_policy,scope->native_policy) ||
         strcmp(declaration->wordpress_policy,scope->wordpress_policy) || !(discovery = delivery_reuse_discovery(scope,d)) ||
-        discovery->recipe->occurrences != d->occurrences) goto unlock;
+        discovery->recipe->occurrences != d->occurrences) goto done_locked;
+    d->reuse_cut_active = 1; d->reuse_cut_provisional = 1;
+    d->reuse_execution_cut = scope->execution_sequence;
     page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
         scope->native_policy,scope->wordpress_policy,scope->policy,d->reuse_publication,d->reuse_representation,discovery->recipe->digest};
     if (delivery_reuse_input_projection(discovery->recipe->inputs,(const unsigned char *)delivery_personal_cookie(d),
         strlen(delivery_personal_cookie(d)),&frame,&length) != DELIVERY_REUSE_INPUT_OK ||
         !delivery_reuse_input_mac(scope->reuse_key,&page,frame,length,d->reuse_binding) ||
-        !delivery_reuse_metadata_key(&page,d->reuse_binding,d->reuse_metadata_key) || !(d->reuse_scope = strdup(scope->scope))) goto unlock;
+        !delivery_reuse_metadata_key(&page,d->reuse_binding,d->reuse_metadata_key) || !(d->reuse_scope = strdup(scope->scope))) goto done_locked;
     memcpy(d->reuse_epoch,public_registry_epoch,65); memcpy(d->reuse_incarnation,scope->incarnation,65);
     memcpy(d->reuse_native_policy,scope->native_policy,65); memcpy(d->reuse_wp_policy,scope->wordpress_policy,65);
     memcpy(d->reuse_policy,scope->policy,65); memcpy(d->reuse_recipe,discovery->recipe->digest,65);
-    memcpy(d->reuse_discovery_revision,discovery->revision,65); d->reuse_negotiated = 1; found = 1;
-unlock:
-    pthread_mutex_unlock(&lock); delivery_reuse_frame_free(frame,length);
-    if (!found) goto done;
+    memcpy(d->reuse_discovery_revision,discovery->revision,65); d->reuse_negotiated = 1;
     snprintf(uri,sizeof(uri),"/__ultracache-native/reuse-v1/%s",d->reuse_metadata_key);
     metadata.url = uri; metadata.cache_key = d->reuse_metadata_key;
     wire.object = delivery_reuse_lookup(ctx,d,&metadata);
@@ -240,30 +240,27 @@ unlock:
         strcmp(HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker),"1") ||
         ObjIterate(ctx->req->wrk,wire.object,&wire,delivery_reuse_chunk,1) ||
         !delivery_reuse_record_parse(wire.copy,wire.length,&record) ||
-        !delivery_reuse_bound_record(NULL,record,wire.object->t_origin+wire.object->ttl,0)) goto done;
-    pthread_mutex_lock(&lock);
+        !delivery_reuse_bound_record(NULL,record,wire.object->t_origin+wire.object->ttl,0)) goto done_locked;
     valid = delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),0);
-    pthread_mutex_unlock(&lock);
-    if (!valid) goto done;
+    if (!valid) goto done_locked;
     valid = 0;
     for (admitted = record->fragments; admitted; admitted = admitted->next) {
         struct delivery_fragment *fragment = calloc(1,sizeof(*fragment));
         const struct delivery_reuse_descriptor *descriptor;
-        if (!fragment) goto done;
+        if (!fragment) goto done_locked;
         *tail = fragment; tail = &fragment->next;
         fragment->url = strdup(admitted->url); fragment->html = strdup("");
         fragment->cache_key = strdup(admitted->cache_key); fragment->cache_tags = strdup(admitted->cache_tags);
         fragment->cache_ttl = admitted->cache_ttl; fragment->cache_deadline = (double)admitted->body_valid_until;
         for (descriptor = record->recipe->fragments; descriptor; descriptor = descriptor->next)
             if (!strcmp(descriptor->descriptor,admitted->descriptor)) break;
-        if (!descriptor || !fragment->url || !fragment->html || !fragment->cache_key || !fragment->cache_tags) goto done;
+        if (!descriptor || !fragment->url || !fragment->html || !fragment->cache_key || !fragment->cache_tags) goto done_locked;
         fragment->occurrences = descriptor->occurrences;
     }
     d->phase = D_READY; d->reuse_fast = 1;
-    if (vmod_delivery_reuse_resolve(ctx,priv) != 1 || !vmod_delivery_reuse_materialize(ctx,priv)) goto done;
+    if (vmod_delivery_reuse_resolve(ctx,priv) != 1 || !delivery_reuse_materialize(ctx,priv,1)) goto done_locked;
     /* No body/header is exposed until every required native object is pinned,
      * complete and copied. The last scope/authority check shares the writer lock. */
-    pthread_mutex_lock(&lock);
     scope = delivery_reuse_current_scope(d);
     discovery = scope ? delivery_reuse_discovery(scope,d) : NULL;
     valid = discovery && !strcmp(discovery->revision,d->reuse_discovery_revision) &&
@@ -280,17 +277,26 @@ unlock:
         valid = current && current == pin->object && pin->deadline > VTIM_real();
         if (current) (void)HSH_DerefObjCore(ctx->req->wrk,&current);
     }
+    if (valid) {
+        d->reuse_record = record; record = NULL;
+        d->reuse_cut_provisional = 0;
+        if (!delivery_reuse_scope_ready(d,scope)) {
+            d->held_parent = ctx->req->objcore; HSH_Ref(d->held_parent);
+            d->held_metadata = wire.object; wire.object = NULL;
+            if (delivery_held_schedule(ctx,d,scope)) outcome = REUSE_PLAN_HELD;
+            else valid = 0;
+        } else { d->reuse_cut_active = 0; outcome = REUSE_PLAN_HIT; }
+    }
+done_locked:
+    d->reuse_cut_provisional = 0;
     pthread_mutex_unlock(&lock);
-    if (valid) { d->reuse_record = record; record = NULL; }
-done:
+    delivery_reuse_frame_free(frame,length);
     delivery_reuse_record_free(record); free(wire.copy);
     if (wire.object) (void)HSH_DerefObjCore(ctx->req->wrk,&wire.object);
     if (!valid) {
-        delivery_reuse_release(ctx,d->reuse_plan); d->reuse_plan = NULL;
-        delivery_free_fragments(d->fragments); d->fragments = NULL; d->reuse_fast = d->reuse_negotiated = 0;
-        free(d->reuse_scope); d->reuse_scope = NULL; d->reuse_recipe[0] = 0;
+        delivery_held_drop(ctx,d);
     }
-    return valid;
+    return outcome;
 }
 #else
 static int delivery_reuse_schedule(VRT_CTX, struct vmod_priv *p, struct continuation *d) { (void)ctx; (void)p; (void)d; return 0; }

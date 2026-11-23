@@ -38,13 +38,22 @@ def native_reuse_source(include):
         header=(receipt.parent/'cache_objhead.h').read_bytes()
         if hashlib.sha256(header).hexdigest()!=record.get('objheadSha256'):
             raise RuntimeError('Bundled native engine interface differs from verified source')
+        pool=(receipt.parent/'cache_pool.h').read_bytes()
+        if hashlib.sha256(pool).hexdigest()!=record.get('poolHeader',{}).get('sha256'):
+            raise RuntimeError('Bundled native engine pool differs from verified source')
+        counters=(receipt.parent/'VSC_main.h').read_bytes()
+        if hashlib.sha256(counters).hexdigest()!=record.get('counterHeader',{}).get('sha256'):
+            raise RuntimeError('Bundled native counters differ from verified source')
+        transport=(receipt.parent/'cache_transport.h').read_bytes()
+        if hashlib.sha256(transport).hexdigest()!=record.get('transportHeader',{}).get('sha256'):
+            raise RuntimeError('Bundled native transport differs from verified source')
         if revision!=installed[1]:continue
         layouts=record.get('installedHeaders',{})
-        if set(layouts)!={'cache/cache.h','cache/cache_int.h'}:
+        if set(layouts)!={'cache/cache.h','cache/cache_int.h','waiter/waiter.h'}:
             raise RuntimeError('Incomplete bundled native engine layout receipt')
         if any(hashlib.sha256((include/name).read_bytes()).hexdigest()!=expected for name,expected in layouts.items()):
             continue
-        return header,record
+        return header,record,pool,counters,transport
     return None
 
 
@@ -61,7 +70,7 @@ def build():
                'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c',
                'delivery_reuse_inputs.c','delivery_reuse_inputs.h','reuse_authority.c',
                'delivery_mutation_wire.c','delivery_mutation_wire.h','delivery_public_projection_wire.c','mutation_backend.c','execution_drain.c',
-               'delivery_reuse_wire.c','delivery_reuse_wire.h','delivery_reuse_metadata.c','delivery_reuse_runtime.c','private_identity_map.c')}
+               'delivery_reuse_wire.c','delivery_reuse_wire.h','delivery_reuse_metadata.c','delivery_reuse_runtime.c','delivery_held.c','private_identity_map.c')}
     inputs['abi'] = (include/'vmod_abi.h').read_bytes()
     # The virtual fetch uses the installed internal http_conn layout. Strict
     # VRT ABI alone is insufficient as a build receipt for internal headers.
@@ -71,6 +80,9 @@ def build():
     private_reuse = native_reuse_source(include)
     if private_reuse:
         inputs['engine-private-header'] = private_reuse[0]
+        inputs['engine-pool-header'] = private_reuse[2]
+        inputs['engine-counter-header'] = private_reuse[3]
+        inputs['engine-transport-header'] = private_reuse[4]
         inputs['engine-private-receipt'] = json.dumps(private_reuse[1],sort_keys=True).encode()
     signature = hashlib.sha256(b'cookie-handoff-build-1\0'+b''.join(inputs.values())).hexdigest()
     library = target/'libvmod_cookie_handoff.so'
@@ -89,7 +101,7 @@ def build():
                          'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c',
                          'delivery_reuse_inputs.c','delivery_reuse_inputs.h','reuse_authority.c',
                          'delivery_mutation_wire.c','delivery_mutation_wire.h','delivery_public_projection_wire.c','mutation_backend.c','execution_drain.c',
-               'delivery_reuse_wire.c','delivery_reuse_wire.h','delivery_reuse_metadata.c','delivery_reuse_runtime.c','private_identity_map.c'):
+               'delivery_reuse_wire.c','delivery_reuse_wire.h','delivery_reuse_metadata.c','delivery_reuse_runtime.c','delivery_held.c','private_identity_map.c'):
                 (folder/name).write_bytes(inputs[name])
             # vmodtool hashes directives, not their documentation. Put the
             # source/ABI identity in $Module so a C-only update gets a new DSO
@@ -103,6 +115,9 @@ def build():
                 ('#define UC_NATIVE_PRIVATE_REUSE 1\n' if private_reuse else ''))
             if private_reuse:
                 (folder/'uc_engine_objhead.h').write_bytes(private_reuse[0])
+                (folder/'uc_engine_pool.h').write_bytes(private_reuse[2])
+                (folder/'uc_engine_counters.h').write_bytes(private_reuse[3])
+                (folder/'uc_engine_transport.h').write_bytes(private_reuse[4])
             command('python3',tool,'cookie_handoff.vcc',cwd=folder)
             command('cc','-Wall','-Wextra','-Werror','-fPIC','-shared','-pthread',
                     '-I'+str(include),'-I.','cookie_handoff.c','delivery_envelope.c','vcc_if.c',

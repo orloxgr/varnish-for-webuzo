@@ -23,6 +23,7 @@ struct mutation_execution {
     char native_policy[65], wordpress_policy[65], reuse_policy[65];
     char recipe[65], coverage_policy[65], scope_revision[65];
     unsigned hold, coverage_qualified;
+    uint64_t sequence;
     uint64_t delivery_key;
     unsigned char key[32];
     char *header;
@@ -52,6 +53,7 @@ struct reuse_scope {
     unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
     unsigned enabled, ready, revision_pending, execution_drain;
     unsigned lost_execution_context;
+    uint64_t execution_sequence;
     struct reuse_transaction *scope_mutations; /* real unknown-owner writers, never fake tags */
     struct mutation_execution *executions;
     struct reuse_discovery **discoveries; /* declarations only; cached record is authority */
@@ -62,6 +64,7 @@ struct reuse_scope {
 };
 static struct reuse_scope *reuse_scopes;
 static const char *reuse_single(const struct http *, hdr_t);
+static void delivery_held_notify(struct reuse_scope *);
 static void reuse_identity_free(struct reuse_scope *);
 #ifdef UC_NATIVE_PRIVATE_REUSE
 static int reuse_identity_install(struct reuse_scope *, const struct delivery_reuse_record *);
@@ -181,6 +184,20 @@ static size_t reuse_scope_holds(const struct reuse_scope *scope) {
 static int reuse_scope_ready(const struct reuse_scope *scope) {
     return scope && scope->ready && !scope->revision_pending && !reuse_scope_holds(scope);
 }
+/* The complete pinned plan may linearize before executions that start after
+ * its admission cut. Earlier executions must still prove independent drain.
+ * Real revisions/dirty tags/unknown state remain separate final barriers. */
+#ifdef UC_NATIVE_PRIVATE_REUSE
+static int delivery_reuse_scope_ready(const struct continuation *d, const struct reuse_scope *scope) {
+    const struct mutation_execution *execution;
+    if (!scope || !scope->ready || scope->revision_pending) return 0;
+    if (d->reuse_cut_provisional) return 1;
+    if (!d->reuse_cut_active) return !reuse_scope_holds(scope);
+    for (execution = scope->executions; execution; execution = execution->next)
+        if (execution->hold && execution->sequence <= d->reuse_execution_cut) return 0;
+    return 1;
+}
+#endif
 static int reuse_tag_clean(const struct reuse_scope *scope, const struct reuse_tag *tag) {
     return reuse_scope_ready(scope) && tag->clean && !strcmp(tag->bound_scope_revision,scope->revision);
 }
@@ -230,6 +247,7 @@ static void reuse_scope_unbind(struct reuse_scope *scope) {
      * A later authenticated observation may mint its actual replacement, but
      * neither observation nor recovery may expose the old revision as fresh. */
     (void)reuse_scope_revision_repair(scope);
+    delivery_held_notify(scope);
 }
 
 VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope,
@@ -808,6 +826,8 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         }
     }
 reply:
+    if (scope && operation && strcmp(operation,"private-authority-context") &&
+        strcmp(operation,"delivery-reuse-context")) delivery_held_notify(scope);
     status = reuse_control_reply(task,status,reason,scope,tag,transaction,drained,context_owner,delivery);
     mutation_execution_free(drained);
     pthread_mutex_unlock(&lock); return status;

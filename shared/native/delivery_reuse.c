@@ -218,7 +218,7 @@ static int delivery_reuse_chunk(void *value, unsigned flush, const void *bytes, 
  * replay. This does not authorize reuse; generation/final commit is separate.
  * Reserve/copy ALL selected HITs before altering any existing fragment bytes.
  */
-VCL_BOOL vmod_delivery_reuse_materialize(VRT_CTX, struct vmod_priv *priv) {
+static int delivery_reuse_materialize(VRT_CTX, struct vmod_priv *priv, int locked) {
     struct continuation *d = priv->priv;
     struct delivery_reuse_pin *pin;
     int failed = 0;
@@ -239,7 +239,7 @@ VCL_BOOL vmod_delivery_reuse_materialize(VRT_CTX, struct vmod_priv *priv) {
         }
         return 0;
     }
-    pthread_mutex_lock(&lock);
+    if (!locked) pthread_mutex_lock(&lock);
     for (pin = d->reuse_plan->pins; pin; pin = pin->next) {
         if (pin->state != REUSE_HIT) continue;
         free(pin->fragment->html); pin->fragment->html = pin->copy;
@@ -247,8 +247,11 @@ VCL_BOOL vmod_delivery_reuse_materialize(VRT_CTX, struct vmod_priv *priv) {
         pin->length = pin->capacity = 0;
     }
     d->reuse_plan->materialized = 1;
-    pthread_mutex_unlock(&lock);
+    if (!locked) pthread_mutex_unlock(&lock);
     return 1;
+}
+VCL_BOOL vmod_delivery_reuse_materialize(VRT_CTX, struct vmod_priv *priv) {
+    return delivery_reuse_materialize(ctx,priv,0);
 }
 
 static double delivery_fragment_deadline(const struct continuation *d, const struct delivery_fragment *f) {

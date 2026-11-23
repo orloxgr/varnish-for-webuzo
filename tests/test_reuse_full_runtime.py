@@ -13,6 +13,10 @@ import shutil
 import time
 import threading
 import unittest
+import subprocess
+import re
+import http.client
+import socket
 import test_reuse_authority as authority
 from test_cookie_delivery import proxy,cookies
 from test_delivery_continuation import BODY,META,PARENT,PRIVATE,ADAPTIVE,envelope
@@ -20,6 +24,7 @@ from test_reuse_delivery_context import all_origin_hooks,signed_context
 from test_reuse_cookie_inputs import declaration,seal_recipe,lp
 from test_private_fragment_ttl import exchange
 import test_mutation_coverage_runtime as coverage
+from test_public_selection_runtime import control as native_control
 
 KEY=hmac.digest(('b'*64).encode(),b'ultracache-delivery-reuse-key-v1','sha256')
 OWNER=authority.TAG
@@ -59,6 +64,39 @@ class NativeFullReuse(unittest.TestCase):
     def test_covered_unchanged_interleaved_owners_and_all_formats_reuse_without_origin(self):
         self.run_full_actor(anonymous_nonce=True,covered=True)
 
+    def test_later_covered_reads_do_not_extend_the_pinned_admission_cut(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='later-read')
+
+    def test_actual_tag_write_after_pin_rejects_the_old_waiting_plan(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='write')
+
+    def test_postresponse_late_write_is_still_inside_the_original_blocker(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='ended-late-write')
+
+    def test_unknown_coverage_wakes_to_real_fallback_without_old_authority(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='unknown')
+
+    def test_actual_request_send_deadline_never_closes_a_lost_drain_as_clean(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='deadline')
+
+    def test_native_vcl_replacement_keeps_the_existing_wait_owner_alive_until_drain(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='reload')
+
+    def test_earlier_failed_fence_cannot_be_excluded_from_the_read_cut(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='failed-fence')
+
+    def test_disconnected_held_reader_releases_native_and_vcl_references(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='cancel')
+
+    def test_actual_provider_lifetime_withdraws_lost_drain_reservation_without_clean_grant(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='body-deadline')
+
+    def test_internal_observation_budget_never_waits_for_the_1500_second_send_budget(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='lost-drain')
+
+    def test_policy_replacement_invalidates_the_earlier_pinned_plan(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,held_case='policy')
+
     def test_fresh_source_authority_namespace_survives_initial_and_postscope_recovery(self):
         self.run_full_actor(anonymous_nonce=True,scope_fence=True,covered=True,namespace_keys=True)
 
@@ -92,9 +130,12 @@ class NativeFullReuse(unittest.TestCase):
                 self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure=field)
 
     def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False,
-                       anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False):
-        holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
+                       anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False,
+                       held_case='read'):
+        holder={};calls=[];prepared={};prepared_accepts={};generation=[1];records=[];armed=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
+        later_entered=threading.Event();later_release=threading.Event();later_original=[]
+        if held_case=='ended-late-write':held_release.set()
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
         content_tag=hashlib.sha256(b'mock-public-comments-content').hexdigest()
         nonce_inputs=declaration(['wordpress_logged_in_mock']) if anonymous_nonce else declaration(['owner'])
@@ -110,6 +151,8 @@ class NativeFullReuse(unittest.TestCase):
         def origin(path,headers):
             phase=headers.get('X-UltraCache-Delivery-Phase');calls.append((path,phase))
             if phase=='prepare':
+                if holder.get('waiting_reader_started') is not None and 'fallback_started' not in holder:
+                    holder['fallback_started']=time.monotonic()
                 signed=read_context(headers,path)
                 context=self.call(holder['get'],'delivery-reuse-context',tag=None,extra={
                     'X-UltraCache-Private-Request-Id':signed['requestId'],'X-UltraCache-Private-Challenge':signed['challenge'],
@@ -123,6 +166,7 @@ class NativeFullReuse(unittest.TestCase):
                 body['reuseCandidate']=dict(version=1,requestId=signed['requestId'],challenge=signed['challenge'],
                     recipe=recipe,inputEvidence=identity_mac(context,owner,recipe['inputs']))
                 prepared[signed['requestId']]=(copy.deepcopy(body),owner,signed,context['scopeRevision'])
+                prepared_accepts[signed['requestId']]=headers.get('Accept','')
                 return json.dumps(body),[('Cache-Control','private, no-store')]+([coverage.response_receipt(signed)] if covered else [])
             if phase=='reuse-finalize':
                 self.assertEqual(path,PARENT);self.assertIsNone(headers.get('Cookie'))
@@ -130,6 +174,15 @@ class NativeFullReuse(unittest.TestCase):
                 context=json.loads(base64.b64decode(headers['X-UltraCache-Delivery-Reuse-Context'],validate=True))
                 old,owner,original,source_namespace=prepared[context['requestId']]
                 current=self.observe(holder['get'])
+                if covered and source_namespace!=current['scopeRevision']:
+                    rejected=self.call(holder['get'],'private-execution-drained',current,tag=None,expected_status=409,extra={
+                        'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
+                        'X-UltraCache-Private-Drained':'1',**coverage.completion_headers(original)})
+                    self.assertIn(rejected['reason'],('coverage-scope-changed','coverage-unqualified'))
+                    self.call(holder['get'],'private-execution-drained',self.observe(holder['get']),tag=None,extra={
+                        'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
+                        'X-UltraCache-Private-Drained':'1',**coverage.completion_headers(original,'unknown')})
+                    return 204,'',[('Cache-Control','private, no-store')]
                 self.call(holder['get'],'private-execution-drained',current,tag=None,extra={
                     'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
                     'X-UltraCache-Private-Drained':'1',**(coverage.completion_headers(original) if covered else {})})
@@ -144,7 +197,8 @@ class NativeFullReuse(unittest.TestCase):
                 if namespace_keys:self.assertEqual(ack['scopeRevision'],source_namespace,
                     'Recovery must not silently rebase a fresh original body claim into another namespace')
                 c=dict(context['context'],scopeRevision=ack['scopeRevision'])
-                deadline=int(time.time())+100
+                deadline=int(time.time())+(5 if holder.get('arm_natural_deadline') else 100)
+                if owner=='B' and prepared_accepts[context['requestId']]=='text/html':holder['natural_until']=deadline
                 rows=[]
                 for descriptor in recipe['fragments']:
                     f=next(row for row in old['renderedFragments'] if row['url']==descriptor['url'])
@@ -182,7 +236,12 @@ class NativeFullReuse(unittest.TestCase):
             if path=='/__owned_mutation-held':
                 signed=read_context(headers,path);held_original.append(signed);held_entered.set()
                 self.assertTrue(held_release.wait(10))
-                return 'held actual response',[('Cache-Control','private, no-store'),coverage.response_receipt(signed)]
+                return 'held actual response',[('Cache-Control','private, no-store'),
+                    coverage.response_receipt(signed,result='unknown' if held_case=='unknown' else 'qualified')]
+            if path=='/__owned_mutation-held-later':
+                signed=read_context(headers,path);later_original.append(signed);later_entered.set()
+                self.assertTrue(later_release.wait(10))
+                return 'later actual response',[('Cache-Control','private, no-store'),coverage.response_receipt(signed)]
             if path=='/__owned_mutation-map':
                 signed=read_context(headers,path)
                 state=self.call(holder['get'],'private-authority-context',tag=nonce_tag('A'))
@@ -190,7 +249,20 @@ class NativeFullReuse(unittest.TestCase):
             return (BODY,META+([('Vary','Accept')] if covered else [])) if path==PARENT else ('cold',[('Cache-Control','private, no-store')])
         from test_cold_public_selection import choices
         policies = choices(('brandCurrency','variant')) if projected else None
-        with proxy('ultracache',origin,transform=all_origin_hooks,policies=policies) as get:
+        def actor_policy(source):
+            source=all_origin_hooks(source)
+            source=source.replace('sub vcl_synth {',
+                'sub vcl_synth { set resp.http.X-Test-Held-Waiters = cookie_handoff.delivery_held_waiters(); '
+                'set resp.http.X-Test-Pending = cookie_handoff.pending();',1)
+            # Test-only actual session budget: the normal adapter intentionally
+            # raises the daemon default to cover all origin phases.
+            if held_case=='deadline':source=re.sub(r'set sess.send_timeout = [^;]+;', 'set sess.send_timeout = 0.2s;',source)
+            return source
+        with proxy('ultracache',origin,transform=actor_policy,policies=policies,
+                   management=held_case in ('reload','cancel'),daemon_parameters=(
+                       ('vsl_mask=+Debug',)+
+                       (('send_timeout=1',) if held_case=='deadline' else
+                        ('debug=+vclrel',) if held_case in ('reload','cancel') else ()))) as get:
             holder['get']=get;get(PARENT)
             if covered:
                 for accept in accepts:get(PARENT,extra={'Accept':accept})
@@ -316,28 +388,141 @@ class NativeFullReuse(unittest.TestCase):
                             self.assertEqual(status,200);self.assertIn('private:'+owner+'-generation2',html)
                 self.assertEqual(calls,[],'All 12 interleaved owner/format requests must be origin-free')
                 self.assertEqual(self.observe(get)['scopeRevision'],stable)
-                errors=[]
+                if held_case in ('reload','cancel'):get.adm('vcl.load','after',str(get.instance.parent/'policy.vcl'))
+                if held_case=='body-deadline':
+                    holder['arm_natural_deadline']=True
+                    self.assertEqual(exchange(get,'PURGE',PRIVATE,cache_key(PRIVATE,'B'),'b'*64)[0],200)
+                    self.assertEqual(get(PARENT,'owner=B',{'Accept':accepts[0]})[0],200)
+                    until=holder['natural_until']
+                    while time.time()<until-.3:time.sleep(.01)
+                errors=[];reader_result=[];reader_done=threading.Event()
                 def hold_request():
                     try:get('/__owned_mutation-held','owner=A')
                     except BaseException as error:errors.append(error)
                 worker=threading.Thread(target=hold_request);worker.start()
+                def read_parent():
+                    try:
+                        if held_case=='cancel':
+                            client=http.client.HTTPConnection(*get.endpoint,timeout=10)
+                            holder['cancel_client']=client
+                            client.request('GET',PARENT,headers=dict(get.request_headers,Cookie='owner=B',Accept=accepts[0]))
+                            response=client.getresponse();reader_result.append((response.status,response.read()))
+                        else:reader_result.append(get(PARENT,'owner=B',{'Accept':accepts[0]}))
+                    except BaseException as error:
+                        if held_case=='cancel':holder['cancelled']=True
+                        else:errors.append(error)
+                    finally:reader_done.set()
+                reader=None;later_worker=None
                 try:
                     self.assertTrue(held_entered.wait(10))
+                    if held_case=='ended-late-write':coverage.NativeCoverageHolds.ended(self,get)
                     self.assertEqual(self.observe(get)['temporaryHolds'],1)
+                    def native_probe():
+                        status,fields,_=native_control(get,'private-authority-context',extra={'X-UltraCache-Public-Selection-Scope':'/'})
+                        self.assertEqual(status,200)
+                        return fields
+                    pending_before=int(native_probe()['X-Test-Pending']) if held_case=='cancel' else None
                     calls.clear()
-                    status,_,during=get(PARENT,'owner=B',{'Accept':accepts[0]})
-                    self.assertEqual(status,200);self.assertIn('private:B-generation2',during)
-                    self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
+                    started=time.monotonic()
+                    holder['waiting_reader_started']=started
+                    def actual_waiters():
+                        return int(native_probe()['X-Test-Held-Waiters'])
+                    reader=threading.Thread(target=read_parent);reader.start()
+                    until=time.monotonic()+5
+                    while not actual_waiters():
+                        self.assertFalse(reader_done.is_set(),reader_result)
+                        if time.monotonic()>=until:self.fail('Held read did not enter the actual engine waiting list')
+                        time.sleep(.01)
+                    self.assertEqual(calls,[],'A real held read must park without executing prepare/providers')
                     self.assertEqual(self.observe(get)['temporaryHolds'],1,
-                        'Reader completion must not clear another still-live hold')
-                finally:held_release.set();worker.join(timeout=15)
+                        'Parking must not clear another still-live hold')
+                    if held_case=='later-read':
+                        def later_request():
+                            try:get('/__owned_mutation-held-later','owner=A')
+                            except BaseException as error:errors.append(error)
+                        later_worker=threading.Thread(target=later_request);later_worker.start()
+                        self.assertTrue(later_entered.wait(5))
+                        self.assertEqual(self.observe(get)['temporaryHolds'],2)
+                        calls.clear()
+                    if held_case in ('reload','cancel'):
+                        get.adm('vcl.use','after');get.adm('vcl.discard','boot')
+                    if held_case=='cancel':
+                        client=holder['cancel_client'];client.sock.shutdown(socket.SHUT_RDWR);client.close()
+                        self.assertTrue(reader_done.wait(5));self.assertTrue(holder.get('cancelled'))
+                        until=time.monotonic()+2
+                        while int(native_probe()['X-Test-Pending'])!=pending_before:
+                            if time.monotonic()>=until:self.fail('Closed reader retains its association until unrelated drain')
+                            time.sleep(.01)
+                        self.assertEqual(self.observe(get)['temporaryHolds'],1,
+                            'Disconnect cleanup must happen while original application execution stays unresolved')
+                        self.assertFalse(any(path==PARENT for path,_ in calls),'Closed reader must not invoke a fresh provider')
+                        calls.clear()
+                    if held_case in ('write','ended-late-write'):
+                        generation[0]=3
+                        tag=hashlib.sha256(b'mock-owner-B').hexdigest()
+                        writer=self.call(get,'private-mutation-begin',self.call(get,'private-authority-context',tag=tag),
+                            tag=tag,extra={'X-UltraCache-Private-Transaction':'4'*64})
+                        self.call(get,'private-mutation-commit',writer,tag=tag,extra={
+                            'X-UltraCache-Private-Transaction':writer['transaction'],'X-UltraCache-Private-Lease':writer['lease']})
+                    if held_case=='policy':
+                        generation[0]=3;coverage.register(self,get,policy='d'*64)
+                    if held_case in ('write','ended-late-write','deadline','body-deadline','lost-drain','policy'):
+                        self.assertTrue(reader_done.wait(10),'Real invalidation/deadline must withdraw the native reservation')
+                        self.assertEqual(reader_result[0][0],200)
+                        self.assertTrue(any(phase=='prepare' for _,phase in calls),'This must be actual original fallback')
+                        if held_case not in ('deadline','body-deadline','lost-drain'):self.assertIn('private:B-generation3',reader_result[0][2])
+                        if held_case in ('deadline','body-deadline','lost-drain'):
+                            self.assertLess(holder['fallback_started']-started,2,
+                                'The cache-only park, not real provider execution, must have bounded failure scheduling')
+                            trace=subprocess.check_output(['varnishlog','-n',str(get.instance),'-d','-g','raw','-i','Debug'],text=True)
+                            self.assertIn('parked deadline='+('observation' if held_case=='lost-drain' else 'natural'),trace)
+                        self.assertEqual(self.observe(get)['temporaryHolds'],1,'No timeout or write signal may retire the old execution')
+                    if held_case in ('unknown','failed-fence'):generation[0]=3
+                    held_release.set();worker.join(timeout=15)
+                    until=time.monotonic()+5
+                    while any(e['requestId']==held_original[0]['requestId'] and e['live']
+                              for e in self.observe(get).get('unsettledExecutions',[])):
+                        if time.monotonic()>=until:self.fail('Original covered backend did not actually finish')
+                        time.sleep(.01)
+                    original=held_original[0]
+                    if held_case=='failed-fence':
+                        self.assertFalse(reader_done.is_set(),'A qualified response/fini cannot replace failed-prewrite drain proof')
+                    self.call(get,'private-execution-drained',self.observe(get),tag=None,extra={
+                        'X-UltraCache-Private-Request-Id':original['requestId'],
+                        'X-UltraCache-Private-Challenge':original['challenge'],'X-UltraCache-Private-Drained':'1',
+                        **coverage.completion_headers(original,'unknown' if held_case in ('unknown','failed-fence','policy') else 'qualified')})
+                    self.assertTrue(reader_done.wait(10))
+                    if held_case!='cancel':
+                        status,_,during=reader_result[0]
+                        self.assertEqual(status,200)
+                    else:self.assertEqual(calls,[],'A closed native reader must not dispatch providers')
+                    if held_case in ('read','later-read','reload'):
+                        self.assertIn('private:B-generation2',during)
+                        self.assertEqual(calls,[],'Exact drain must reselect the complete pinned cache with zero origin work')
+                    if held_case=='later-read':
+                        self.assertEqual(self.observe(get)['temporaryHolds'],1,
+                            'A later real execution remains live yet cannot extend the earlier snapshot read')
+                        later_release.set();later_worker.join(timeout=10)
+                        coverage.NativeCoverageHolds.ended(self,get)
+                        later=later_original[0]
+                        self.call(get,'private-execution-drained',self.observe(get),tag=None,extra={
+                            'X-UltraCache-Private-Request-Id':later['requestId'],'X-UltraCache-Private-Challenge':later['challenge'],
+                            'X-UltraCache-Private-Drained':'1',**coverage.completion_headers(later)})
+                    if held_case in ('reload','cancel'):
+                        until=time.monotonic()+5
+                        while True:
+                            listing=get.adm('vcl.list');rows=[line.split() for line in listing.splitlines() if line.split() and line.split()[-1]=='boot']
+                            # An idle discarded VCL may remain warm for the
+                            # engine's real cooldown; its busy count must be zero.
+                            if not rows or rows[0][-2]=='0':break
+                            if time.monotonic()>=until:self.fail('Original VCL still busy after wait owners ended: '+listing)
+                            time.sleep(.01)
+                finally:
+                    held_release.set();later_release.set();worker.join(timeout=15)
+                    if reader:reader.join(timeout=15)
+                    if later_worker:later_worker.join(timeout=15)
                 self.assertEqual(errors,[]);self.assertFalse(worker.is_alive())
-                coverage.NativeCoverageHolds.ended(self,get)
-                original=held_original[0]
-                self.call(get,'private-execution-drained',self.observe(get),tag=None,extra={
-                    'X-UltraCache-Private-Request-Id':original['requestId'],
-                    'X-UltraCache-Private-Challenge':original['challenge'],'X-UltraCache-Private-Drained':'1',
-                    **coverage.completion_headers(original)})
+                if held_case in ('write','ended-late-write','unknown','failed-fence','deadline','body-deadline','lost-drain','cancel','policy'):return
                 self.assertEqual(self.observe(get)['scopeRevision'],stable)
                 calls.clear()
                 for accept in accepts:

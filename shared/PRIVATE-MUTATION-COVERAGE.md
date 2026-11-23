@@ -138,6 +138,14 @@ replacement SQL sessions, lost replies, unknown stores/raw operations,
 restart/policy changes and actual normal bootstrap. All prior cookie lifecycle,
 nonce, content dependency and no-leak requirements remain applicable.
 
+The experimental native read path now distinguishes HELD complete plans from
+MISS. Its finite admission cut and native waiting-list ownership are specified
+in [PRIVATE-HELD-READS.md](PRIVATE-HELD-READS.md). This explicitly changes read
+ordering from global quiescence to a complete pinned snapshot blocked by exact
+pre-existing executions. Publication/recovery readiness and execution hold
+retirement retain their existing rules. A newer execution never becomes
+qualified by being excluded from an earlier read's blocker set.
+
 True loss of every coherence channel while business SQL continues is not
 resolved by this wire. A local journal/outbox alone does not notify native HITs;
 that gap remains explicitly unqualified until a real channel/order is proven.

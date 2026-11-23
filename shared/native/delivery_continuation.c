@@ -95,10 +95,15 @@ VCL_STRING vmod_guest_issuer_authorization(VRT_CTX, VCL_STRING credential, VCL_S
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY,
-    D_FINALIZE_QUEUED, D_FINALIZE, D_FINALIZE_RETURN, D_SOURCE_PERSONAL_QUEUED, D_FAILED };
+    D_FINALIZE_QUEUED, D_FINALIZE, D_FINALIZE_RETURN, D_SOURCE_PERSONAL_QUEUED,
+    D_HELD_QUEUED, D_HELD_LOOKUP, D_HELD_RETURN, D_HELD_RESUME, D_FAILED };
 enum public_source_stage { SOURCE_NONE, SOURCE_RESOLVER, SOURCE_CAPTURE, SOURCE_PERSONAL, SOURCE_COMPLETE };
+enum reuse_lookup_result { REUSE_PLAN_MISS, REUSE_PLAN_HIT, REUSE_PLAN_HELD };
 struct delivery_reuse_plan;
+struct delivery_held_wait;
+struct reuse_scope;
 static void delivery_reuse_release(VRT_CTX, struct delivery_reuse_plan *);
+static void delivery_held_fini(VRT_CTX, struct continuation *);
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
@@ -152,6 +157,12 @@ struct continuation {
     char *reuse_finalize_header, *reuse_metadata_uri;
     unsigned reuse_final_restart, reuse_done, reuse_failed, reuse_fetched;
     unsigned reuse_fast;
+    /* A pinned read cut is request-local ordering, not a scope CLEAN grant. */
+    uint64_t reuse_execution_cut;
+    unsigned reuse_cut_active, reuse_cut_provisional, held_restart, held_result;
+    char held_key[65], held_uri[sizeof("/__ultracache-native/held-v1/")+64];
+    struct objcore *held_parent, *held_metadata;
+    struct delivery_held_wait *held_wait;
     char reuse_discovery_revision[65];
     struct delivery_reuse_record *reuse_record;
     struct fields *public_headers;
@@ -170,6 +181,12 @@ static int delivery_reuse_schedule(VRT_CTX, struct vmod_priv *, struct continuat
 static int delivery_reuse_recv(VRT_CTX, struct continuation *);
 static int delivery_reuse_finish(VRT_CTX, struct continuation *);
 static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *, struct continuation *);
+static int delivery_held_recv(VRT_CTX, struct continuation *);
+static int delivery_held_finish(VRT_CTX, struct vmod_priv *, struct continuation *);
+#ifdef UC_NATIVE_PRIVATE_REUSE
+static int delivery_held_schedule(VRT_CTX, struct continuation *, struct reuse_scope *);
+static void delivery_held_drop(VRT_CTX, struct continuation *);
+#endif
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -227,6 +244,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     struct continuation *d = value;
     unsigned i;
     /* The table lock excludes an aborting backend filter before freeing d. */
+    delivery_held_fini(ctx,d);
     close_owner(&d->association);
     delivery_reuse_release(ctx,d->reuse_plan);
     delivery_reuse_candidate_free(d->reuse_candidate); free(d->reuse_scope);
@@ -601,6 +619,8 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
     const char *url;
     unsigned i;
     if (!d) return 0;
+    if (!ctx->req->esi_level && (d->phase == D_HELD_QUEUED || d->phase == D_HELD_RETURN))
+        return delivery_held_recv(ctx,d);
     if (!ctx->req->esi_level && d->phase == D_SOURCE_PERSONAL_QUEUED &&
         ctx->req->restarts == d->restart+1) {
         if (!delivery_restore(ctx,d)) return -1;
@@ -685,7 +705,9 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
     url = ctx->http_req->hd[HTTP_HDR_URL].b;
     method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     pthread_mutex_lock(&lock);
-    phase = (d->phase == D_RESELECT_QUEUED && d->reselect_attempted && ctx->req->restarts == d->restart+2) ||
+    phase = ((d->phase == D_HELD_QUEUED || d->phase == D_HELD_RETURN) &&
+            ctx->req->restarts == d->held_restart) ||
+        (d->phase == D_RESELECT_QUEUED && d->reselect_attempted && ctx->req->restarts == d->restart+2) ||
         (d->phase == D_SOURCE_PERSONAL_QUEUED && ctx->req->restarts == d->restart+1) ||
         (d->phase == D_QUEUED && ctx->req->restarts == d->restart+1) ||
         (d->phase == D_RETURN && ctx->req->restarts == d->restart+(d->selection_entry ? 1 : 2)) ||
@@ -694,7 +716,8 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
         (d->phase == D_RECOVERY_QUEUED && ctx->req->restarts == d->recovery_restart);
     valid = phase && !d->failed && method && !strcmp(method,"GET") &&
         d->site && !strcmp(d->site,site) && host && !strcmp(d->host,host) &&
-        url && (!strcmp(d->url,url) || (d->phase == D_FINALIZE_RETURN &&
+        url && (!strcmp(d->url,url) || (d->phase == D_HELD_RETURN && !strcmp(d->held_uri,url)) ||
+            (d->phase == D_FINALIZE_RETURN &&
             d->reuse_metadata_uri && !strcmp(d->reuse_metadata_uri,url)));
     pthread_mutex_unlock(&lock);
     return valid;
@@ -1015,10 +1038,11 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     struct continuation *d = priv->priv;
     unsigned i;
     if (ctx->req->esi_level > 0) return 0;
+    if (d && d->phase == D_HELD_RESUME) return delivery_held_finish(ctx,priv,d);
     if (d && d->phase == D_FINALIZE) return delivery_reuse_finish(ctx,d);
     if (!d) {
         struct handoff *entry;
-        int cookie_delivery;
+        int cookie_delivery, reuse_result;
         if (!begin || !target || !*target) return 0;
         cookie_delivery = delivery_cookie_marker(ctx->http_resp);
         if (cookie_delivery < 0 || !delivery_relative(target) || occurrences < 0 ||
@@ -1052,7 +1076,9 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->cookie_delivery = (unsigned)cookie_delivery;
         d->parent = ctx->req->objcore;
         (void)delivery_reuse_capture_parent(ctx,d);
-        if (delivery_reuse_try_hit(ctx,priv,d)) {
+        reuse_result = delivery_reuse_try_hit(ctx,priv,d);
+        if (reuse_result == REUSE_PLAN_HELD) return 1;
+        if (reuse_result == REUSE_PLAN_HIT) {
             d->phase = D_DELIVERED; d->outcome = 1; return 0;
         }
         d->phase = D_QUEUED;
@@ -1248,3 +1274,4 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 #include "mutation_backend.c"
 #include "execution_drain.c"
 #include "delivery_reuse_runtime.c"
+#include "delivery_held.c"
