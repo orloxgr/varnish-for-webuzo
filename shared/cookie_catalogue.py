@@ -86,6 +86,20 @@ def cookie_pattern(catalogue, consumer):
     return '(^|;[[:blank:]]*)(' + '|'.join(names) + ')='
 
 
+def native_source_identity(root=None):
+    """Generation identity for every bundled native source and engine receipt."""
+    root = Path(root) if root is not None else Path(__file__).parent
+    paths = [root/'native_build.py'] + [path for path in (root/'native').rglob('*')
+        if path.is_file() and path.suffix in ('.c', '.h', '.vcc', '.json')]
+    digest = hashlib.sha256()
+    for path in sorted(paths, key=lambda path: path.relative_to(root).as_posix()):
+        name = path.relative_to(root).as_posix().encode('utf-8')
+        content = path.read_bytes()
+        digest.update(len(name).to_bytes(8, 'big')); digest.update(name)
+        digest.update(len(content).to_bytes(8, 'big')); digest.update(content)
+    return digest.hexdigest()
+
+
 def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rules='', delivery_authorization='',selection_rules=''):
     """Expand only reviewed names; output remains a standalone native VCL."""
     validate(catalogue)
@@ -104,9 +118,4 @@ def render_policy(source, catalogue, admin_rules='', response_rules='', cms_rule
     rendered = rendered.replace('@@CMS_NORMALIZATION@@', cms_routes.normalization_vcl())
     # Native-helper-only updates must also activate a newly loaded VCL/VMOD.
     # This contains source identity, never visitor state or an engine ABI guess.
-    root=Path(__file__).parent
-    identity=hashlib.sha256(b''.join((root/name).read_bytes() for name in
-        ('native/cookie_handoff.c','native/cookie_handoff.vcc','native/delivery_continuation.c','native/delivery_snapshot_backend.c',
-         'native/delivery_envelope.c','native/delivery_envelope.h','native/delivery_selection.c',
-         'native/public_selection_registry.c','native/selection_digest.c','native_build.py'))).hexdigest()
-    return '# Native cookie handoff sources: '+identity+'\n'+rendered
+    return '# Native cookie handoff sources: '+native_source_identity()+'\n'+rendered
