@@ -1,5 +1,6 @@
 """Release metadata must agree before any ZIP is created or replaced."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -15,6 +16,32 @@ PLUGIN = 'varnish-for-webuzo'
 
 
 class PackageVersions(unittest.TestCase):
+    def test_windows_checkout_native_header_receipts_survive_the_actual_zip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);self.fixture(root)
+            records=list((ROOT/'shared/native/engine').glob('*/engine.json'))
+            self.assertTrue(records)
+            for source in records:
+                target=root/source.parent.relative_to(ROOT);target.mkdir(parents=True)
+                for original in source.parent.iterdir():
+                    if original.is_file():
+                        raw=original.read_bytes().replace(b'\r\n',b'\n')
+                        (target/original.name).write_bytes(raw.replace(b'\n',b'\r\n'))
+            with patch.object(builder,'ROOT',root):archive=builder.build()
+            with zipfile.ZipFile(archive) as bundle:
+                for source in records:
+                    prefix=PLUGIN+'/'+source.parent.relative_to(ROOT).as_posix()+'/'
+                    record=json.loads(bundle.read(prefix+'engine.json'))
+                    expected={'cache_objhead.h':record['objheadSha256'],
+                        'cache_pool.h':record['poolHeader']['sha256'],
+                        'VSC_main.h':record['counterHeader']['sha256'],
+                        'cache_transport.h':record['transportHeader']['sha256']}
+                    for name,digest in expected.items():
+                        with self.subTest(header=name):
+                            raw=bundle.read(prefix+name)
+                            self.assertNotIn(b'\r\n',raw)
+                            self.assertEqual(hashlib.sha256(raw).hexdigest(),digest)
+
     def test_packaged_text_has_git_line_endings_and_binary_assets_are_unchanged(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);self.fixture(root)

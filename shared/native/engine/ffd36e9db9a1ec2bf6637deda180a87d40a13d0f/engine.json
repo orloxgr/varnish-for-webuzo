@@ -14,7 +14,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/varnish/varnish/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f/bin/vinyld/cache/cache_pool.h"
   },
   "counterHeader": {
-    "sha256": "d0c5d7549139cd7a1eac83f0908c143ca55e0372263aa39f87db0f3fb0527f38",
+    "sha256": "1e875f4479e5cc10820686bbfc00277590a5ed05a1850cc5fe593b52d5753158",
     "generatedBy": "vsctool.py -h VSC_main.vsc",
     "sourceVscSha256": "c958384b6cc3ee12b4a9d6375615bbe0beaa0932799d8205ae664a758cba0b5b",
     "generatorSha256": "a3cb3172158eda97ddff28fa1074d92f20b5b464085e238b2defde4e1a63fffa",
