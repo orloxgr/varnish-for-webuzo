@@ -1,7 +1,7 @@
 """Owned actual-native backend actors; mock signed producer, no SQL drain claim.
 
-Only these isolated VCL transforms call the new backend functions. Production
-VCL has no caller/capability until identity maps/recovery/admission qualify.
+Isolated transforms narrow the normal generated backend boundary for focused
+authority actors. The installed adapter uses the original dynamic boundary.
 """
 import base64
 import hashlib
@@ -23,18 +23,14 @@ TRANSACTION='9'*64
 
 
 def actor_hooks(source):
-    bind='cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);'
-    source=source.replace(bind,bind+'''
-    if (bereq.url ~ "/__owned_mutation") {
-        call scp_delivery_authorization;
-        if (cookie_handoff.mutation_backend_start(bereq.http.X-SCP-Site,
-            bereq.http.X-SCP-Selection-Native-Policy,bereq.http.X-UltraCache-Delivery-Authorization)) {}
-        unset bereq.http.X-UltraCache-Delivery-Authorization;
-    }
-''',1)
-    return source.replace('sub scp_backend_response {','''sub scp_backend_response {
-    if (cookie_handoff.mutation_backend_response()) { set beresp.http.X-Actor-Receipt-Verified = "1"; }
-''',1)
+    # Narrow the NORMAL generated call for isolated authority actors. No test
+    # function/caller is injected; installed routing uses the original boundary.
+    call='call scp_mutation_backend_fetch;'
+    if source.count(call)!=1:raise AssertionError('Normal mutation boundary missing or duplicated')
+    source=source.replace(call,'if (bereq.url ~ "/__owned_mutation") { '+call+' }',1)
+    response='if (cookie_handoff.mutation_backend_response()) {}'
+    if source.count(response)!=1:raise AssertionError('Normal receipt boundary missing or duplicated')
+    return source.replace(response,'if (cookie_handoff.mutation_backend_response()) { set beresp.http.X-Actor-Receipt-Verified = "1"; }',1)
 
 
 def post(get,path='/__owned_mutation',extra=None):

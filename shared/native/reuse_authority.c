@@ -63,7 +63,7 @@ struct reuse_scope {
 static struct reuse_scope *reuse_scopes;
 static const char *reuse_single(const struct http *, hdr_t);
 static void reuse_identity_free(struct reuse_scope *);
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 static int reuse_identity_install(struct reuse_scope *, const struct delivery_reuse_record *);
 #endif
 static void reuse_identity_prearm(struct reuse_scope *, struct mutation_execution *, const char *);
@@ -242,7 +242,7 @@ VCL_BOOL vmod_reuse_register(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRI
     int valid = 0;
     (void)ctx;
     if (!coverage_policy) coverage_policy = "";
-#ifndef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifndef UC_NATIVE_PRIVATE_REUSE
     (void)site; (void)host; (void)scope; (void)native_policy; (void)wordpress_policy; (void)policy; (void)enabled;
     return 0;
 #endif
@@ -301,7 +301,7 @@ static const char *reuse_single(const struct http *http, hdr_t header) {
     const char *value;
     return http_CountHdr(http,header) == 1 && http_GetHdr(http,header,&value) ? value : NULL;
 }
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 static struct reuse_scope *delivery_reuse_current_scope(const struct continuation *d) {
     struct reuse_scope *scope;
     const struct public_declaration *declaration;
@@ -317,7 +317,7 @@ static struct reuse_scope *delivery_reuse_current_scope(const struct continuatio
 }
 #endif
 static void delivery_reuse_candidate_capture(VRT_CTX, struct continuation *d, const char *wire, size_t length) {
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
     struct delivery_reuse_candidate *candidate = NULL;
     const struct delivery_reuse_descriptor *descriptor;
     const struct delivery_fragment *fragment;
@@ -360,7 +360,7 @@ done:
     (void)ctx; (void)d; (void)wire; (void)length;
 #endif
 }
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 static char *delivery_reuse_make_finalize(VRT_CTX, struct continuation *d) {
     struct delivery_reuse_finalize_context context;
     struct reuse_scope *scope;
@@ -404,7 +404,7 @@ done:
  }
 #endif
 VCL_STRING vmod_delivery_reuse_finalize_context(VRT_CTX, struct vmod_priv *priv) {
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
     char *header = delivery_reuse_make_finalize(ctx,priv->priv);
     const char *out = header ? WS_Copy(ctx->ws,header,-1) : NULL;
     delivery_mutation_header_free(header); return out;
@@ -547,7 +547,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     expected_scope = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Scope-Revision"));
     expected = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Expected-Revision"));
     pthread_mutex_lock(&lock);
-#ifndef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifndef UC_NATIVE_PRIVATE_REUSE
     status = 501; reason = "reuse-not-enabled"; goto reply;
 #endif
     if (!operation || !site || !*site || ctx->req->esi_level ||

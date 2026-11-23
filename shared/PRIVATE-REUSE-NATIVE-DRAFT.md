@@ -1,9 +1,9 @@
 # Multi-fragment native resolution candidate
 
-Not frozen, negotiated, enabled in production VCL or released. This is the
-consumer-side lifecycle stage of cached private composition, not a completed
-zero-application delivery feature. Application authority remains a separate
-producer/native protocol and must be qualified before enabling any fast path.
+The sections below record the earlier staged resolver design and its isolated
+qualification. The current normal-build integration is described in
+`docs/ENGINE-INTERFACE.md`. It is local work, not a released feature; actual
+application/drain acceptance remains separate from native mock-producer actors.
 
 ## Existing ownership and storage
 
@@ -13,11 +13,11 @@ by that same top request and released by the existing `delivery_fini`. It does
 not use the fixed-capacity engine request object stash, add a global private
 body cache, create a helper service or change the public parent object pointer.
 
-The current entry requires an existing ready continuation whose complete
+The original first-stage entry required an existing ready continuation whose complete
 rendered descriptor claims have already passed the existing authenticated
 envelope parser. It therefore STILL requires prepare. Later admission/context
-work will supply authenticated metadata before prepare; that does not exist in
-this stage. These experimental methods do not advertise reuse negotiation.
+work supplied authenticated metadata before prepare in subsequent stages. These
+first-stage experimental methods alone do not advertise reuse negotiation.
 
 The agreed producer input-declaration direction is
 `recipe.inputs={"cookieNames":[...],"cookiePrefixes":[...],"phpMaxInputVars":1000}`,
@@ -57,13 +57,13 @@ recheck/linearization and durable mutation failure/restart protocol are OPEN.
 ## Explicit engine-source dependency
 
 The installed development package does not provide the HSH declarations used
-by this experiment. An exported executable symbol is not a supported SDK
-contract. Default builds leave the implementation OFF and the methods report
-unavailable; generated production VCL has no caller in either build mode.
-
-For an isolated qualified build, explicitly supply the absolute directory in
-`SCP_EXPERIMENTAL_REUSE_ENGINE_SOURCE`. That directory contains the unmodified
-matching official engine-source `cache_objhead.h` and an `engine.json` receipt:
+by this implementation. An exported executable symbol alone does not prove a
+compatible interface. The normal addon build selects the bundled verified upstream
+interface/receipt matching the actual installed engine ABI and exported layout.
+No manual flag is required. Unknown or patched engine interfaces retain the
+existing producer fallback without advertising an unsupported private-reuse
+capability. See `docs/ENGINE-INTERFACE.md` for provenance and license. The generated
+UltraCache backend path uses the existing VMOD mutation owner; Basic is unchanged.
 
 ```json
 {

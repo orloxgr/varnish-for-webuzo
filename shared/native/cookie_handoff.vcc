@@ -42,14 +42,14 @@ Number of live handoffs, for lifecycle verification (never cookie contents).
 $Function BOOL mutation_backend_start(PRIV_TASK, STRING site, STRING native_policy, STRING credential)
 $Restrict vcl_backend_fetch
 
-Experimental isolated actors only; not called by production VCL or advertised.
+Called at the normal UltraCache dynamic backend boundary after negotiation.
 Own a request-bound revoke-only receipt context on the existing backend task.
 Unknown identity provenance unbinds only its registered application scope.
 
 $Function BOOL mutation_backend_response(PRIV_TASK)
 $Restrict vcl_backend_response
 
-Experimental isolated actors only. Validate a receipt against this backend
+Validate a receipt against this exact backend
 execution, revoke authority before browser headers, strip its transport fields.
 Never grant CLEAN or change application status, body or Set-Cookie on failure.
 

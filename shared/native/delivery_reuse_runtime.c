@@ -3,7 +3,7 @@
  * private namespace. Optional failure never changes the original application
  * response or repeats its provider execution.
  */
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 static const hdr_t reuse_metadata_marker = HDR("X-SCP-Reuse-Metadata");
 static const hdr_t reuse_context_header = HDR("X-UltraCache-Delivery-Reuse-Context");
 static unsigned delivery_reuse_discovery_hash(const char *publication, const char *representation) {
@@ -276,7 +276,7 @@ VCL_BOOL vmod_delivery_reuse_pending(VRT_CTX, struct vmod_priv *priv) {
     return !ctx->req->esi_level && d && d->phase == D_FINALIZE;
 }
 VCL_BOOL vmod_delivery_reuse_backend(VRT_CTX, struct vmod_priv *priv) {
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
     struct task *task = priv->priv;
     struct handoff *entry;
     struct continuation *d;
@@ -308,7 +308,7 @@ VCL_BOOL vmod_delivery_reuse_backend(VRT_CTX, struct vmod_priv *priv) {
 #endif
 }
 VCL_BOOL vmod_delivery_reuse_response(VRT_CTX, struct vmod_priv *priv) {
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
     struct task *task = priv->priv;
     struct handoff *entry;
     struct continuation *d;

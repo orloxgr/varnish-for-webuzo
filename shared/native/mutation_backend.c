@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Existing backend PRIV_TASK/registry ownership. No default VCL caller, helper,
- * public credential, body store or clean grant. Recovery of retained unknown
+ * Existing backend PRIV_TASK/registry ownership. No helper, public credential,
+ * body store or clean grant. Recovery of retained unknown
  * execution markers and trusted identity mapping are separate integration gates.
  */
 static const hdr_t h_mutation_context = HDR("X-UltraCache-Mutation-Context");
@@ -73,7 +73,7 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     http_Unset(ctx->http_bereq,h_mutation_context);
     http_Unset(ctx->http_bereq,h_mutation_receipt);
     http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Reuse-Candidate-Version"));
-#ifndef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifndef UC_NATIVE_PRIVATE_REUSE
     (void)priv; (void)site; (void)native_policy; (void)credential;
     return 0;
 #endif

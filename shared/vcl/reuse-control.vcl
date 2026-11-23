@@ -42,3 +42,16 @@ sub scp_reuse_control {
         return (synth(std.integer(req.http.X-SCP-Reuse-Control-Status,503),"Private authority control"));
     }
 }
+
+# Called from the normal generated backend path, never from a URL allowlist.
+# Real public static files are dispatched by the adapter's existing Nginx file
+# handler before Varnish. Anything reaching this dynamic application boundary
+# can execute a provider; MIME/suffix is not evidence of a read-only operation.
+sub scp_mutation_backend_fetch {
+    if (bereq.http.X-SCP-Profile == "ultracache") {
+        call scp_delivery_authorization;
+        if (cookie_handoff.mutation_backend_start(bereq.http.X-SCP-Site,
+            bereq.http.X-SCP-Selection-Native-Policy,bereq.http.X-UltraCache-Delivery-Authorization)) {}
+        unset bereq.http.X-UltraCache-Delivery-Authorization;
+    }
+}

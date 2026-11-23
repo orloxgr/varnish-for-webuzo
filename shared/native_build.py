@@ -1,4 +1,4 @@
-"""Build the handoff against the installed native engine, never a bundled ABI."""
+"""Build against the installed engine and its verified upstream interface."""
 import fcntl
 import hashlib
 import json
@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 
 
+ENGINE_INTERFACES=Path(__file__).with_name('native')/'engine'
+
 def command(*args, cwd=None):
     result = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
     if result.returncode:
@@ -16,30 +18,34 @@ def command(*args, cwd=None):
     return result.stdout.strip()
 
 
-def experimental_reuse_source(include):
-    """Explicit internal-engine dependency for the isolated resolver candidate.
+def native_reuse_source(include):
+    """Automatically select a proven upstream interface for the installed ABI.
 
-    No network download or guessed prototypes. A source receipt must match the
-    installed strict ABI AND actual installed cache layouts. Default is off.
+    No user flag, guessed prototypes or build-time network fetch. Unknown engine
+    interfaces retain the existing compatible producer path. A bundled interface
+    that has been altered is an install error, never silently trusted.
     """
-    value = os.environ.get('SCP_EXPERIMENTAL_REUSE_ENGINE_SOURCE')
-    if not value:
-        return None
-    root = Path(value)
-    if not root.is_absolute():
-        raise RuntimeError('Experimental reuse needs an absolute engine source receipt directory')
-    record = json.loads((root/'engine.json').read_text())
-    revision = record.get('revision','')
-    if not re.fullmatch('[0-9a-f]{40}',revision) or revision not in (include/'vmod_abi.h').read_text():
-        raise RuntimeError('Experimental reuse source revision differs from the installed engine ABI')
-    header = (root/'cache_objhead.h').read_bytes()
-    if hashlib.sha256(header).hexdigest() != record.get('objheadSha256'):
-        raise RuntimeError('Experimental reuse private header differs from its source receipt')
-    for name in ('cache/cache.h','cache/cache_int.h'):
-        expected = record.get('installedHeaders',{}).get(name)
-        if hashlib.sha256((include/name).read_bytes()).hexdigest() != expected:
-            raise RuntimeError('Experimental reuse installed layout differs from its source receipt: '+name)
-    return header,record
+    abi=(include/'vmod_abi.h').read_text()
+    declaration=re.search(r'^\s*#define\s+VMOD_ABI_Version\s+"([^"\r\n]+)"\s*$',abi,re.M)
+    installed=re.search(r'(?:^| )([0-9a-f]{40})$',declaration[1]) if declaration else None
+    if not installed:return None
+    root=ENGINE_INTERFACES
+    for receipt in sorted(root.glob('*/engine.json')):
+        record=json.loads(receipt.read_text())
+        revision=record.get('revision','')
+        if not re.fullmatch('[0-9a-f]{40}',revision) or receipt.parent.name!=revision:
+            raise RuntimeError('Invalid bundled native engine source receipt')
+        header=(receipt.parent/'cache_objhead.h').read_bytes()
+        if hashlib.sha256(header).hexdigest()!=record.get('objheadSha256'):
+            raise RuntimeError('Bundled native engine interface differs from verified source')
+        if revision!=installed[1]:continue
+        layouts=record.get('installedHeaders',{})
+        if set(layouts)!={'cache/cache.h','cache/cache_int.h'}:
+            raise RuntimeError('Incomplete bundled native engine layout receipt')
+        if any(hashlib.sha256((include/name).read_bytes()).hexdigest()!=expected for name,expected in layouts.items()):
+            continue
+        return header,record
+    return None
 
 
 def build():
@@ -62,10 +68,10 @@ def build():
     for header in ('cache/cache_int.h','cache/cache.h','cache/cache_filter.h','vrt.h','vrt_obj.h'):
         inputs['installed:'+header] = (include/header).read_bytes()
     inputs['builder'] = Path(__file__).read_bytes()
-    experimental = experimental_reuse_source(include)
-    if experimental:
-        inputs['engine-private-header'] = experimental[0]
-        inputs['engine-private-receipt'] = json.dumps(experimental[1],sort_keys=True).encode()
+    private_reuse = native_reuse_source(include)
+    if private_reuse:
+        inputs['engine-private-header'] = private_reuse[0]
+        inputs['engine-private-receipt'] = json.dumps(private_reuse[1],sort_keys=True).encode()
     signature = hashlib.sha256(b'cookie-handoff-build-1\0'+b''.join(inputs.values())).hexdigest()
     library = target/'libvmod_cookie_handoff.so'
     receipt = target/'cookie_handoff.build.json'
@@ -94,17 +100,17 @@ def build():
             (folder/'cookie_handoff.vcc').write_text(vcc,encoding='utf-8')
             (folder/'vmod_vcs_version.txt').write_text(signature+'\n')
             (folder/'config.h').write_text('#define PACKAGE_VERSION "'+signature+'"\n'+
-                ('#define UC_EXPERIMENTAL_PRIVATE_REUSE 1\n' if experimental else ''))
-            if experimental:
-                (folder/'uc_engine_objhead.h').write_bytes(experimental[0])
+                ('#define UC_NATIVE_PRIVATE_REUSE 1\n' if private_reuse else ''))
+            if private_reuse:
+                (folder/'uc_engine_objhead.h').write_bytes(private_reuse[0])
             command('python3',tool,'cookie_handoff.vcc',cwd=folder)
             command('cc','-Wall','-Wextra','-Werror','-fPIC','-shared','-pthread',
                     '-I'+str(include),'-I.','cookie_handoff.c','delivery_envelope.c','vcc_if.c',
                     '-o','libvmod_cookie_handoff.so','-lm',cwd=folder)
             output=folder/'libvmod_cookie_handoff.so'
             metadata={'signature':signature,'library':hashlib.sha256(output.read_bytes()).hexdigest()}
-            if experimental:
-                metadata['experimentalReuseEngine']=experimental[1]
+            if private_reuse:
+                metadata['privateReuseEngine']=private_reuse[1]
             output.chmod(0o644)
             os.replace(output,library)
             record=folder/'receipt.json';record.write_text(json.dumps(metadata)+'\n');record.chmod(0o644)

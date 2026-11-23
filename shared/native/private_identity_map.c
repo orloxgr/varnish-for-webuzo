@@ -35,7 +35,7 @@ static void reuse_identity_free(struct reuse_scope *scope) {
         scope->identity_schemas = schema->next; reuse_identity_schema_free(schema);
     }
 }
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 static struct delivery_reuse_inputs *reuse_identity_inputs_copy(const struct delivery_reuse_inputs *source) {
     struct delivery_reuse_inputs *copy = calloc(1,sizeof(*copy));
     size_t i;
@@ -82,7 +82,7 @@ static int reuse_identity_same_tags(const struct reuse_identity_entry *entry, co
     return 1;
 }
 #endif
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 static int reuse_identity_install(struct reuse_scope *scope, const struct delivery_reuse_record *record) {
     const struct delivery_reuse_admitted_fragment *fragment;
     for (fragment = record->fragments; fragment; fragment = fragment->next) {
@@ -133,7 +133,7 @@ static int reuse_identity_install(struct reuse_scope *scope, const struct delive
 }
 #endif
 static void reuse_identity_prearm(struct reuse_scope *scope, struct mutation_execution *execution, const char *cookie) {
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
     struct reuse_identity_schema *schema;
     struct delivery_reuse_context context = {scope->site,scope->host,scope->scope,public_registry_epoch,
         scope->native_policy,scope->wordpress_policy,scope->policy,NULL,NULL,NULL};

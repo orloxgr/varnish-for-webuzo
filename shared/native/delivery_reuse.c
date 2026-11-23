@@ -3,7 +3,7 @@
  * No admission/authority, cookie-policy change, producer bypass or VCL caller.
  * Engine internals are enabled only by an explicit source/ABI build receipt.
  */
-#ifdef UC_EXPERIMENTAL_PRIVATE_REUSE
+#ifdef UC_NATIVE_PRIVATE_REUSE
 #include "uc_engine_objhead.h"
 #include "vsha256.h"
 #include "vtim.h"

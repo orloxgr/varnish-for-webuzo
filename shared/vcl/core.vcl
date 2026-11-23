@@ -195,6 +195,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-UltraCache-Private-Coverage-Policy;
     unset bereq.http.X-UltraCache-Private-Coverage-Version;
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
+    call scp_mutation_backend_fetch;
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-UltraCache-Guest-Issuer-Version;
     unset bereq.http.X-UltraCache-Guest-Issuer-Canonical-URL;
@@ -306,6 +307,7 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Warm-Projection-Supported;
 }
 sub scp_backend_response {
+    if (cookie_handoff.mutation_backend_response()) {}
     unset beresp.http.X-UltraCache-Guest-Issuer-Version;
     unset beresp.http.X-UltraCache-Guest-Issuer-Canonical-URL;
     unset beresp.http.X-UltraCache-Guest-Issuer-Authorization;

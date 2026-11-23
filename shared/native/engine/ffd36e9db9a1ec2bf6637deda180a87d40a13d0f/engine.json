@@ -1,0 +1,10 @@
+{
+  "installedHeaders": {
+    "cache/cache.h": "1494164fdf99ada25d5f3bb6f5818ad8bfa05a372779bd458020f44c9e9dc5d4",
+    "cache/cache_int.h": "7b047c68e3aa5b23880e381acc518c223224c4f246eab6d1c78d0467c50c7d7f"
+  },
+  "objheadSha256": "a203692652a438a161bd821de424327b2697e9f18d0295cdbfe2fa447e51fa14",
+  "revision": "ffd36e9db9a1ec2bf6637deda180a87d40a13d0f",
+  "sourceUrl": "https://raw.githubusercontent.com/varnish/varnish/ffd36e9db9a1ec2bf6637deda180a87d40a13d0f/bin/vinyld/cache/cache_objhead.h",
+  "upstreamGitBlob": "2c617e88b4b4e736d51c6967239471d5dc067f8f"
+}
