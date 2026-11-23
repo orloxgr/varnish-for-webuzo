@@ -493,3 +493,4 @@ int delivery_cookie_envelope_parse(const char *body, size_t length,
 }
 
 #include "delivery_selection.c"
+#include "delivery_reuse_inputs.c"

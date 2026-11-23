@@ -52,7 +52,8 @@ def build():
     inputs = {name:(source/name).read_bytes() for name in
               ('cookie_handoff.c','cookie_handoff.vcc','delivery_continuation.c',
                'delivery_envelope.c','delivery_envelope.h','delivery_selection.c',
-               'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c')}
+               'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c',
+               'delivery_reuse_inputs.c','delivery_reuse_inputs.h')}
     inputs['abi'] = (include/'vmod_abi.h').read_bytes()
     # The virtual fetch uses the installed internal http_conn layout. Strict
     # VRT ABI alone is insufficient as a build receipt for internal headers.
@@ -77,7 +78,8 @@ def build():
             (folder/'cookie_handoff.c').write_bytes(inputs['cookie_handoff.c'])
             (folder/'delivery_continuation.c').write_bytes(inputs['delivery_continuation.c'])
             for name in ('delivery_envelope.c','delivery_envelope.h','delivery_selection.c',
-                         'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c'):
+                         'public_selection_registry.c','selection_digest.c','delivery_snapshot_backend.c','delivery_reuse.c',
+                         'delivery_reuse_inputs.c','delivery_reuse_inputs.h'):
                 (folder/name).write_bytes(inputs[name])
             # vmodtool hashes directives, not their documentation. Put the
             # source/ABI identity in $Module so a C-only update gets a new DSO

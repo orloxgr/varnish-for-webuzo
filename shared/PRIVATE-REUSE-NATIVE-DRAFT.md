@@ -26,8 +26,9 @@ It is not an observed-cookie-name list. Proposed binding groups every matching
 wire occurrence by normalized PHP flat name, sorts groups by bytes and preserves
 occurrence order inside a group. Ambiguous/unqualified matching syntax uses
 ordinary prepare without reuse and does not become a Private cookie policy.
-Exact frame/MAC vectors are separate from this native object resolver and are
-not implemented or claimed qualified here.
+The portable projection/metadata/MAC owner is specified separately in
+`PRIVATE-REUSE-INPUTS-DRAFT.md`. It now matches actual PHP wire/MAC vectors; this
+does not add admission or a pre-prepare entry to the native object resolver.
 
 The resolver hashes the actual existing private namespace: domain, native site,
 host, exact fragment URI and authenticated cache key. It respects the actual
