@@ -148,7 +148,10 @@ grants a tag generation; ordinary fills/context/fragment lookup never do.
 
 Same completed tag/transaction/lease. The producer calls this only AFTER its
 native ACK has been durably recorded in the existing SQL outbox owner. It
-removes completed receipt metadata without an arbitrary timeout. Active records
+rotates the tag CAS revision before removing completed receipt metadata, without
+an arbitrary timeout. Current clean state/content generation remain intact. This
+also fences a completed-begin retry reobserved after a newer publication; delayed
+replay cannot reopen the writer after its record is gone. Active records
 cannot be discarded. The backend receipt stage must additionally defer removal
 while a native execution can still return the same transaction receipt; it is
 not yet wired here. Unknown old commit remains non-authoritative after cleanup.

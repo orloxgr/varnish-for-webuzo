@@ -347,6 +347,10 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (!strcmp(operation,"private-mutation-ack")) {
             struct reuse_transaction **position = &tag->transactions;
             if (transaction->active) { status = 409; reason = "mutation-active"; goto reply; }
+            /* Invalidate even a completed-begin retry frame observed after a
+             * later publication, before forgetting its idempotency record.
+             * Content generation/clean state stay intact: this is CAS fencing. */
+            if (!reuse_random_id(tag->revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
             while (*position && *position != transaction) position = &(*position)->next;
             *position = transaction->next; free(transaction); transaction = NULL;
             status = 200; reason = "mutation-acknowledged"; goto reply;

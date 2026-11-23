@@ -109,6 +109,23 @@ class NativeReuseAuthority(unittest.TestCase):
             self.assertNotEqual(current['revision'],done['revision'])
             self.assertEqual(self.publish(get,done,status=409)['reason'],'revision-changed')
 
+    def test_completed_begin_reobserved_after_publish_cannot_reopen_after_ack_gc(self):
+        with proxy('ultracache',lambda p,h:('ordinary',[])) as get:
+            self.register(get);context=self.ready(get)
+            begun=self.begin(get,context,'late-completed-begin');done=self.commit(get,begun)
+            fresh=self.publish(get,self.observe(get),'e'*64)
+            retry=self.call(get,'private-mutation-begin',fresh,extra={
+                'X-UltraCache-Private-Transaction':done['transaction']})
+            self.assertFalse(retry['active']);self.assertEqual(retry['revision'],fresh['revision'])
+            acknowledged=self.call(get,'private-mutation-ack',fresh,extra={
+                'X-UltraCache-Private-Transaction':done['transaction'],'X-UltraCache-Private-Lease':done['lease']})
+            self.assertNotEqual(acknowledged['revision'],retry['revision'])
+            self.assertEqual((acknowledged['state'],acknowledged['generation']),('clean','e'*64))
+            delayed=self.call(get,'private-mutation-begin',retry,expected_status=409,extra={
+                'X-UltraCache-Private-Transaction':done['transaction']})
+            self.assertEqual(delayed['reason'],'revision-changed')
+            self.assertEqual(self.observe(get)['remainingMutations'],0)
+
     def test_scopes_isolate_identical_tags_and_bad_auth_never_reaches_operations(self):
         with proxy('ultracache',lambda p,h:('ordinary',[])) as get:
             self.register(get,'/shop/');self.register(get,'/blog/')
