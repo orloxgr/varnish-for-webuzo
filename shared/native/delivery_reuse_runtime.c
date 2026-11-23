@@ -100,6 +100,30 @@ static int delivery_reuse_recv(VRT_CTX, struct continuation *d) {
     if (!delivery_restore(ctx,d)) return -1;
     d->phase = D_READY; return 0;
 }
+/* Provider absolute deadlines and the native request's relative body grants
+ * are independent upper bounds. Never extend either, infer a clock offset or
+ * discard valid original work merely because their integer anchors differ. */
+static int delivery_reuse_bound_record(const struct continuation *d, struct delivery_reuse_record *record,
+    double deadline, int original) {
+    struct delivery_reuse_admitted_fragment *f;
+    if (!record || !isfinite(deadline) || deadline < 1.0 || deadline >= (double)UINT64_MAX) return 0;
+    for (f = record->fragments; f; f = f->next) {
+        double bound = deadline;
+        uint64_t until;
+        if (original) {
+            const struct delivery_fragment *body = delivery_fragment_named(d,f->url);
+            if (!body || !body->cache_key || strcmp(body->cache_key,f->cache_key) ||
+                !body->cache_tags || strcmp(body->cache_tags,f->cache_tags) || !body->cache_ttl) return 0;
+            bound = fmin(bound,delivery_fragment_deadline(d,body));
+        }
+        if (!isfinite(bound) || bound < 1.0) return 0;
+        until = (uint64_t)floor(bound);
+        if (f->body_valid_until > until) f->body_valid_until = until;
+        if (record->valid_until > f->body_valid_until) record->valid_until = f->body_valid_until;
+    }
+    if (record->valid_until > (uint64_t)floor(deadline)) record->valid_until = (uint64_t)floor(deadline);
+    return 1;
+}
 static int delivery_reuse_record_current(const struct continuation *d, const struct delivery_reuse_record *record,
     const struct reuse_scope *scope, int original) {
     const struct delivery_reuse_admitted_fragment *f;
@@ -158,7 +182,9 @@ static int delivery_reuse_finish(VRT_CTX, struct continuation *d) {
     }
     if (parsed) {
         pthread_mutex_lock(&lock);
-        if (delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),1)) {
+        if (delivery_reuse_bound_record(d,record,fmin(d->public_deadline,
+                ctx->req->objcore->t_origin+ctx->req->objcore->ttl),1) &&
+            delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),1)) {
             if (delivery_reuse_publish_discovery(d,delivery_reuse_current_scope(d),record)) {
                 (void)reuse_identity_install(delivery_reuse_current_scope(d),record);
                 delivery_reuse_record_free(d->reuse_record); d->reuse_record = record; record = NULL;
@@ -213,7 +239,8 @@ unlock:
     if (!wire.object || !HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker) ||
         strcmp(HTTP_GetHdrPack(ctx->req->wrk,wire.object,reuse_metadata_marker),"1") ||
         ObjIterate(ctx->req->wrk,wire.object,&wire,delivery_reuse_chunk,1) ||
-        !delivery_reuse_record_parse(wire.copy,wire.length,&record)) goto done;
+        !delivery_reuse_record_parse(wire.copy,wire.length,&record) ||
+        !delivery_reuse_bound_record(NULL,record,wire.object->t_origin+wire.object->ttl,0)) goto done;
     pthread_mutex_lock(&lock);
     valid = delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),0);
     pthread_mutex_unlock(&lock);
@@ -316,6 +343,8 @@ VCL_BOOL vmod_delivery_reuse_response(VRT_CTX, struct vmod_priv *priv) {
     const char *remaining, *type;
     char *end;
     unsigned long long ttl = 0;
+    double remaining_ttl = 0;
+    const struct delivery_fragment *fragment;
     int owned = 0, valid = 0;
     if (!task || !task->key) return 0;
     pthread_mutex_lock(&lock);
@@ -333,12 +362,20 @@ VCL_BOOL vmod_delivery_reuse_response(VRT_CTX, struct vmod_priv *priv) {
             type && !strcmp(type,"application/vnd.ultracache.reuse+json") &&
             !http_CountHdr(ctx->http_beresp,H_Set_Cookie) && !http_CountHdr(ctx->http_beresp,h_set_cookie2) &&
             !http_CountHdr(ctx->http_beresp,H_Content_Encoding) && d->public_deadline > ctx->now;
+        if (valid) {
+            remaining_ttl = fmin((double)ttl,d->public_deadline-ctx->now);
+            for (fragment = d->fragments; fragment; fragment = fragment->next) {
+                if (!fragment->cache_key || !fragment->cache_tags || !fragment->cache_ttl) { valid = 0; break; }
+                remaining_ttl = fmin(remaining_ttl,delivery_fragment_deadline(d,fragment)-ctx->now);
+            }
+            if (!isfinite(remaining_ttl) || remaining_ttl <= 0) valid = 0;
+        }
         filter = VRT_priv_task(ctx,&filter_task_token);
         if (filter) filter->priv = &task->key; else valid = 0;
         if (valid) {
             http_ForceHeader(ctx->http_beresp,HDR("X-SCP-Private-Object"),"1");
             http_ForceHeader(ctx->http_beresp,reuse_metadata_marker,"1");
-            VRT_l_beresp_ttl(ctx,fmin((double)ttl,d->public_deadline-ctx->now));
+            VRT_l_beresp_ttl(ctx,remaining_ttl);
         } else {
             d->reuse_failed = 1;
             VRT_l_beresp_ttl(ctx,0); VRT_l_beresp_uncacheable(ctx,1);

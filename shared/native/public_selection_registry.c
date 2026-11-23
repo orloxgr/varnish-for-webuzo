@@ -391,6 +391,10 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
         if (d->guest_requested) { guest_disable(ctx); d->cold_entry = !d->guest_has_variant; }
     }
     if (d->document) return 1;
+    /* An unavailable source supplied no public-parent provenance. Complete the
+     * same real visitor privately; never publish its newly rendered page as
+     * an inferred replacement for the missing pure public source. */
+    if (d->source_declined) return 0;
     s = d->selection;
     if (d->source_projected && (d->source_unstable ||
         !delivery_public_projection_equal(s->resolved,d->projection))) return 0;

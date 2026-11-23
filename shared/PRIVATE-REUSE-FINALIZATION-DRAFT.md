@@ -512,3 +512,16 @@ checks those fences too. Unknown execution still invalidates only its own scope;
 a positive mapping or Shared policy cannot infer known-empty/full arbitrary
 cross-route actor coverage. Actual external mutation/content invalidation coverage
 and producer application acceptance remain separate gates.
+
+Finalized metadata is bounded by the minimum of its provided freshness, the
+actual original native body grants and the public parent. The admission keeps
+the provider's natural body/identity/cookie deadlines as upper bounds and only
+shortens effective deadlines; it never estimates clock skew, adds tolerance or
+restarts a body TTL. Exact original body keys/tags, current scope/dependencies,
+input bindings and all-object/final revision barriers remain mandatory. The
+existing HSH metadata object carries this capped lifetime; future reads also
+bound the parsed record by that object's actual expiry. No pending object,
+post-delivery hook or second PHP approval is added. Tests use a deliberately
+later absolute provider deadline, prove first-fill origin-free reuse, verify
+native expiry still requires fresh work and reject changed keys/tags or already
+expired natural evidence.

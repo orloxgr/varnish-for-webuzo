@@ -162,6 +162,56 @@ class ProjectedSourceRuntime(unittest.TestCase):
             self.assertEqual(dict(fields).get('X-UltraCache-Public-Source-Outcome'), 'protocol-error')
             self.assertNotEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'), 'verified')
 
+    def test_unfinished_source_uses_one_actual_private_execution_per_visitor_without_projection_mix(self):
+        app=ProjectedApplication();personal=[]
+        def origin(path,headers):
+            if headers.get('X-UltraCache-Delivery-Public-Source-Role')=='parent-v1':
+                app.calls.append((path,dict(headers)))
+                return 409,b'',[('Cache-Control','private, no-store'),
+                    ('X-UltraCache-Delivery-Public-Source-Version','1'),
+                    ('X-UltraCache-Delivery-Public-Source-Outcome','unavailable')]
+            if headers.get('X-UltraCache-Delivery-Public-Source-Fallback')=='public-source-unavailable':
+                app.calls.append((path,dict(headers)));personal.append(dict(headers))
+                visitor=headers['X-Test-Visitor']
+                value=dict(schemaVersion=1,requestId=headers['X-UltraCache-Delivery-Request'],
+                    originalUrl=headers['X-UltraCache-Delivery-Original-URL'],privateDocument=dict(
+                        status=200,contentType='text/html',bodyBase64=base64.b64encode(('actual-private:'+visitor).encode()).decode()))
+                return json.dumps(value),[('Content-Type','application/vnd.ultracache.delivery+json'),
+                    ('X-UltraCache-Delivery-Public-Selection-Version','1'),('Cache-Control','private, no-store'),
+                    ('Set-Cookie','private_session='+visitor+'; Path=/; HttpOnly')]
+            return app(path,headers)
+        with proxy('ultracache',origin,policies=self.policy()) as get:
+            self.declare(get)
+            for visitor in ('A','B'):
+                status,fields,body=get('/unfinished','brandCurrency=USD; cart='+visitor,extra={'X-Test-Visitor':visitor})
+                self.assertEqual((status,body),(200,'actual-private:'+visitor))
+                self.assertEqual(cookies(fields)[-1],'private_session='+visitor+'; Path=/; HttpOnly')
+                self.assertTrue(cookies(fields)[0].startswith('brandCurrency=EUR;'))
+                self.assertNotIn('X-UltraCache-Delivery-Public-Source-Projection',personal[-1])
+                self.assertNotIn('X-UltraCache-Delivery-Public-Source-Role',personal[-1])
+                self.assertIn('cart='+visitor,personal[-1].get('Cookie',''))
+                self.assertIn('private, no-store',dict(fields).get('Cache-Control',''))
+            self.assertEqual(len(app.calls),6,'Only resolver, source and original private execution per visitor')
+            self.assertEqual(len(personal),2)
+
+    def test_unavailable_source_cannot_replace_private_fallback_with_a_claimed_public_selection(self):
+        app=ProjectedApplication()
+        def origin(path,headers):
+            if headers.get('X-UltraCache-Delivery-Public-Source-Role')=='parent-v1':
+                return 409,b'',[('Cache-Control','private, no-store'),
+                    ('X-UltraCache-Delivery-Public-Source-Version','1'),
+                    ('X-UltraCache-Delivery-Public-Source-Outcome','unavailable')]
+            if headers.get('X-UltraCache-Delivery-Public-Source-Fallback'):
+                fields=dict(headers);fields.pop('X-UltraCache-Delivery-Public-Source-Fallback')
+                fields['X-UltraCache-Delivery-Public-Source-Projection']=base64.b64encode(json.dumps(tuple_for()).encode()).decode()
+                return app(path,fields)
+            return app(path,headers)
+        with proxy('ultracache',origin,policies=self.policy()) as get:
+            self.declare(get)
+            status,fields,_=get('/unfinished-invalid','brandCurrency=USD; cart=A')
+            self.assertEqual(status,503)
+            self.assertNotEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
+
     def test_each_real_phase_has_exact_execution_and_only_personal_attaches_private_candidate(self):
         import test_mutation_coverage_runtime as coverage
         import test_reuse_authority as authority

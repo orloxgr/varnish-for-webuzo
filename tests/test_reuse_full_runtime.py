@@ -77,8 +77,22 @@ class NativeFullReuse(unittest.TestCase):
     def test_anonymous_content_wrong_generation_refuses_admission(self):
         self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure='generation')
 
+    def test_later_absolute_deadline_is_capped_by_native_grants_without_another_approval_fetch(self):
+        self.run_full_actor(anonymous_nonce=True,covered=True,ahead_absolute=True)
+
+    def test_actual_native_body_expiry_still_requires_fresh_original_work(self):
+        self.run_full_actor(anonymous_nonce=True,ahead_absolute=True,body_budget=2,verify_budget_expiry=True)
+
+    def test_expired_natural_deadline_is_never_resurrected_by_native_budget_binding(self):
+        self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure='natural-expired')
+
+    def test_native_budget_binding_never_accepts_different_original_body_keys_or_tags(self):
+        for field in ('cache-key','cache-tags'):
+            with self.subTest(field=field):
+                self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure=field)
+
     def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False,
-                       anonymous_content=False,content_failure=None):
+                       anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
@@ -104,7 +118,7 @@ class NativeFullReuse(unittest.TestCase):
                 owner=headers['Cookie'].split('owner=',1)[1].split(';',1)[0]
                 body=json.loads(envelope(headers,owner+'-generation'+str(generation[0])))
                 for f in body['renderedFragments']:
-                    f['cache']=dict(key=cache_key(f['url'],owner),ttl=120,tags='owner product:123')
+                    f['cache']=dict(key=cache_key(f['url'],owner),ttl=body_budget,tags='owner product:123')
                     if anonymous_nonce and f['url']==ADAPTIVE:f['html']='nonce:uid0-generation'+str(generation[0])
                 body['reuseCandidate']=dict(version=1,requestId=signed['requestId'],challenge=signed['challenge'],
                     recipe=recipe,inputEvidence=identity_mac(context,owner,recipe['inputs']))
@@ -151,9 +165,17 @@ class NativeFullReuse(unittest.TestCase):
                         authority=[dict(tag=dependency,revision=dependency_ack['revision'],generation=dependency_ack['generation'])] if dependencies else []))
                     if anonymous and anonymous_content and content_failure in ('revision','generation'):
                         rows[-1]['authority'][0][content_failure]='0'*64
+                    if anonymous and content_failure=='cache-key':rows[-1]['cache']=dict(f['cache'],key='0'*64)
+                    if anonymous and content_failure=='cache-tags':rows[-1]['cache']=dict(f['cache'],tags='different-original-tags')
                 record=dict(schemaVersion=1,requestId=context['deliveryRequestId'],originalUrl=path,
                     reuse=dict(version=1,context=c,recipe=recipe,admission=dict(binding=context['binding'],validUntil=deadline,
                         cookieWork=dict(state='none',validUntil=deadline+20),fragments=rows)))
+                if ahead_absolute:
+                    record['reuse']['admission']['validUntil']+=3600
+                    record['reuse']['admission']['cookieWork']['validUntil']+=3600
+                    for row in rows:
+                        row['bodyValidUntil']+=3600;row['identity']['validUntil']+=3600
+                if content_failure=='natural-expired':record['reuse']['admission']['validUntil']=int(time.time())-1
                 records.append(record)
                 return json.dumps(record),[('Content-Type','application/vnd.ultracache.reuse+json'),('Cache-Control','private, no-store'),
                     ('X-UltraCache-Delivery-Reuse-Outcome','finalized'),('X-UltraCache-Delivery-Reuse-Fresh-Remaining','99')]
@@ -179,7 +201,7 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual(status,200);self.assertIn('private:A-generation1',body)
             self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
             self.assertEqual(len(records),1)
-            if content_failure in ('revision','generation'):
+            if content_failure in ('revision','generation','cache-key','cache-tags','natural-expired'):
                 calls.clear()
                 self.assertEqual(get(PARENT,'owner=A')[0],200)
                 self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],
@@ -196,6 +218,13 @@ class NativeFullReuse(unittest.TestCase):
             status,headers,body2=get(PARENT,'owner=A; _fbp=second')
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
+            if verify_budget_expiry:
+                time.sleep(body_budget+.2);generation[0]=2
+                status,_,fresh=get(PARENT,'owner=A')
+                self.assertEqual(status,200);self.assertIn('private:A-generation2',fresh)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],
+                    'A later absolute provider clock may never extend the real native body grant')
+                return
             if content_failure=='dirty':
                 state=self.call(get,'private-authority-context',tag=content_tag)
                 dirty=self.call(get,'private-mutation-begin',state,tag=content_tag,

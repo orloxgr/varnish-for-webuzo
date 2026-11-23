@@ -749,17 +749,17 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
             }
             if (d->source_projected && d->phase == D_PREPARE) {
                 http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection-Version"),"1");
-                if (d->projection_header && !d->source_unstable && d->source_stage != SOURCE_RESOLVER)
+                if (d->projection_header && !d->source_declined && d->source_stage != SOURCE_RESOLVER)
                     http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection"),d->projection_header);
                 else http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection"));
-                if (d->source_unstable)
-                    http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"),"unstable-public-projection");
-                else http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"));
             } else {
                 http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection-Version"));
                 http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Projection"));
-                http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"));
             }
+            if (d->phase == D_PREPARE && d->source_declined)
+                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"),
+                    d->source_unstable ? "unstable-public-projection" : "public-source-unavailable");
+            else http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"));
             if (d->phase == D_PREPARE && !d->selection_entry && !d->reselect_attempted)
                 http_ForceHeader(ctx->http_bereq,h_reselect_version,"1");
             else http_Unset(ctx->http_bereq,h_reselect_version);

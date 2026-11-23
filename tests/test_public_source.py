@@ -103,6 +103,15 @@ class SourceApplication(Application):
             return 409, b'', [('Cache-Control', 'private, no-store'),
                 ('X-UltraCache-Delivery-Public-Source-Version', '1'),
                 ('X-UltraCache-Delivery-Public-Source-Outcome', 'unavailable')]
+        if headers.get('X-UltraCache-Delivery-Public-Source-Fallback') == 'public-source-unavailable':
+            self.calls.append((path,headers.get('X-UltraCache-Delivery-Phase'),headers.get('Cookie')))
+            visitor=headers.get('X-Test-Visitor','guest')
+            document=dict(schemaVersion=1,requestId=headers['X-UltraCache-Delivery-Request'],
+                originalUrl=headers['X-UltraCache-Delivery-Original-URL'],privateDocument=dict(
+                    status=200,contentType='text/html',bodyBase64=base64.b64encode(('private:'+visitor).encode()).decode()))
+            return json.dumps(document),[('Content-Type','application/vnd.ultracache.delivery+json'),
+                ('X-UltraCache-Delivery-Public-Selection-Version','1'),('Cache-Control','private, no-store'),
+                ('Set-Cookie','visitor_session='+visitor+'; Path=/; HttpOnly')]
         body, fields = super().__call__(path, headers)
         if headers.get('X-UltraCache-Delivery-Phase') == 'public-select':
             value = json.loads(body)
@@ -200,7 +209,12 @@ class NativePublicSource(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertIn('private:A', body)
             self.assertEqual(len(app.wire), 2)
+            self.assertEqual(app.wire[-1][1].get('X-UltraCache-Delivery-Public-Source-Fallback'),'public-source-unavailable')
             self.assertEqual(dict(fields).get('X-UltraCache-Public-Source-Outcome'), 'unavailable')
+            self.assertIn('private, no-store',dict(fields).get('Cache-Control',''))
+            self.assertEqual(cookies(fields),['visitor_session=A; Path=/; HttpOnly'])
+            self.assertEqual(get('/declined',extra={'X-Test-Visitor':'B'})[2],'private:B')
+            self.assertEqual(len(app.wire),4,'Another visitor must execute its own private response')
 
     def test_corrupt_source_or_different_publication_cannot_be_accepted(self):
         for mode, count in [('corrupt', 1), ('mismatch', 2)]:

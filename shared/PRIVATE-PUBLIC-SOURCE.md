@@ -146,3 +146,12 @@ The explicit fallback reason is not feature-goal acceptance. Actual resolver and
 personal issuer headers retain chronological order; pure source cookies are
 discarded. Private reuse evidence/finalization uses the real effective visitor
 Cookie, while final original-route ownership still uses the preserved raw URI.
+
+A typed `409 / unavailable` pure source supplied no completed public-parent
+provenance. The same real personal execution therefore receives the existing
+fallback header with reason `public-source-unavailable`, without Source-Role or
+expected projection. It must return a genuine privateDocument or an actual raw
+private response; a claimed selectedPublic cannot replace the missing source.
+No empty success, extra business callback, shared write or inferred anonymous
+parent is created. A source still being processed must use this explicit decline
+instead of binding a raw intermediate body to a later optimized publication.
