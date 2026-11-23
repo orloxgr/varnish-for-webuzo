@@ -65,10 +65,24 @@ class NativeFullReuse(unittest.TestCase):
     def test_projected_resolver_registration_does_not_intercept_a_complete_native_hit(self):
         self.run_full_actor(projected=True)
 
-    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False):
+    def test_anonymous_mutable_content_reuses_and_never_installs_a_visitor_revoke_map(self):
+        self.run_full_actor(anonymous_nonce=True,anonymous_content=True,covered=True)
+
+    def test_anonymous_content_dirty_authority_refuses_reuse_without_a_fake_owner(self):
+        self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure='dirty')
+
+    def test_anonymous_content_wrong_revision_refuses_admission(self):
+        self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure='revision')
+
+    def test_anonymous_content_wrong_generation_refuses_admission(self):
+        self.run_full_actor(anonymous_nonce=True,anonymous_content=True,content_failure='generation')
+
+    def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False,
+                       anonymous_content=False,content_failure=None):
         holder={};calls=[];prepared={};generation=[1];records=[];armed=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         nonce_tag=lambda owner:hashlib.sha256(('mock-nonce-owner-'+owner).encode()).hexdigest()
+        content_tag=hashlib.sha256(b'mock-public-comments-content').hexdigest()
         nonce_inputs=declaration(['wordpress_logged_in_mock']) if anonymous_nonce else declaration(['owner'])
         recipe=seal_recipe(dict(inputs=declaration(['owner','wordpress_logged_in_mock'] if anonymous_nonce else ['owner']),fragments=[
             dict(url=PRIVATE,provider='cart',occurrences=2),dict(url=ADAPTIVE,provider='nonce',occurrences=1)]))
@@ -105,7 +119,8 @@ class NativeFullReuse(unittest.TestCase):
                 self.call(holder['get'],'private-execution-drained',current,tag=None,extra={
                     'X-UltraCache-Private-Request-Id':context['requestId'],'X-UltraCache-Private-Challenge':context['challenge'],
                     'X-UltraCache-Private-Drained':'1',**(coverage.completion_headers(original) if covered else {})})
-                if self.observe(holder['get'])['scopeMutations'] or self.observe(holder['get']).get('temporaryHolds'):
+                if (self.observe(holder['get'])['scopeMutations'] or self.observe(holder['get']).get('temporaryHolds') or
+                        content_failure=='dirty' and holder.get('content_dirty')):
                     return 204,'',[('Cache-Control','private, no-store')]
                 self.recover(holder['get'],self.observe(holder['get']))
                 owner_tag=OWNER if owner=='A' else hashlib.sha256(('mock-owner-'+owner).encode()).hexdigest()
@@ -120,19 +135,22 @@ class NativeFullReuse(unittest.TestCase):
                 for descriptor in recipe['fragments']:
                     f=next(row for row in old['renderedFragments'] if row['url']==descriptor['url'])
                     dependency=owner_tag
-                    if descriptor['provider']=='nonce' and not anonymous_nonce:
-                        dependency=nonce_tag(owner)
+                    if descriptor['provider']=='nonce' and (not anonymous_nonce or anonymous_content):
+                        dependency=content_tag if anonymous_content else nonce_tag(owner)
                         nonce_context=self.call(holder['get'],'private-authority-context',tag=dependency)
                         dependency_ack=self.call(holder['get'],'private-generation-publish',nonce_context,tag=dependency,
                             extra={'X-UltraCache-Private-Generation':hashlib.sha256(str(generation[0]).encode()).hexdigest()})
                     else:dependency_ack=ack
                     anonymous=anonymous_nonce and descriptor['provider']=='nonce'
                     inputs=nonce_inputs if descriptor['provider']=='nonce' else declaration(['owner'])
+                    dependencies=not anonymous or anonymous_content
                     rows.append(dict(descriptor=descriptor['descriptor'],url=descriptor['url'],cache=f['cache'],bodyValidUntil=deadline+10,
                         identity=dict(identityState='anonymous' if anonymous else 'personal',identityInputs=inputs,
                             identityBinding=identity_mac(c,owner,inputs),owner=None if anonymous else dependency,
-                            tags=[] if anonymous else [dependency],validUntil=deadline+20),
-                        authority=[] if anonymous else [dict(tag=dependency,revision=dependency_ack['revision'],generation=dependency_ack['generation'])]))
+                            tags=[dependency] if dependencies else [],validUntil=deadline+20),
+                        authority=[dict(tag=dependency,revision=dependency_ack['revision'],generation=dependency_ack['generation'])] if dependencies else []))
+                    if anonymous and anonymous_content and content_failure in ('revision','generation'):
+                        rows[-1]['authority'][0][content_failure]='0'*64
                 record=dict(schemaVersion=1,requestId=context['deliveryRequestId'],originalUrl=path,
                     reuse=dict(version=1,context=c,recipe=recipe,admission=dict(binding=context['binding'],validUntil=deadline,
                         cookieWork=dict(state='none',validUntil=deadline+20),fragments=rows)))
@@ -161,6 +179,12 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual(status,200);self.assertIn('private:A-generation1',body)
             self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
             self.assertEqual(len(records),1)
+            if content_failure in ('revision','generation'):
+                calls.clear()
+                self.assertEqual(get(PARENT,'owner=A')[0],200)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],
+                    'Invalid anonymous content authority must not publish reusable metadata')
+                return
             if projected:
                 from test_public_selection_runtime import control
                 status,fields,_=control(get,enabled=True,names='brandCurrency',extra={
@@ -172,6 +196,33 @@ class NativeFullReuse(unittest.TestCase):
             status,headers,body2=get(PARENT,'owner=A; _fbp=second')
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
+            if content_failure=='dirty':
+                state=self.call(get,'private-authority-context',tag=content_tag)
+                dirty=self.call(get,'private-mutation-begin',state,tag=content_tag,
+                    extra={'X-UltraCache-Private-Transaction':'6'*64})
+                holder['content_dirty']=True
+                generation[0]=2;calls.clear()
+                status,_,fresh=get(PARENT,'owner=A')
+                self.assertEqual(status,200);self.assertIn('nonce:uid0-generation2',fresh)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
+                self.assertEqual(self.call(get,'private-authority-context',tag=content_tag)['remainingMutations'],1)
+                return
+            if anonymous_content:
+                state=self.call(get,'private-authority-context',tag=content_tag)
+                old_generation=state['generation'];old_revision=state['revision']
+                writer=self.call(get,'private-mutation-begin',state,tag=content_tag,
+                    extra={'X-UltraCache-Private-Transaction':'6'*64})
+                self.assertNotEqual(writer['revision'],old_revision)
+                done=self.call(get,'private-mutation-commit',writer,tag=content_tag,
+                    extra={'X-UltraCache-Private-Transaction':writer['transaction'],'X-UltraCache-Private-Lease':writer['lease']})
+                self.assertNotEqual(done['revision'],writer['revision'])
+                published=self.call(get,'private-generation-publish',done,tag=content_tag,
+                    extra={'X-UltraCache-Private-Generation':old_generation})
+                self.assertNotEqual(published['revision'],old_revision)
+                calls.clear();self.assertEqual(get(PARENT,'owner=A')[0],200)
+                self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')],
+                    'Same published content generation must not revive a pre-mutation admission')
+                calls.clear();self.assertEqual(get(PARENT,'owner=A')[0],200);self.assertEqual(calls,[])
             if projected: return  # this case qualifies the registered full-HIT boundary only
             if scope_fence:
                 current=self.observe(get)
@@ -270,11 +321,15 @@ class NativeFullReuse(unittest.TestCase):
                 self.assertIn('nonce:uid0-generation2',again)
                 # This observation-only probe is not an anonymous owner map.
                 probe=self.call(get,'private-authority-context',tag=nonce_tag('A'))
+                content_before=self.call(get,'private-authority-context',tag=content_tag) if anonymous_content else None
                 personal=self.observe(get)
                 self.assertEqual(get('/__owned_mutation-map','owner=A; _fbp=unrelated')[0],200)
                 if covered:self.assertNotEqual(self.observe(get)['scopeRevision'],personal['scopeRevision'])
                 else:self.assertNotEqual(self.observe(get)['revision'],personal['revision'])
                 self.assertEqual(self.call(get,'private-authority-context',tag=nonce_tag('A'))['revision'],probe['revision'])
+                if anonymous_content:
+                    self.assertEqual(self.call(get,'private-authority-context',tag=content_tag)['revision'],content_before['revision'],
+                        'An anonymous content tag must never become a visitor revoke-map dependency')
                 self.assertEqual(self.observe(get)['scopeState'],'unbound')
                 return
             # Two PERSONAL provider owners share the same input binding. Both

@@ -24,7 +24,7 @@ struct delivery_reuse_admitted_fragment {
     struct delivery_reuse_inputs *identity_inputs;
     char **identity_tags;
     size_t identity_tag_count;
-    unsigned anonymous; /* explicit per-fragment UID0 proof; never a revoke map */
+    unsigned anonymous; /* UID0 identity; tags may fence content, never a visitor map */
     struct delivery_reuse_authority *authority;
 };
 struct delivery_reuse_record {

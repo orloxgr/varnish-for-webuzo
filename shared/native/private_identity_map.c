@@ -92,7 +92,8 @@ static int reuse_identity_install(struct reuse_scope *scope, const struct delive
         size_t length = 0, i, bucket;
         char declaration[65];
         /* Anonymous is an authenticated per-document body/input fact only.
-         * It does not install an owner, tag, known-empty map or route coverage. */
+         * Even when it depends on mutable content tags, it must not install
+         * a visitor owner/revoke map, known-empty map or route coverage. */
         if (fragment->anonymous) continue;
         if (delivery_reuse_input_projection(fragment->identity_inputs,NULL,0,&frame,&length) != DELIVERY_REUSE_INPUT_OK) return 0;
         i = delivery_selection_digest(frame,length,declaration);

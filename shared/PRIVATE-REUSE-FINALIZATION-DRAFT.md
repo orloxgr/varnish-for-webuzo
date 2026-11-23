@@ -477,6 +477,18 @@ coverage and no fabricated anonymous revoke map. This is not evidence of
 actual WordPress identity, provider persistence/drain or cookie-work closure.
 Those proofs must come from the real producer before general acceptance.
 
+Anonymous fragments may depend on mutable content. They retain `owner:null`,
+but their existing `identity.tags` and matching `authority` rows may contain
+content dependencies. Every listed dependency still needs exact current native
+revision/generation authority, and every identity input/binding/lifetime gate
+remains. Anonymous content dependencies never enter visitor identity/revoke maps.
+The metadata object key uses the v2 admission namespace so pre-change admissions
+cannot satisfy the new implementation's lookup. This changes no wire envelope,
+control endpoint or public capability advertisement. Native mock-producer tests
+cover mutable anonymous content, dirty/wrong authority, same-generation mutation
+fencing, interleaved personal owners and absence of anonymous revoke-map entries;
+actual application comment mutation coverage remains producer acceptance.
+
 The original response's genuine repeated provider cookies survive an optional
 finalization decline; protocol-only cookies are never replayed. Metadata failure
 cannot change completed original provider work. Exactly two added, owned restart

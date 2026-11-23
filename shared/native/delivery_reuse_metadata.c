@@ -93,7 +93,10 @@ static int reuse_metadata_identity(struct reader *r, const char *body, struct de
     }
     if (seen == 63) {
         size_t i;
-        if (f->anonymous) return owner_null && !f->identity_tag_count;
+        /* Anonymous fixes visitor identity, not content immutability. Its tags
+         * may name mutable content, but never manufacture a visitor owner.
+         * Exact authority coverage and runtime revisions are checked below. */
+        if (f->anonymous) return owner_null;
         if (owner_null) return 0;
         for (i = 0; i < f->identity_tag_count; ++i) if (!strcmp(f->identity_tags[i],f->owner)) return 1;
     }
@@ -321,7 +324,8 @@ int delivery_reuse_metadata_key(const struct delivery_reuse_context *context, co
     fields[3] = context->epoch; fields[4] = context->native_policy; fields[5] = context->wordpress_policy;
     fields[6] = context->reuse_policy; fields[7] = context->publication_digest;
     fields[8] = context->representation; fields[9] = context->recipe_digest; fields[10] = binding;
-    if (!reuse_lp_string(&frame,"ultracache-private-admission-object-v1")) goto done;
+    /* Separate admissions made before anonymous content dependencies existed. */
+    if (!reuse_lp_string(&frame,"ultracache-private-admission-object-v2")) goto done;
     for (i = 0; i < 11; ++i) if (!fields[i] || !*fields[i] || !reuse_lp_string(&frame,fields[i])) goto done;
     valid = delivery_selection_digest(frame.bytes,frame.length,key);
 done:

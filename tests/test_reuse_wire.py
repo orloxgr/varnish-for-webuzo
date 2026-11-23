@@ -169,4 +169,28 @@ class ReuseWire(unittest.TestCase):
         bad=copy.deepcopy(obj);bad['reuse']['admission']['fragments'].pop()
         self.assertEqual(self.parse_metadata(bad),0,'Anonymous nonce is required, never silently omitted')
 
+    def test_anonymous_content_dependencies_require_exact_authority_and_null_owner(self):
+        obj=self.metadata()
+        for row in obj['reuse']['admission']['fragments']:
+            row['identity'].update(identityState='anonymous',owner=None)
+        self.assertEqual(self.parse_metadata(obj),1,'All anonymous may depend on mutable content')
+        for mutation in ('missing','extra','duplicate','malformed','owner'):
+            bad=copy.deepcopy(obj);row=bad['reuse']['admission']['fragments'][0]
+            if mutation=='missing':row['authority'].pop()
+            elif mutation=='extra':row['authority'].append(dict(tag='9'*64,revision='3'*64,generation='4'*64))
+            elif mutation=='duplicate':row['identity']['tags'].append(row['identity']['tags'][0])
+            elif mutation=='malformed':row['authority'][0]['revision']='invalid'
+            else:row['identity']['owner']='1'*64
+            self.assertEqual(self.parse_metadata(bad),0,mutation)
+
+    def test_content_dependency_admission_uses_a_new_object_namespace(self):
+        self.lib.delivery_reuse_metadata_key.argtypes=[ctypes.POINTER(Context),ctypes.c_char_p,ctypes.c_void_p]
+        fields=('siteId','canonicalHost','scope','epoch','nativePolicy','wordpressPolicy','reusePolicy','publicationDigest','representation','recipeDigest')
+        values=self.metadata()['reuse']['context'];context=Context(*(values[n].encode() for n in fields))
+        out=ctypes.create_string_buffer(65);binding=b'5'*64
+        self.assertEqual(self.lib.delivery_reuse_metadata_key(ctypes.byref(context),binding,out),1)
+        suffix=b''.join(lp(values[n]) for n in fields)+lp(binding)
+        self.assertNotEqual(out.value.decode(),hashlib.sha256(lp('ultracache-private-admission-object-v1')+suffix).hexdigest())
+        self.assertEqual(out.value.decode(),hashlib.sha256(lp('ultracache-private-admission-object-v2')+suffix).hexdigest())
+
 if __name__=='__main__':unittest.main()
