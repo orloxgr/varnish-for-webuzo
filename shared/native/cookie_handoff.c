@@ -21,7 +21,10 @@ struct handoff {
     struct fields *fields;
     struct continuation *delivery; /* PRIV_TOP-owned; only accessed under lock. */
 };
-struct task { struct handoff *owner; uint64_t key; };
+struct task {
+    struct handoff *owner; uint64_t key;
+    char *control_body; size_t control_length;
+};
 #define BUCKETS 1024
 static struct handoff *buckets[BUCKETS];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -49,7 +52,7 @@ static void close_owner(struct task *task) {
 static void task_fini(VRT_CTX, void *value) {
     struct task *task = value;
     (void)ctx;
-    close_owner(task); free(task);
+    close_owner(task); free(task->control_body); free(task);
 }
 
 static const struct vmod_priv_methods methods = {
@@ -68,7 +71,10 @@ static struct task *get_task(struct vmod_priv *priv) {
 
 VCL_VOID vmod_reset(VRT_CTX, struct vmod_priv *priv) {
     (void)ctx;
-    if (priv->priv) { close_owner(priv->priv); free(priv->priv); priv->priv = NULL; }
+    if (priv->priv) {
+        struct task *task = priv->priv;
+        close_owner(task); free(task->control_body); free(task); priv->priv = NULL;
+    }
 }
 
 static void discard_key(uint64_t key) {

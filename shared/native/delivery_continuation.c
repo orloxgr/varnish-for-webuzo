@@ -135,6 +135,7 @@ struct continuation {
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static int public_selection_parse(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
+static void reuse_registry_free(void);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -989,3 +990,4 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 }
 
 #include "public_selection_registry.c"
+#include "reuse_authority.c"

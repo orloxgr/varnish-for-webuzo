@@ -10,5 +10,6 @@ include "vcl/cms-routes.vcl";
 include "vcl/aggressive.vcl";
 include "vcl/representations.vcl";
 include "vcl/public-selection.vcl";
+include "vcl/reuse-control.vcl";
 include "vcl/ultracache-esi.vcl";
 include "vcl/ultracache-private.vcl";

@@ -28,6 +28,7 @@ static int public_selection_vcl_event(enum vcl_event_e event) {
         }
         ++public_selection_vcls;
     } else if (event == VCL_EVENT_DISCARD && public_selection_vcls && !--public_selection_vcls) {
+        reuse_registry_free(); /* same registry lifetime, lock already held */
         while (public_declarations) {
             struct public_declaration *next = public_declarations->next;
             public_declaration_free(public_declarations); public_declarations = next;

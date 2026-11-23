@@ -252,10 +252,28 @@ Domain-separated HMAC of the actual POST method, forwarded Host, raw URI and
 native canonical context. The reusable credential is not forwarded to PHP.
 
 $Function BOOL delivery_reuse_available()
-$Restrict vcl_deliver
+$Restrict vcl_recv vcl_deliver vcl_synth
 
 Experimental resolver build capability, not negotiated producer reuse support.
 False unless the exact engine-source build receipt was explicitly supplied.
+
+$Function BOOL reuse_register(STRING site, STRING host, STRING scope, STRING native_policy, STRING wordpress_policy, STRING reuse_policy, BOOL enabled)
+$Restrict vcl_recv
+
+Authenticated capabilities only. New authority starts UNBOUND. Disabling and
+policy changes revoke scope readiness without forgetting outstanding writers.
+
+$Function INT reuse_control(PRIV_TASK, STRING site, STRING native_policy)
+$Restrict vcl_recv
+
+Called only inside adapter site-token control authentication. Native metadata
+operations return HTTP status and request-owned JSON; no ordinary fill grants
+clean authority. Context creates only UNBOUND tag slots.
+
+$Function BOOL reuse_control_synth(PRIV_TASK)
+$Restrict vcl_synth
+
+Deliver the current authenticated operation JSON without response workspace caps.
 
 $Function INT delivery_reuse_resolve(PRIV_TOP)
 $Restrict vcl_deliver
