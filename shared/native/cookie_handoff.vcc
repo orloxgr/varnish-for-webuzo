@@ -250,3 +250,28 @@ $Restrict vcl_backend_fetch
 
 Domain-separated HMAC of the actual POST method, forwarded Host, raw URI and
 native canonical context. The reusable credential is not forwarded to PHP.
+
+$Function BOOL delivery_reuse_available()
+$Restrict vcl_deliver
+
+Experimental resolver build capability, not negotiated producer reuse support.
+False unless the exact engine-source build receipt was explicitly supplied.
+
+$Function INT delivery_reuse_resolve(PRIV_TOP)
+$Restrict vcl_deliver
+
+Experimental existing-owner pre-header resolution of authenticated descriptor
+claims: -1 unavailable/invalid owner, 0 dependencies missing, 1 all pinned.
+Does not create admission, authorize cached delivery or bypass prepare.
+
+$Function INT delivery_reuse_count(PRIV_TOP, BOOL hits)
+$Restrict vcl_deliver
+
+Request-local descriptor counts for isolated qualification; not body occurrence
+counts and not a cache-authority assertion.
+
+$Function BOOL delivery_reuse_materialize(PRIV_TOP)
+$Restrict vcl_deliver
+
+Copy reserved HIT bytes into the existing owner for selective context/replay,
+preserving native absolute expiry. Production VCL does not call these methods.

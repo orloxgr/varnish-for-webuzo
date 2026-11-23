@@ -93,6 +93,8 @@ VCL_STRING vmod_guest_issuer_authorization(VRT_CTX, VCL_STRING credential, VCL_S
 enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY, D_FAILED };
+struct delivery_reuse_plan;
+static void delivery_reuse_release(VRT_CTX, struct delivery_reuse_plan *);
 struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
@@ -111,7 +113,8 @@ struct continuation {
     uint64_t occurrences;
     /* Identity check only; exact installed-engine lifetime still needs native
      * qualification. Also revalidate signed manifest/count on final delivery.
-     * Never swap engine pointers or call uninstalled private HSH APIs. */
+     * Never swap engine pointers. Default builds do not call private HSH APIs;
+     * the experimental resolver requires a matching engine-source receipt. */
     const struct objcore *parent;
     char *url, *host, *site, *target, *manifest, *cookie, *encoding;
     char *retire_expression;
@@ -122,6 +125,7 @@ struct continuation {
     char *body;
     size_t length, capacity;
     struct delivery_fragment *fragments;
+    struct delivery_reuse_plan *reuse_plan; /* same top-request owner, not a body store */
     struct delivery_public_parent *public_parent; /* same-request public bytes */
     struct delivery_private_document *document;
     struct delivery_public_selection *selection;
@@ -189,7 +193,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     unsigned i;
     /* The table lock excludes an aborting backend filter before freeing d. */
     close_owner(&d->association);
-    (void)ctx;
+    delivery_reuse_release(ctx,d->reuse_plan);
     free(d->guest_policy); free(d->guest_epoch); free(d->guest_key); free(d->guest_canonical);
     free(d->retire_expression);
     free(d->url); free(d->host); free(d->site); free(d->target); free(d->cookie); free(d->encoding);
@@ -957,6 +961,7 @@ VCL_BOOL vmod_delivery_synth(VRT_CTX, struct vmod_priv *priv) {
     return 1;
 }
 
+#include "delivery_reuse.c"
 #include "delivery_snapshot_backend.c"
 
 int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event) {

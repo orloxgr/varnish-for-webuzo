@@ -127,7 +127,7 @@ static int delivery_snapshot_gethdrs(VRT_CTX, VCL_BACKEND backend) {
             http_ForceHeader(ctx->http_beresp,H_Content_Type,"text/html; charset=UTF-8");
             http_ForceHeader(ctx->http_beresp,private_object,"1");
             http_ForceHeader(ctx->http_beresp,private_tags,fragment->cache_tags);
-            remaining = d->prepare_response_time+(double)fragment->cache_ttl-ctx->now;
+            remaining = delivery_fragment_deadline(d,fragment)-ctx->now;
             if (!isfinite(remaining) || remaining < 0) remaining = 0;
             http_PrintfHeader(ctx->http_beresp,"Cache-Control: public, max-age=%.0f",floor(remaining));
         }
@@ -259,7 +259,7 @@ VCL_BOOL vmod_delivery_private_source(VRT_CTX) {
         ? delivery_fragment_named(entry->delivery,ctx->http_bereq->hd[HTTP_HDR_URL].b) : NULL;
     valid = f && f->cache_key && f->cache_ttl &&
         http_GetStatus(ctx->http_beresp) == 200 && !http_CountHdr(ctx->http_beresp,H_Set_Cookie);
-    if (valid) remaining = entry->delivery->prepare_response_time+(double)f->cache_ttl-ctx->now;
+    if (valid) remaining = delivery_fragment_deadline(entry->delivery,f)-ctx->now;
     pthread_mutex_unlock(&lock);
     if (!valid) { VRT_fail(ctx,"Prepared private source rejected"); return 1; }
     if (!isfinite(remaining) || remaining < 0) remaining = 0;
