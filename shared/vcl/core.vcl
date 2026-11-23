@@ -26,7 +26,7 @@ sub scp_init {
     # permits reuse. Client headers, ESI children and ordinary restarts cannot.
     unset req.http.X-SCP-Admin-Reuse;
     if (req.http.X-SCP-Admin-Applied == "1" && req.http.Cookie &&
-        req.http.X-SCP-Admin-Input == req.http.Cookie &&
+        cookie_handoff.delivery_cookie_unchanged() &&
         cookie_handoff.delivery_resume_authorized(req.http.X-SCP-Site)) {
         set req.http.X-SCP-Admin-Reuse = "1";
     }
@@ -147,8 +147,10 @@ sub scp_init {
     unset req.http.X-SCP-Query;
     unset req.http.X-SCP-Key-Path;
     unset req.http.X-SCP-Key-Query;
-    unset req.http.X-SCP-Vary-Cookie;
-    unset req.http.X-SCP-Vary-ESI-Cookie;
+    if (req.http.X-SCP-Admin-Reuse != "1") {
+        unset req.http.X-SCP-Vary-Cookie;
+        unset req.http.X-SCP-Vary-ESI-Cookie;
+    }
     unset req.http.X-SCP-Vary-Accept;
     unset req.http.X-SCP-Vary-Accept-Language;
     unset req.http.X-SCP-Normalize-Value;

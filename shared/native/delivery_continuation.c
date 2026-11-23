@@ -15,6 +15,8 @@ struct guest_request {
     unsigned captured, eligible, disabled;
     unsigned shared_candidate, shared_proved, fallback_restart;
     char *original_cookie, *site, *host, *url;
+    char *classified_cookie, *classified_variant;
+    unsigned classified;
     char shared_manifest[65];
     unsigned warm_requested, warm_single, warm_checked, warm_valid;
     char *warm_projection, *warm_authorization;
@@ -25,6 +27,7 @@ static void guest_fini(VRT_CTX, void *value) {
     (void)ctx;
     free(g->warm_projection); free(g->warm_authorization);
     free(g->original_cookie); free(g->site); free(g->host); free(g->url);
+    free(g->classified_cookie); free(g->classified_variant);
     free(g->key); free(g->policy); free(g->wordpress_policy); free(g->epoch); free(g->scope); free(g);
 }
 static const struct vmod_priv_methods guest_methods = {
@@ -767,6 +770,51 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
             d->reuse_metadata_uri && !strcmp(d->reuse_metadata_uri,url)));
     pthread_mutex_unlock(&lock);
     return valid;
+}
+
+VCL_BOOL vmod_delivery_cookie_unchanged(VRT_CTX, struct vmod_priv *priv) {
+    const struct guest_request *g = guest_context(ctx);
+    const char *original, *current = NULL;
+    (void)priv;
+    if (ctx->req->esi_level || !g || !g->classified || http_CountHdr(ctx->http_req,H_Cookie) > 1) return 0;
+    original = g->classified_cookie;
+    http_GetHdr(ctx->http_req,H_Cookie,&current);
+    return (!original && !current) || (original && current && !strcmp(original,current));
+}
+
+VCL_VOID vmod_cookie_classification_snapshot(VRT_CTX) {
+    struct guest_request *g = guest_context(ctx);
+    char *cookie = NULL, *variant = NULL;
+    if (ctx->req->esi_level) return;
+    if (!g || !delivery_copy_header(ctx->http_req,H_Cookie,&cookie) ||
+        !delivery_copy_header(ctx->http_req,h_lookup_variant,&variant)) {
+        free(cookie); free(variant);
+        VRT_fail(ctx,"Cookie classification snapshot unavailable"); return;
+    }
+    free(g->classified_cookie); free(g->classified_variant);
+    g->classified_cookie = cookie; g->classified_variant = variant; g->classified = 1;
+}
+
+VCL_VOID vmod_cookie_classification_restore(VRT_CTX) {
+    const struct guest_request *g = guest_context(ctx);
+    if (ctx->req->esi_level || !g || !g->classified ||
+        !delivery_restore_header(ctx,h_lookup_variant,g->classified_variant))
+        VRT_fail(ctx,"Cookie classification restore unavailable");
+}
+
+/* These are the same two canonical Vary carriers, not another cookie policy.
+ * Keep identical single fields in place across an owned continuation. */
+VCL_VOID vmod_cookie_variation_headers(VRT_CTX, VCL_STRING value, VCL_BOOL normalize) {
+    const char *canonical = NULL;
+    if (!value || !*value) value = NULL;
+    if (!delivery_restore_header(ctx,HDR("X-SCP-Vary-Cookie"),value)) {
+        VRT_fail(ctx,"Cookie variation header unavailable"); return;
+    }
+    if (normalize) cookie_working_header_normalize(ctx,HDR("X-SCP-Vary-Cookie"));
+    http_GetHdr(ctx->http_req,HDR("X-SCP-Vary-Cookie"),&canonical);
+    if (canonical && !*canonical) canonical = NULL;
+    if (!delivery_restore_header(ctx,HDR("X-SCP-Vary-ESI-Cookie"),canonical))
+        VRT_fail(ctx,"Cookie ESI variation header unavailable");
 }
 
 VCL_BOOL vmod_delivery_recover(VRT_CTX, struct vmod_priv *priv) {

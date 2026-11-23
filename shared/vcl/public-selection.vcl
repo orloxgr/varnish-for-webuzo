@@ -149,7 +149,7 @@ sub scp_selection_recv {
         if (req.http.X-SCP-Selection-State == "-1") { return (synth(503, "Public selection unavailable")); }
     }
     if (cookie_handoff.selection_manifest()) {
-        set req.http.X-SCP-Admin-Variant = cookie_handoff.selection_variant();
+        cookie_handoff.selection_variant_apply();
         # Native Vary/hash distinguishes absent from present-but-empty.
         # A Shared-only cold selection must rejoin the original no-Variant key.
         if (req.http.X-SCP-Admin-Variant == "") { unset req.http.X-SCP-Admin-Variant; }

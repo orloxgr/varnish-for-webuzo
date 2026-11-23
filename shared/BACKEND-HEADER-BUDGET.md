@@ -81,3 +81,34 @@ ordinary authenticated POST verifies exact Cookie, Authorization, URL/query,
 Content-Type and encoded form-body preservation with one backend execution.
 These fixtures qualify native transport behavior, not real WordPress or browser
 acceptance. The earlier header-capacity negative control remains active.
+
+## Large Variant values through the complete continuation
+
+The active-coverage fixture additionally exercises a6144-byte incoming Cookie.
+The historical245-method run on770309a did not cover that size: the older
+workspace loop covered600/1200/1800/2400 bytes. Its passing result must not be
+reported as6144-byte acceptance.
+
+Variant groups now accumulate on the existing request task, with the same VCL
+selectors and rule order. Delimiter normalization remains at each original rule
+boundary; moving it to the end can change a later selector's leading-blank
+behavior. Normalization and name extraction use temporary owned heap buffers,
+then emit only the needed final header/name bytes. Begin/reset/finalization free
+the task buffers; allocation/overflow failures remain explicit.
+
+The existing authorized continuation also retains its native capture of the
+original Cookie and ordered Variant instead of duplicating them as scratch
+headers. Reuse still requires the original phase/site/host/URL authorization and
+exact Cookie equality, preserving absence/empty distinctions and excluding ESI
+children. Identical unique Vary headers remain in place across that same resume;
+changed or duplicate headers take normal replacement. Applying the selected
+Variant uses the existing header restoration owner once. Cookie diagnostics
+materialize names under the existing predicate, without copying full values
+into another request header merely to remove them again.
+
+No action, priority, cookie value, request limit, workspace size, worker count or
+TTL changes. Normal and disabled-engine modules share these helpers.
+`test_cookie_working_normalization.py` compares native normalization and names
+against the original VCL operations, including empty/delimiter/Latin1/random
+inputs and a large value. These are explicitly native mock-application checks;
+matching real WordPress/browser and normal installer acceptance remain separate.

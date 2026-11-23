@@ -573,6 +573,18 @@ VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     if (d->cold_entry && !d->source_projected) return d->lookup_variant ? WS_Copy(ctx->ws,d->lookup_variant,-1) : NULL;
     return WS_Copy(ctx->ws,d->variant,-1);
 }
+VCL_VOID vmod_selection_variant_apply(VRT_CTX, struct vmod_priv *priv) {
+    const struct continuation *d = priv->priv;
+    const char *value;
+    if (ctx->req->esi_level || !d || !d->selection_entry || !d->variant ||
+        (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) {
+        VRT_fail(ctx,"Public selection variant unavailable"); return;
+    }
+    value = d->cold_entry && !d->source_projected ? d->lookup_variant : d->variant;
+    if (value && !*value) value = NULL;
+    if (!delivery_restore_header(ctx,h_lookup_variant,value))
+        VRT_fail(ctx,"Public selection variant workspace exhausted");
+}
 VCL_BOOL vmod_selection_local(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
     struct handoff *entry;

@@ -8,6 +8,36 @@ $Restrict vcl_recv
 
 Discard request state before a new receive attempt, including restart to a HIT.
 
+$Function VOID cookie_variant_begin(PRIV_TASK)
+$Restrict vcl_recv
+
+Begin the exact ordered cookie Variant accumulator owned by this request task.
+
+$Function VOID cookie_variant_append(PRIV_TASK, STRING value)
+$Restrict vcl_recv
+
+Normalize and append the matched group without allocating an intermediate header.
+
+$Function VOID cookie_variant_finish(PRIV_TASK)
+$Restrict vcl_recv
+
+Publish the exact accumulated Variant header once and release the heap buffer.
+
+$Function STRING cookie_variant_names(PRIV_TASK)
+$Restrict vcl_recv
+
+Return the last canonical matched group's names without copying its values to a header.
+
+$Function VOID cookie_remainder_normalize()
+$Restrict vcl_recv
+
+Normalize the owned remaining-cookie working header at its existing rule boundary.
+
+$Function STRING cookie_diagnostic_names(STRING value, BOOL allowed)
+$Restrict vcl_deliver vcl_synth
+
+Return names under the existing VCL diagnostic predicate without copying cookie values to a header.
+
 $Function STRING open(PRIV_TASK)
 $Restrict vcl_miss
 
@@ -102,6 +132,27 @@ $Restrict vcl_recv
 Read-only ingress proof for the same initially authorized top-level GET.
 Requires exact native phase/restart plus stored adapter site, host and URI.
 No request header, positive restart count alone or other task creates a grant.
+
+$Function BOOL delivery_cookie_unchanged(PRIV_TOP)
+$Restrict vcl_recv
+
+Compare the current original Cookie with its native classification capture.
+Absent and present-empty remain distinct; this alone grants no resume authority.
+
+$Function VOID cookie_classification_snapshot()
+$Restrict vcl_recv
+
+Capture original Cookie and ordered Variant bytes for this top request only.
+
+$Function VOID cookie_classification_restore()
+$Restrict vcl_recv
+
+Restore the native-owned Variant after the VCL's existing authorized-resume check.
+
+$Function VOID cookie_variation_headers(STRING value, BOOL normalize)
+$Restrict vcl_recv
+
+Set the existing canonical Cookie and ESI Vary carriers without recopying identical fields.
 
 $Function BOOL delivery_recover(PRIV_TOP)
 $Restrict vcl_miss
@@ -247,6 +298,11 @@ $Function STRING selection_variant(PRIV_TOP)
 $Restrict vcl_recv
 
 Native Variant projection of the logical candidate; actual Cookie stays intact.
+
+$Function VOID selection_variant_apply(PRIV_TOP)
+$Restrict vcl_recv
+
+Apply the selected Variant to its existing header without an intermediate string copy.
 
 $Function BOOL selection_local(PRIV_TASK)
 $Restrict vcl_backend_response

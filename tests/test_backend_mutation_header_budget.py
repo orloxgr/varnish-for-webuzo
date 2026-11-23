@@ -21,15 +21,15 @@ import test_mutation_coverage_runtime as coverage
 import test_reuse_authority as authority
 
 
-def synthetic_consent_cookie():
+def synthetic_consent_cookie(size=2315):
     rows = [('cmplz_consented_services', 'fixture'), ('cmplz_policy_id', '1'),
         ('cmplz_functional', 'allow'), ('cmplz_saved_services', ''),
         ('cmplz_id', 'fixture'), ('_fbp', 'fixture'),
         ('_tt_enable_cookie', '1'), ('_ttp', 'fixture')]
     wire = '; '.join(name+'='+value for name, value in rows)
-    rows[3] = (rows[3][0], 's'*(2315-len(wire)))
+    rows[3] = (rows[3][0], 's'*(size-len(wire)))
     wire = '; '.join(name+'='+value for name, value in rows)
-    assert len(wire) == 2315
+    assert len(wire) == size
     return wire
 
 
@@ -60,7 +60,7 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
         self.assertEqual(fields.get('X-UltraCache-VCL-Public-Selection-Coverage-Version'), '1')
         self.assertEqual(fields.get('X-UltraCache-VCL-Public-Selection-Execution-Drain-Version'), '1')
 
-    def run_cold(self, extra_navigation=False):
+    def run_cold(self, extra_navigation=False, cookie_size=2315):
         source_app = SourceApplication()
         received = []
         received_contexts = []
@@ -100,7 +100,7 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
                 daemon_parameters=('http_max_hdr=64','workspace_backend=96k',
                     'workspace_client=96k','http_req_hdr_len=8k','http_req_size=32k')) as get:
             self.register(get)
-            raw = synthetic_consent_cookie()
+            raw = synthetic_consent_cookie(cookie_size)
             status, fields, body = get('/browser-consent', raw, extra=browser_headers(extra_navigation))
             trace = subprocess.check_output(['varnishlog','-n',str(get.instance),'-d',
                 '-i','Error,VCL_Error,LostHeader,RespReason,BerespReason'],text=True)
@@ -127,6 +127,12 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
 
     def test_cold_covered_navigation_keeps_pragma_and_referer(self):
         self.run_cold(extra_navigation=True)
+
+    def test_large_cold_consent_navigation_with_actual_coverage_and_execution_drain(self):
+        self.run_cold(cookie_size=6144)
+
+    def test_large_cold_covered_navigation_keeps_pragma_and_referer(self):
+        self.run_cold(extra_navigation=True, cookie_size=6144)
 
     def test_ordinary_authenticated_post_preserves_cookie_url_and_form_body(self):
         received = []

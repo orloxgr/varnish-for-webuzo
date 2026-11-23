@@ -18,54 +18,30 @@ sub scp_cookie_variation {
     # The origin still receives the complete Cookie header. Only an explicit
     # Vary: Cookie is keyed by the resolved functional remainder.
     # Only resolved Shared choices omit values; there is no second name list.
-    unset req.http.X-SCP-Vary-Cookie;
-    unset req.http.X-SCP-Vary-ESI-Cookie;
     if (req.http.X-SCP-Admin-Reuse == "1") {
         # Selection may replace Admin-Variant with an origin-approved key.
         # Restore the original classification before the current selection.
-        if (req.http.X-SCP-Admin-Request-Variant) {
-            set req.http.X-SCP-Admin-Variant = req.http.X-SCP-Admin-Request-Variant;
-        } else { unset req.http.X-SCP-Admin-Variant; }
+        cookie_handoff.cookie_classification_restore();
     } else {
         call scp_admin_cookie_rules;
-        if (req.http.X-SCP-Profile == "ultracache" &&
+        if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0 &&
             req.http.Cookie && req.http.X-SCP-Admin-Applied == "1") {
-            set req.http.X-SCP-Admin-Input = req.http.Cookie;
-            if (req.http.X-SCP-Admin-Variant) {
-                set req.http.X-SCP-Admin-Request-Variant = req.http.X-SCP-Admin-Variant;
-            }
+            cookie_handoff.cookie_classification_snapshot();
         }
     }
     unset req.http.X-SCP-Admin-Reuse;
     if (req.http.Cookie) {
         if (req.http.X-SCP-Admin-Filtered) {
-            set req.http.X-SCP-Vary-Cookie = req.http.X-SCP-Admin-Filtered;
+            cookie_handoff.cookie_variation_headers(req.http.X-SCP-Admin-Filtered, false);
+        } else if (req.http.X-SCP-Admin-Variant) {
+            cookie_handoff.cookie_variation_headers(req.http.X-SCP-Admin-Variant, false);
         } else if (req.http.X-SCP-Admin-Applied == "1") {
-            unset req.http.X-SCP-Vary-Cookie;
+            cookie_handoff.cookie_variation_headers("", false);
         } else {
-            set req.http.X-SCP-Vary-Cookie = req.http.Cookie;
+            cookie_handoff.cookie_variation_headers(req.http.Cookie, true);
         }
-        # The compiled result is already canonical. Do not allocate two more
-        # full copies for the same normalization, including on restarts.
-        if (req.http.X-SCP-Admin-Applied != "1") {
-            if (req.http.X-SCP-Vary-Cookie ~ "^[;[:blank:]]|[;[:blank:]]$") {
-                set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, "^[;[:blank:]]+|[;[:blank:]]+$", "");
-            }
-            if (req.http.X-SCP-Vary-Cookie ~ ";(?! [^[:blank:]])") {
-                set req.http.X-SCP-Vary-Cookie = regsuball(req.http.X-SCP-Vary-Cookie, ";[[:blank:]]*", "; ");
-            }
-        }
-        if (req.http.Cookie != "" && req.http.X-SCP-Vary-Cookie == "") { unset req.http.X-SCP-Vary-Cookie; }
-        # Composition does not reclassify cart/session names or omit a saved
-        # Variant. The origin-approved parent uses the same resolved remainder.
-        # An absent source assigned to a header becomes present-but-empty.
-        # Native Vary distinguishes that from absence, splitting Shared-only
-        # visitors away from the no-cookie object. Canonicalize both to absent.
-        if (req.http.X-SCP-Vary-Cookie && req.http.X-SCP-Vary-Cookie != "") {
-            set req.http.X-SCP-Vary-ESI-Cookie = req.http.X-SCP-Vary-Cookie;
-        } else {
-            unset req.http.X-SCP-Vary-ESI-Cookie;
-        }
+    } else {
+        cookie_handoff.cookie_variation_headers("", false);
     }
 }
 sub scp_cookie_diagnostics {
@@ -79,35 +55,28 @@ sub scp_cookie_diagnostics {
     }
     unset resp.http.X-Cache-Cookie-Names;
     unset resp.http.X-Cache-Cookie-Role;
-    # Describe the dimension actually used by this stored response. A matching
-    # application-owned policy hashes selected variants only; a newer origin
-    # policy retains its complete Cookie Vary; ordinary Vary uses our remainder.
-    unset req.http.X-SCP-Admin-Matched;
-    if (resp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)" &&
-        !(req.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
-          resp.http.X-UltraCache-Cookie-Settings == req.http.X-SCP-Cookie-Contract &&
-          resp.http.X-UltraCache-Cookie-Vary == "policy-only")) {
-        if (req.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" && resp.http.X-UltraCache-Cookie-Settings ~ "^[0-9a-f]{64}$" &&
-            resp.http.X-UltraCache-Cookie-Settings != req.http.X-SCP-Cookie-Contract) {
-            set req.http.X-SCP-Admin-Matched = req.http.Cookie;
-        } else { set req.http.X-SCP-Admin-Matched = req.http.X-SCP-Vary-Cookie; }
-    } else { set req.http.X-SCP-Admin-Matched = req.http.X-SCP-Admin-Variant; }
+    # Select the same diagnostic source; materialize names only, not values.
     if (req.http.X-SCP-Cookie-Name &&
         (req.http.X-SCP-Cookie-Role == "private" || req.http.X-SCP-Cookie-Role == "private-fragment" ||
          req.http.X-SCP-Cookie-Role == "site-bypass" || req.http.X-SCP-Cookie-Role == "provider-consent")) {
         set resp.http.X-Cache-Cookie-Names = req.http.X-SCP-Cookie-Name;
         set resp.http.X-Cache-Cookie-Role = req.http.X-SCP-Cookie-Role;
-    } else if (req.http.X-SCP-Admin-Matched &&
-               (req.http.X-SCP-Admin-Matched == req.http.X-SCP-Admin-Variant ||
-                req.http.X-SCP-Admin-Matched ~ {"^[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*(;[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*)*$"})) {
-        # Validate pair syntax first: malformed Cookie text without '=' must not
-        # be reflected as a supposed cookie name. Values are always removed.
-        set resp.http.X-Cache-Cookie-Names = regsuball(req.http.X-SCP-Admin-Matched, "=[^;]*", "");
-        set resp.http.X-Cache-Cookie-Names = regsuball(resp.http.X-Cache-Cookie-Names, ";[[:blank:]]*", ", ");
-        set resp.http.X-Cache-Cookie-Role = "public-variant";
-    } else if (req.http.X-SCP-Cookie-Name) {
-        set resp.http.X-Cache-Cookie-Names = req.http.X-SCP-Cookie-Name;
-        set resp.http.X-Cache-Cookie-Role = req.http.X-SCP-Cookie-Role;
+    } else {
+        if (resp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Cookie[[:blank:]]*(,|$)" &&
+            !(req.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" &&
+              resp.http.X-UltraCache-Cookie-Settings == req.http.X-SCP-Cookie-Contract &&
+              resp.http.X-UltraCache-Cookie-Vary == "policy-only")) {
+            if (req.http.X-SCP-Cookie-Contract ~ "^[0-9a-f]{64}$" && resp.http.X-UltraCache-Cookie-Settings ~ "^[0-9a-f]{64}$" &&
+                resp.http.X-UltraCache-Cookie-Settings != req.http.X-SCP-Cookie-Contract) {
+                set resp.http.X-Cache-Cookie-Names = cookie_handoff.cookie_diagnostic_names(req.http.Cookie, req.http.Cookie == req.http.X-SCP-Admin-Variant || req.http.Cookie ~ {"^[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*(;[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*)*$"});
+            } else { set resp.http.X-Cache-Cookie-Names = cookie_handoff.cookie_diagnostic_names(req.http.X-SCP-Vary-Cookie, req.http.X-SCP-Vary-Cookie == req.http.X-SCP-Admin-Variant || req.http.X-SCP-Vary-Cookie ~ {"^[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*(;[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*)*$"}); }
+        } else { set resp.http.X-Cache-Cookie-Names = cookie_handoff.cookie_diagnostic_names(req.http.X-SCP-Admin-Variant, req.http.X-SCP-Admin-Variant == req.http.X-SCP-Admin-Variant || req.http.X-SCP-Admin-Variant ~ {"^[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*(;[[:blank:]]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=[^;]*)*$"}); }
+        if (resp.http.X-Cache-Cookie-Names) {
+            set resp.http.X-Cache-Cookie-Role = "public-variant";
+        } else if (req.http.X-SCP-Cookie-Name) {
+            set resp.http.X-Cache-Cookie-Names = req.http.X-SCP-Cookie-Name;
+            set resp.http.X-Cache-Cookie-Role = req.http.X-SCP-Cookie-Role;
+        } else { unset resp.http.X-Cache-Cookie-Names; }
     }
     if (resp.http.X-Cache-Cookie-Names) {
         set resp.http.X-Cache-Cookie-Policy = "@@COOKIE_POLICY_VERSION@@";
