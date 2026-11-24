@@ -359,6 +359,19 @@ VCL_BOOL vmod_delivery_reuse_pending(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
     return !ctx->req->esi_level && d && d->phase == D_FINALIZE;
 }
+#ifdef UC_NATIVE_PRIVATE_REUSE
+/* Registry lock held. This is the same original's natural cache-only lifetime,
+ * not a new retry deadline or a permission to clear a mutation fence. */
+static int delivery_reuse_observer_current(const struct continuation *d) {
+    const struct delivery_fragment *fragment;
+    double now = VTIM_real();
+    if (d->failed || d->reuse_failed || !d->reuse_finalize_header ||
+        d->public_deadline <= now || !delivery_reuse_current_scope(d)) return 0;
+    for (fragment = d->fragments; fragment; fragment = fragment->next)
+        if (delivery_fragment_deadline(d,fragment) <= now) return 0;
+    return 1;
+}
+#endif
 VCL_BOOL vmod_delivery_reuse_backend(VRT_CTX, struct vmod_priv *priv) {
 #ifdef UC_NATIVE_PRIVATE_REUSE
     struct task *task = priv->priv;
@@ -369,7 +382,8 @@ VCL_BOOL vmod_delivery_reuse_backend(VRT_CTX, struct vmod_priv *priv) {
     pthread_mutex_lock(&lock);
     entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
     if (d && d->phase == D_FINALIZE && !d->reuse_fetched && d->reuse_finalize_header &&
-        delivery_header_equals(ctx->http_bereq,h_private_key,d->reuse_metadata_key)) {
+        delivery_header_equals(ctx->http_bereq,h_private_key,d->reuse_metadata_key) &&
+        delivery_reuse_observer_current(d)) {
         owned = d->reuse_fetched = 1;
         http_ForceField(ctx->http_bereq,HTTP_HDR_METHOD,"GET");
         http_SetH(ctx->http_bereq,HTTP_HDR_URL,WS_Copy(ctx->ws,d->url,-1));
@@ -408,6 +422,10 @@ VCL_BOOL vmod_delivery_reuse_response(VRT_CTX, struct vmod_priv *priv) {
     entry = delivery_entry(task->key); d = entry ? entry->delivery : NULL;
     if (d && d->phase == D_FINALIZE && d->reuse_fetched) {
         owned = 1;
+        d->reuse_retry = http_GetStatus(ctx->http_beresp) == 204 &&
+            delivery_header_equals(ctx->http_beresp,HDR("X-UltraCache-Delivery-Reuse-Outcome"),"pending") &&
+            !http_CountHdr(ctx->http_beresp,H_Set_Cookie) && !http_CountHdr(ctx->http_beresp,h_set_cookie2) &&
+            !http_CountHdr(ctx->http_beresp,H_Content_Encoding);
         remaining = reuse_single(ctx->http_beresp,HDR("X-UltraCache-Delivery-Reuse-Fresh-Remaining"));
         type = reuse_single(ctx->http_beresp,H_Content_Type);
         if (remaining && *remaining) {
@@ -433,14 +451,50 @@ VCL_BOOL vmod_delivery_reuse_response(VRT_CTX, struct vmod_priv *priv) {
             http_ForceHeader(ctx->http_beresp,HDR("X-SCP-Private-Object"),"1");
             http_ForceHeader(ctx->http_beresp,reuse_metadata_marker,"1");
             VRT_l_beresp_ttl(ctx,remaining_ttl);
-        } else {
+        } else if (!d->reuse_retry) {
             d->reuse_failed = 1;
             VRT_l_beresp_ttl(ctx,0); VRT_l_beresp_uncacheable(ctx,1);
+        } else {
+            /* A known pending observation is not a reusable metadata object.
+             * Only the same live busyobj may repeat this exact finalizer.
+             * Do not poison that busyobj's final successful object's cache
+             * admission with an uncacheable flag from an intermediate reply. */
+            VRT_l_beresp_ttl(ctx,0);
         }
         http_Unset(ctx->http_beresp,H_Set_Cookie); http_Unset(ctx->http_beresp,h_set_cookie2);
         http_Unset(ctx->http_beresp,H_Vary);
     }
     pthread_mutex_unlock(&lock); return owned;
+#else
+    (void)ctx; (void)priv; return 0;
+#endif
+}
+
+VCL_BOOL vmod_delivery_reuse_retry(VRT_CTX, struct vmod_priv *priv) {
+#ifdef UC_NATIVE_PRIVATE_REUSE
+    struct task *task = priv->priv;
+    struct handoff *entry;
+    struct continuation *d;
+    int retry = 0;
+    pthread_mutex_lock(&lock);
+    entry = task && task->key ? delivery_entry(task->key) : NULL;
+    d = entry ? entry->delivery : NULL;
+    if (d && d->phase == D_FINALIZE && d->reuse_fetched && d->reuse_retry) {
+        retry = delivery_reuse_observer_current(d);
+        d->reuse_retry = 0;
+        if (retry) {
+            /* Keep the original PRIV_TOP owner and the engine's existing HSH
+             * busyobj. No restart, renderer, new candidate or detached req.
+             * Engine retry exhaustion remains an ordinary optional failure. */
+            d->reuse_fetched = 0;
+            VSLb(ctx->vsl,SLT_Debug,"uc-finalize pending same-owner backend-retry");
+        } else {
+            d->reuse_failed = 1;
+            VRT_l_beresp_ttl(ctx,0); VRT_l_beresp_uncacheable(ctx,1);
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return retry;
 #else
     (void)ctx; (void)priv; return 0;
 #endif

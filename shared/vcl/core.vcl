@@ -353,6 +353,10 @@ sub scp_backend_fetch {
 sub scp_backend_response {
     set beresp.http.X-SCP-Execution-Drain = cookie_handoff.execution_drain_response();
     if (beresp.http.X-SCP-Execution-Drain == "-1") { return (abandon); }
+    if (beresp.http.X-SCP-Execution-Drain == "2") {
+        unset beresp.http.X-SCP-Execution-Drain;
+        return (retry);
+    }
     if (beresp.http.X-SCP-Execution-Drain == "1") {
         unset beresp.http.X-SCP-Execution-Drain;
         set beresp.uncacheable = true;

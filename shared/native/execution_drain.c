@@ -5,6 +5,19 @@
 #include <limits.h>
 static const hdr_t h_execution_drain = HDR("X-UltraCache-Delivery-Execution-Drain-Context");
 
+/* Registry lock held. Retrying a diagnostic never rebases its signed original
+ * onto a different deployment, application policy or scope incarnation. */
+static int execution_drain_current(const struct delivery_execution_drain *d) {
+    const struct reuse_scope *scope = reuse_scope_find(d->site_id,d->host,d->scope);
+    const struct public_declaration *boundary = public_declaration_for_url(d->site_id,d->host,d->target);
+    return scope && scope->enabled && scope->execution_drain && boundary &&
+        !strcmp(boundary->scope,d->scope) && !strcmp(boundary->wordpress_policy,scope->wordpress_policy) &&
+        !strcmp(public_registry_epoch,d->epoch) &&
+        !strcmp(scope->incarnation,d->incarnation) && !strcmp(scope->native_policy,d->native_policy) &&
+        !strcmp(scope->wordpress_policy,d->wordpress_policy) && !strcmp(scope->policy,d->reuse_policy) &&
+        !strcmp(scope->coverage_policy,d->coverage_policy);
+}
+
 VCL_INT vmod_execution_drain_authorize(VRT_CTX, struct vmod_priv *priv,
     VCL_STRING site, VCL_STRING native_policy, VCL_STRING credential) {
     struct task *task = get_task(priv);
@@ -111,7 +124,7 @@ VCL_INT vmod_execution_drain_backend(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     pthread_mutex_lock(&lock);
     entry = task && task->key ? delivery_entry(task->key) : NULL;
     d = entry ? entry->execution_drain : NULL;
-    if (d) {
+    if (d && execution_drain_current(d)) {
         owned = 1;
         target = WS_Copy(ctx->ws,d->target,-1);
         header = WS_Copy(ctx->ws,d->header,-1);
@@ -119,7 +132,10 @@ VCL_INT vmod_execution_drain_backend(VRT_CTX, struct vmod_priv *priv, VCL_STRING
     }
     pthread_mutex_unlock(&lock);
     if (!owned) return http_CountHdr(ctx->http_bereq,h_execution_drain) ? -1 : 0;
-    if (task->execution_drain_sent || !credential || !*credential || !target || !header || !application_scope ||
+    /* State 2 is armed only by a genuine pending response on this same backend
+     * task. A settled/unavailable response cannot reopen the dispatch. */
+    if ((task->execution_drain_sent && task->execution_drain_sent != 2) ||
+        !credential || !*credential || !target || !header || !application_scope ||
         !execution_drain_clear_headers(ctx->http_bereq)) return -1;
     task->execution_drain_sent = 1;
     http_SetH(ctx->http_bereq,HTTP_HDR_METHOD,"GET");
@@ -135,15 +151,29 @@ VCL_INT vmod_execution_drain_backend(VRT_CTX, struct vmod_priv *priv, VCL_STRING
 }
 VCL_INT vmod_execution_drain_response(VRT_CTX, struct vmod_priv *priv) {
     struct task *task = priv->priv;
+    struct handoff *entry;
     const char *outcome;
-    if (!task || !task->execution_drain_sent) return 0;
+    int retry = 0;
+    if (!task || task->execution_drain_sent != 1) return 0;
     outcome = reuse_single(ctx->http_beresp,HDR("X-UltraCache-Execution-Drain-Outcome"));
     if (http_GetStatus(ctx->http_beresp) != 204 ||
         !delivery_header_equals(ctx->http_beresp,HDR("X-UltraCache-Execution-Drain-Version"),"1") ||
         !outcome || (strcmp(outcome,"settled") && strcmp(outcome,"pending") && strcmp(outcome,"unavailable"))) return -1;
+    if (!strcmp(outcome,"pending")) {
+        if (http_CountHdr(ctx->http_beresp,H_Set_Cookie) || http_CountHdr(ctx->http_beresp,h_set_cookie2) ||
+            http_CountHdr(ctx->http_beresp,H_Content_Encoding)) return -1;
+        pthread_mutex_lock(&lock);
+        entry = task->key ? delivery_entry(task->key) : NULL;
+        if (entry && entry->execution_drain && execution_drain_current(entry->execution_drain)) {
+            task->execution_drain_sent = 2; retry = 1;
+        }
+        pthread_mutex_unlock(&lock);
+        if (!retry) return -1;
+        VSLb(ctx->vsl,SLT_Debug,"uc-execution-drain pending same-owner backend-retry");
+    }
     http_Unset(ctx->http_beresp,H_Set_Cookie); http_Unset(ctx->http_beresp,h_set_cookie2);
     http_Unset(ctx->http_beresp,h_execution_drain); http_Unset(ctx->http_beresp,h_mutation_context);
     http_Unset(ctx->http_beresp,h_mutation_receipt);
     http_Unset(ctx->http_beresp,HDR("X-UltraCache-Delivery-Authorization"));
-    return 1;
+    return retry ? 2 : 1;
 }

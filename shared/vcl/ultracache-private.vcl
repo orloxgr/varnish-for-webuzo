@@ -62,6 +62,7 @@ sub scp_private_miss {
 
 sub scp_private_backend_response {
     if (cookie_handoff.delivery_reuse_response()) {
+        if (cookie_handoff.delivery_reuse_retry()) { return (retry); }
         set beresp.do_stream = false;
         set beresp.grace = 0s;
         set beresp.keep = 0s;

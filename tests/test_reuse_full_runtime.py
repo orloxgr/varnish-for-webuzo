@@ -135,10 +135,26 @@ class NativeFullReuse(unittest.TestCase):
     def test_reuse_stage_diagnostics_are_masked_by_default_without_changing_cached_delivery(self):
         self.run_full_actor(anonymous_nonce=True,diagnostic_only=False)
 
+    def test_known_pending_finalizer_retries_same_original_then_complete_hit_has_zero_origin(self):
+        self.run_full_actor(anonymous_nonce=True,pending_case='settled')
+
+    def test_pending_finalizer_exhaustion_preserves_original_without_publishing_metadata(self):
+        self.run_full_actor(anonymous_nonce=True,pending_case='exhausted')
+
+    def test_declined_finalizer_is_terminal_without_retry_or_admission(self):
+        self.run_full_actor(anonymous_nonce=True,pending_case='declined')
+
+    def test_pending_finalizer_with_cookie_is_terminal_without_cookie_replay(self):
+        self.run_full_actor(anonymous_nonce=True,pending_case='cookie')
+
+    def test_pending_finalizer_cannot_retry_past_actual_fragment_deadline(self):
+        self.run_full_actor(anonymous_nonce=True,pending_case='expired',body_budget=1)
+
     def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False,
                        anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False,
-                       held_case='read',diagnostic_only=None):
+                       held_case='read',diagnostic_only=None,pending_case=None):
         holder={};calls=[];prepared={};prepared_accepts={};generation=[1];records=[];armed=[]
+        finalize_attempts={};finalize_headers={}
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         later_entered=threading.Event();later_release=threading.Event();later_original=[]
         if held_case=='ended-late-write':held_release.set()
@@ -178,6 +194,19 @@ class NativeFullReuse(unittest.TestCase):
                 self.assertEqual(path,PARENT);self.assertIsNone(headers.get('Cookie'))
                 self.assertIsNone(headers.get('X-UltraCache-Mutation-Context'))
                 context=json.loads(base64.b64decode(headers['X-UltraCache-Delivery-Reuse-Context'],validate=True))
+                original_id=context['requestId']
+                exact=headers['X-UltraCache-Delivery-Reuse-Context']
+                if original_id in finalize_headers:
+                    self.assertEqual(exact,finalize_headers[original_id],
+                        'A pending observer must retry the exact original signed finalization')
+                finalize_headers[original_id]=exact
+                finalize_attempts[original_id]=finalize_attempts.get(original_id,0)+1
+                if pending_case and (pending_case!='settled' or finalize_attempts[original_id]<=2):
+                    if pending_case=='expired':time.sleep(1.1)
+                    diagnostic=[('Cache-Control','private, no-store'),
+                        ('X-UltraCache-Delivery-Reuse-Outcome','declined' if pending_case=='declined' else 'pending')]
+                    if pending_case=='cookie':diagnostic.append(('Set-Cookie','invalid-observer=never; HttpOnly; Path=/'))
+                    return 204,'',diagnostic
                 old,owner,original,source_namespace=prepared[context['requestId']]
                 current=self.observe(holder['get'])
                 if covered and source_namespace!=current['scopeRevision']:
@@ -277,7 +306,20 @@ class NativeFullReuse(unittest.TestCase):
             calls.clear()
             status,headers,body=get(PARENT,'owner=A; _fbp=first')
             self.assertEqual(status,200);self.assertIn('private:A-generation1',body)
-            self.assertEqual(calls,[(PARENT,'prepare'),(PARENT,'reuse-finalize')])
+            if pending_case in ('exhausted','declined','cookie','expired'):
+                self.assertEqual(calls.count((PARENT,'prepare')),1,'Retry is metadata only, never another provider execution')
+                attempts=calls.count((PARENT,'reuse-finalize'))
+                if pending_case=='exhausted':self.assertGreater(attempts,1)
+                else:self.assertEqual(attempts,1)
+                self.assertEqual(len(finalize_attempts),1,'One original execution owns every attempt')
+                self.assertEqual(records,[],'Neither pending nor declined creates reusable metadata')
+                self.assertNotIn('invalid-observer=',str(cookies(headers)))
+                calls.clear()
+                again=get(PARENT,'owner=A')
+                self.assertEqual((again[0],again[2]),(200,body))
+                self.assertEqual(calls.count((PARENT,'prepare')),1,'Failed optional metadata must not become an admitted HIT')
+                return
+            self.assertEqual(calls,[(PARENT,'prepare')]+[(PARENT,'reuse-finalize')]*(3 if pending_case=='settled' else 1))
             self.assertEqual(len(records),1)
             if content_failure in ('revision','generation','cache-key','cache-tags','natural-expired'):
                 calls.clear()
@@ -296,6 +338,7 @@ class NativeFullReuse(unittest.TestCase):
             status,headers,body2=get(PARENT,'owner=A; _fbp=second')
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
+            if pending_case=='settled':return
             if diagnostic_only is not None:
                 status,_,other=get(PARENT,'owner=B')
                 self.assertEqual(status,200);self.assertIn('private:B-generation1',other)

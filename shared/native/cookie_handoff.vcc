@@ -102,7 +102,9 @@ Return 1 for an owned metadata backend, 0 for ordinary, -1 for unavailable owner
 $Function INT execution_drain_response(PRIV_TASK)
 $Restrict vcl_backend_response
 
-Return 1 for valid diagnostic 204, 0 for ordinary, -1 for invalid metadata reply.
+Return 2 for a genuine pending diagnostic on the same live dispatch (backend
+retry with unchanged engine budget), 1 for settled/unavailable diagnostic 204,
+0 for ordinary, -1 for invalid metadata reply. Never an admission grant.
 
 $Function INT delivery_recv(PRIV_TOP)
 $Restrict vcl_recv
@@ -458,5 +460,12 @@ $Function BOOL delivery_reuse_response(PRIV_TASK)
 $Restrict vcl_backend_response
 
 Capture metadata from that source into the existing private native namespace.
+
+$Function BOOL delivery_reuse_retry(PRIV_TASK)
+$Restrict vcl_backend_response
+
+Consume a genuine pending response for this live original's exact metadata
+fetch. Retry uses the same busyobj and unchanged engine retry budget; it never
+renders, grants admission, or transfers ownership beyond the original task.
 
 $Function STRING reuse_coverage_policy(STRING site, STRING host, STRING scope)

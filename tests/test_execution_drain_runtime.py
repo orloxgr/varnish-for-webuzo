@@ -99,10 +99,60 @@ class NativeExecutionDrain(unittest.TestCase):
             self.assertEqual(status,400)
             self.assertEqual(len(seen),1);self.assertEqual(self.observe(get)['temporaryHolds'],1)
 
+    def test_pending_dispatch_retries_exact_original_until_actual_mock_settlement(self):
+        self.run_pending_dispatch('settled')
+
+    def test_pending_dispatch_exhaustion_never_retires_original_or_reenters_application(self):
+        self.run_pending_dispatch('exhausted')
+
+    def test_unavailable_dispatch_is_terminal_without_metadata_retry(self):
+        self.run_pending_dispatch('unavailable')
+
+    def test_pending_dispatch_with_cookie_is_terminal_without_replay(self):
+        self.run_pending_dispatch('cookie')
+
+    def run_pending_dispatch(self,mode):
+        holder={};seen=[];attempts=[]
+        def origin(path,headers):
+            if headers.get('X-UltraCache-Delivery-Phase')=='execution-drain':
+                self.assertEqual(path,PATH)
+                for name in ('Cookie','Authorization','X-UltraCache-Mutation-Context'):
+                    self.assertNotIn(name,headers)
+                attempts.append(headers['X-UltraCache-Delivery-Execution-Drain-Context'])
+                self.assertEqual(attempts[-1],attempts[0],'Every retry retains the same signed original')
+                outcome='unavailable' if mode=='unavailable' else 'pending'
+                if mode=='settled' and len(attempts)==3:
+                    self.drain(holder['get'],seen[0]);outcome='settled'
+                response=[('X-UltraCache-Execution-Drain-Version','1'),('X-UltraCache-Execution-Drain-Outcome',outcome)]
+                if mode=='cookie':response.append(('Set-Cookie','invalid-drain=never; Path=/'))
+                return 204,'',response
+            original=coverage.context(self,headers,'POST',path);seen.append(original)
+            return 'original unchanged',[('Cache-Control','private, no-store'),coverage.response_receipt(original)]
+        with proxy('ultracache',origin,allow_post=True) as get:
+            holder['get']=get;self.register(get);self.ready(get)
+            self.assertEqual(backend.post(get,PATH)[2],b'original unchanged');self.ended(get)
+            status,headers,body=self.dispatch(get,seen[0])
+            self.assertEqual(len(seen),1,'A metadata retry must never invoke another application execution')
+            self.assertFalse(cookies(list(headers.items())))
+            if mode=='settled':
+                self.assertEqual((status,body),(204,b''));self.assertEqual(len(attempts),3)
+                self.assertEqual(self.observe(get).get('temporaryHolds',0),0)
+            else:
+                self.assertEqual(status,204 if mode=='unavailable' else 503)
+                if mode=='exhausted':self.assertGreater(len(attempts),1)
+                else:self.assertEqual(len(attempts),1)
+                self.assertEqual(self.observe(get)['temporaryHolds'],1,'No timeout/error/unknown is a drain grant')
+
     def test_ten_millisecond_sender_disconnect_does_not_cancel_started_native_metadata_fetch(self):
+        self.run_disconnected_sender(pending=False)
+
+    def test_pending_dispatch_continues_same_native_backend_task_after_sender_disconnect(self):
+        self.run_disconnected_sender(pending=True)
+
+    def run_disconnected_sender(self,pending):
         # Actual native lifecycle/network actor. Application/independent drain
         # are MOCKED; this does not establish PHP shutdown or SQL termination.
-        holder={};seen=[];failures=[];timed_out=[]
+        holder={};seen=[];failures=[];timed_out=[];attempts=[]
         entered=threading.Event();sender_closed=threading.Event();original_returned=threading.Event();completed=threading.Event()
         def origin(path,headers):
             if headers.get('X-UltraCache-Delivery-Phase')=='execution-drain':
@@ -110,6 +160,10 @@ class NativeExecutionDrain(unittest.TestCase):
                     entered.set()
                     self.assertTrue(original_returned.wait(5),'Original mock application did not return')
                     self.assertTrue(sender_closed.is_set())
+                    attempts.append(headers['X-UltraCache-Delivery-Execution-Drain-Context'])
+                    self.assertEqual(attempts[-1],attempts[0])
+                    if pending and len(attempts)==1:
+                        return 204,'',[('X-UltraCache-Execution-Drain-Version','1'),('X-UltraCache-Execution-Drain-Outcome','pending')]
                     self.ended(holder['get'])
                     self.drain(holder['get'],seen[0])
                     completed.set()
@@ -142,6 +196,7 @@ class NativeExecutionDrain(unittest.TestCase):
             self.assertEqual(response[0],200);self.assertEqual(response[2],b'original unchanged body')
             self.assertTrue(completed.wait(5),'Metadata did not finish after sender disconnected')
             self.assertEqual(failures,[]);self.assertEqual(timed_out,[True])
+            self.assertEqual(len(attempts),2 if pending else 1)
             current=self.observe(get)
             self.assertEqual((current['scopeState'],current.get('temporaryHolds',0),current['scopeRevision']),
                              ('ready',0,old['scopeRevision']))

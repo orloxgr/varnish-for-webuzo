@@ -190,7 +190,7 @@ struct continuation {
     struct delivery_reuse_candidate *reuse_candidate;
     char reuse_binding[65], reuse_metadata_key[65];
     char *reuse_finalize_header, *reuse_metadata_uri;
-    unsigned reuse_final_restart, reuse_done, reuse_failed, reuse_fetched;
+    unsigned reuse_final_restart, reuse_done, reuse_failed, reuse_fetched, reuse_retry;
     unsigned reuse_fast;
     /* A pinned read cut is request-local ordering, not a scope CLEAN grant. */
     uint64_t reuse_execution_cut;
