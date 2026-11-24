@@ -10,6 +10,7 @@ import http.client
 import json
 import os
 import shutil
+import subprocess
 import threading
 import time
 import unittest
@@ -148,6 +149,13 @@ class NativeMutationBackend(unittest.TestCase):
             shop=self.observe(get,'/shop/')
             self.assertEqual(shop['scopeState'],'unbound')
             self.assertTrue(shop['unsettledExecutions'][0]['unknown'])
+            # Join the retained opaque identity to the real failing backend,
+            # without needing its deliberately unlogged signed header values.
+            execution_id=shop['unsettledExecutions'][0]['requestId']
+            observed=subprocess.run(['varnishlog','-n',str(get.instance),'-d','-g','vxid','-i','VCL_Log'],
+                                    capture_output=True,text=True,timeout=10)
+            self.assertEqual(observed.returncode,0,observed.stderr)
+            self.assertIn('UltraCache backend execution rejected: reason=receipt-missing execution='+execution_id,observed.stdout)
             refused=self.call(get,'private-authority-recover',shop,scope='/shop/',tag=None,expected_status=409,
                 extra={'X-UltraCache-Private-Drained':'1'})
             self.assertEqual(refused['reason'],'execution-unsettled','A boolean cannot erase an unknown execution')

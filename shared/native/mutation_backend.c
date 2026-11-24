@@ -23,12 +23,21 @@ static void mutation_unknown(struct mutation_execution *execution) {
     execution->unknown = 1;
     reuse_scope_unbind(execution->scope);
 }
+/* Failure-only correlation with this backend VXID. The opaque execution ID
+ * contains no Cookie, request proof, credential or application value. */
+static void mutation_log_failure(VRT_CTX, const struct mutation_execution *execution, const char *reason) {
+    if (ctx && ctx->vsl) VSLb(ctx->vsl,SLT_VCL_Log,
+        "UltraCache backend execution rejected: reason=%s execution=%s",reason,execution->request_id);
+}
 static void mutation_task_fini(VRT_CTX, struct task *task) {
     struct mutation_execution *execution = task ? task->mutation : NULL;
     if (!execution) return;
     if (ctx && ctx->http_bereq) http_Unset(ctx->http_bereq,h_mutation_context);
     pthread_mutex_lock(&lock);
-    if (execution->awaiting_receipt) mutation_unknown(execution);
+    if (execution->awaiting_receipt) {
+        mutation_log_failure(ctx,execution,"backend-ended-without-receipt");
+        mutation_unknown(execution);
+    }
     /* This backend owner can no longer return a receipt. Unknown application
      * execution remains retained until independent actual-drain attestation. */
     execution->awaiting_receipt = 0;
@@ -188,7 +197,10 @@ VCL_BOOL vmod_mutation_backend_response(VRT_CTX, struct vmod_priv *priv) {
     if (!execution) { delivery_mutation_receipt_free(receipt); return 0; }
     pthread_mutex_lock(&lock);
     execution->awaiting_receipt = 0;
-    if (!valid || !mutation_context_current(execution)) { mutation_unknown(execution); valid = 0; goto done; }
+    if (!valid || !mutation_context_current(execution)) {
+        mutation_log_failure(ctx,execution,!header ? "receipt-missing" : !valid ? "receipt-invalid" : "context-changed");
+        mutation_unknown(execution); valid = 0; goto done;
+    }
     if (receipt->state == MUTATION_SCOPE || (execution->hold && !receipt->coverage_qualified)) mutation_unknown(execution);
     else if (execution->hold) execution->coverage_qualified = 1;
     if (receipt->state == MUTATION_DIRTY) {

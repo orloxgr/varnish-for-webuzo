@@ -1,5 +1,10 @@
 # Varnish for Webuzo
 
+Version **0.13.8** correlates a missing or rejected native mutation receipt with
+its actual backend transaction using an opaque execution ID and fixed failure
+reason in the existing VSL error channel. No cookies, credentials or request
+proofs are logged. Failure handling and reuse authority are unchanged.
+
 Version **0.13.7** binds provider mutation receipt cleanup to its actual native
 execution owner. Unrelated V2 requests no longer delay that cleanup; the
 original pending receipt and legacy/unbound callers retain their required
