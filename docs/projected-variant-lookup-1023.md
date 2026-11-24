@@ -10,15 +10,16 @@ continuation. A final HIT header did not reveal the three repeated application
 calls that had preceded that final delivery.
 
 vmod_selection_begin now applies that same existing codec before initial lookup
-for a registered projected public source. It updates the request-owned
-classified_variant snapshot after successful header replacement so continuation
-restoration cannot reintroduce the old order. An already matching key does not
-consume another header copy. The raw Cookie delivered to the application is
+for a registered projected public source. The canonical key stays on the existing
+top-request frame, bound to its classification/restart. vcl_hash reads those stable
+bytes through the existing selection_variant getter without an intermediate
+working header or string copy. Original classification and both Vary carriers
+retain their literal bytes. The raw Cookie delivered to the application is
 untouched. No alias cache, cookie-specific rule, policy choice, TTL, resource
 setting or protocol was added. Basic, unregistered and nonprojected paths keep
 their original lookup behavior.
 
-Native old/new comparison in an isolated owned Lab:
+Initial identity comparison in an isolated owned Lab:
 
 - Both old modules failed three of five new cases, including repeated grouped
   values, duplicate first-value semantics and an active 6144-byte value. The
@@ -33,6 +34,18 @@ Native old/new comparison in an isolated owned Lab:
   9b2e49a54e84ffc0556d828bfe94924faebbf29e8faa17131d4e590edd04b168
   and module SHA256
   d2e7170f1c66b86e76338338564457857fc05fc35a91b719772eebbc951ccc3e.
+
+The subsequent full native gate exposed two workspace regressions in the first
+implementation under actual mutation coverage and a 6144-byte value. It had
+replaced the classified snapshot with canonical order, causing repeated large
+Vary carrier copies during continuation. That implementation was not released.
+The repair keeps canonical bytes off request WS and leaves the original
+classification snapshot intact. The two old failures reproduced with matching
+old VCL/module; the repaired Webuzo run passed all 14 methods including both
+failures, all five identity cases, and public/private source controls. Its module
+SHA is ed70aa0ec44bedb9ac6137bb148c9f29adfc88dd5ba31598fe2a7cff962425c4
+with signature 105dec9840c40350ec5411551e51f8a1bca59bab115874adc5921b9eda9601d3.
+The failed full receipt remains retained. A fresh matching full gate is required.
 
 These use an explicitly declared mock application and actual native HTTP/VCL,
 not WordPress/provider/browser or LiteSpeed Enterprise execution. Private local

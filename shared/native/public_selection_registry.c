@@ -385,26 +385,18 @@ VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {
     out = WS_Copy(ctx->ws,actions,-1); free(actions);
     return out;
 }
-/* A projected fill and its first lookup must use the same existing Variant
- * codec. Only the classified key changes; the application's Cookie is intact. */
+/* Hash the same projection as publication without replacing the working
+ * classification/Vary headers on every continuation through finite req WS. */
 static int public_projection_lookup_variant(VRT_CTX, const char *rules, struct guest_request *g) {
-    const char *current = NULL, *key;
-    char *canonical, *snapshot = NULL;
-    int snapshot_changed = 0;
+    const char *current = NULL;
+    char *canonical;
+    if (!g) return 0;
     if (!http_GetHdr(ctx->http_req,h_lookup_variant,&current)) return 1;
     canonical = delivery_selection_projection(current,rules);
     if (!canonical) return 0;
-    key = *canonical ? canonical : NULL;
-    if (g && g->classified && ((key && (!g->classified_variant || strcmp(key,g->classified_variant))) ||
-        (!key && g->classified_variant))) {
-        if (key && !(snapshot = strdup(key))) { free(canonical); return 0; }
-        snapshot_changed = 1;
-    }
-    if ((!key || strcmp(current,key)) && !delivery_restore_header(ctx,h_lookup_variant,key)) {
-        free(snapshot); free(canonical); return 0;
-    }
-    if (snapshot_changed) { free(g->classified_variant); g->classified_variant = snapshot; }
-    free(canonical); return 1;
+    free(g->projected_variant); g->projected_variant = canonical;
+    g->projected_variant_restart = ctx->req->restarts;
+    return 1;
 }
 VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     VCL_STRING site, VCL_STRING policy, VCL_STRING rules, VCL_BOOL cold, VCL_BOOL reselect) {
@@ -593,10 +585,20 @@ VCL_STRING vmod_selection_manifest(VRT_CTX, struct vmod_priv *priv) {
 }
 VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
-    if (ctx->req->esi_level || !d || !d->selection_entry || !d->variant ||
+    const struct guest_request *g = guest_context(ctx);
+    const char *value;
+    if (ctx->req->esi_level) return NULL;
+    if (!d) {
+        value = g && g->projected_variant_restart == ctx->req->restarts ? g->projected_variant : NULL;
+    } else {
+        if (!d->selection_entry || !d->variant ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
-    if (d->cold_entry && !d->source_projected) return d->lookup_variant ? WS_Copy(ctx->ws,d->lookup_variant,-1) : NULL;
-    return WS_Copy(ctx->ws,d->variant,-1);
+        value = d->cold_entry && !d->source_projected ? d->lookup_variant : d->variant;
+    }
+    if (!value) return NULL;
+    /* The owning top-request frame cannot change during vcl_hash. Hash its
+     * stable bytes directly; recv callers retain their existing WS lifetime. */
+    return ctx->method == VCL_MET_HASH ? value : WS_Copy(ctx->ws,value,-1);
 }
 VCL_VOID vmod_selection_variant_apply(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;

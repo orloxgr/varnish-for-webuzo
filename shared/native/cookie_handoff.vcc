@@ -295,9 +295,9 @@ $Restrict vcl_recv vcl_hash vcl_hit vcl_deliver
 Only an owned prepared selection exposes its exact signed target publication.
 
 $Function STRING selection_variant(PRIV_TOP)
-$Restrict vcl_recv
+$Restrict vcl_recv vcl_hash
 
-Native Variant projection of the logical candidate; actual Cookie stays intact.
+Native Variant projection of the initial lookup or logical candidate; actual Cookie stays intact.
 
 $Function VOID selection_variant_apply(PRIV_TOP)
 $Restrict vcl_recv

@@ -1,6 +1,15 @@
 # Varnish for Webuzo
 
-Version **0.13.1** corrects backend header-slot exhaustion and repeated client
+Version **0.13.2** separates the UltraCache application's storage approval from
+the browser's cache headers and aligns the first projected Variant lookup with
+publication. The existing serializer produces a request-owned hash input without
+rewriting large classification/Vary headers during continuations. Raw Cookie,
+saved choices, Basic behavior and native resource limits remain unchanged. Pair
+with WordPress UltraCache **3.13.13-dev.1329** for preserved browser cache headers.
+See [application policy](docs/application-cache-policy-1022.md) and
+[projected lookup](docs/projected-variant-lookup-1023.md).
+
+The 0.13 development work also corrects backend header-slot exhaustion and repeated client
 workspace copying during covered UltraCache public-selection continuations.
 Only four internal storage carriers are omitted from owned, uncacheable prepare
 fetches; their representation inputs remain on the original request and native
@@ -9,7 +18,7 @@ allocates another copy. Application Cookie, Authorization, form bodies and the
 negotiated execution/coverage protocol are preserved. No Varnish limits, cache
 lifetimes or saved settings are changed. See [backend header budget](shared/BACKEND-HEADER-BUDGET.md).
 
-Version **0.13.0** reuses prewarmed complete guest pages across Shared cookies
+It reuses prewarmed complete guest pages across Shared cookies
 when the application's declared provider inputs still match the guest context.
 Stateful visitors can reuse qualified private fragments through native cache
 objects, preserving their actual provider identity and current publication.

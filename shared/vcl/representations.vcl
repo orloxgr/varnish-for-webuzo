@@ -15,7 +15,11 @@ sub scp_cookie_hash {
     }
     if (req.http.X-SCP-Admin-Variant) {
         hash_data("explicit-cookie-variant");
-        hash_data(req.http.X-SCP-Admin-Variant);
+        if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.selection_variant()) {
+            hash_data(cookie_handoff.selection_variant());
+        } else {
+            hash_data(req.http.X-SCP-Admin-Variant);
+        }
     }
 }
 

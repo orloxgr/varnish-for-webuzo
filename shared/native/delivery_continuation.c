@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include "cache/cache_filter.h"
+#include "vcl.h"
 #include "vrt_obj.h"
 #include "delivery_envelope.h"
 #include "delivery_reuse_wire.h"
@@ -15,8 +16,8 @@ struct guest_request {
     unsigned captured, eligible, disabled;
     unsigned shared_candidate, shared_proved, fallback_restart;
     char *original_cookie, *site, *host, *url;
-    char *classified_cookie, *classified_variant;
-    unsigned classified;
+    char *classified_cookie, *classified_variant, *projected_variant;
+    unsigned classified, projected_variant_restart;
     char shared_manifest[65];
     unsigned warm_requested, warm_single, warm_checked, warm_valid;
     char *warm_projection, *warm_authorization;
@@ -27,7 +28,7 @@ static void guest_fini(VRT_CTX, void *value) {
     (void)ctx;
     free(g->warm_projection); free(g->warm_authorization);
     free(g->original_cookie); free(g->site); free(g->host); free(g->url);
-    free(g->classified_cookie); free(g->classified_variant);
+    free(g->classified_cookie); free(g->classified_variant); free(g->projected_variant);
     free(g->key); free(g->policy); free(g->wordpress_policy); free(g->epoch); free(g->scope); free(g);
 }
 static const struct vmod_priv_methods guest_methods = {
@@ -793,6 +794,7 @@ VCL_VOID vmod_cookie_classification_snapshot(VRT_CTX) {
     }
     free(g->classified_cookie); free(g->classified_variant);
     g->classified_cookie = cookie; g->classified_variant = variant; g->classified = 1;
+    free(g->projected_variant); g->projected_variant = NULL;
 }
 
 VCL_VOID vmod_cookie_classification_restore(VRT_CTX) {
