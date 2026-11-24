@@ -6,7 +6,7 @@ import re
 DEFAULTS=dict(enabled=True,static_seconds=2592000,versioned_seconds=31536000,versioned_paths=[])
 PROFILE_PATHS={'ultracache':['/wp-content/uploads/ultracache/css-bundles/bundle-*-{hash}.css']}
 TYPES={
-    'text/css':'css', 'application/javascript':'js mjs',
+    'text/css':'css', 'application/javascript':'js mjs', 'application/json':'map',
     'image/jpeg':'jpg jpeg', 'image/png':'png', 'image/gif':'gif',
     'image/webp':'webp', 'image/avif':'avif', 'image/avif-sequence':'avifs',
     'image/x-icon':'ico', 'image/svg+xml':'svg',

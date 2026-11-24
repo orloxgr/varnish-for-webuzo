@@ -1,5 +1,17 @@
 # Verification
 
+## Source-map static boundary — 24 November 2026
+
+The two methods in `tests/test_source_map_boundary.py` passed against an isolated
+Nginx 1.30.7 using the generated domain locations and browser-cache maps (1.046
+seconds, no skips). An existing public `.css.map` returned its exact file bytes,
+`application/json` and `STATIC` without calling the upstream. A missing `.map`
+kept its original URL/query and the dynamic upstream's private response.
+The original source reproduced the existing-file request reaching upstream.
+The upstream is an explicit application/Varnish fixture; this does not claim a
+WordPress execution, Apache no-application proof or retirement of earlier holds.
+No installed service/configuration or live site was changed by these tests.
+
 ## 0.12.0 candidate — 21 November 2026
 
 The prepared package includes independent Basic/UC cookie actions and scoped
