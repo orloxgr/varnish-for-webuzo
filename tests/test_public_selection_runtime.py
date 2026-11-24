@@ -529,7 +529,7 @@ class PublicSelectionRuntime(unittest.TestCase):
             lambda o,h:o['selectedPublic'].update(wordpressPolicyDigest='f'*64),
             lambda o,h:o['selectedPublic']['headers'].append('Set-Cookie: leaked=bad'),
             lambda o,h:o['selectedPublic']['publicParent'].update(generation='f'*64),
-            lambda o,h:o['selectedPublic']['headers'].append('Cache-Control: private, no-store'),
+            lambda o,h:o['selectedPublic']['headers'].append('Surrogate-Control: private, no-store'),
             lambda o,h:o['selectedPublic']['cookieUpdates'].append(dict(name='wordpress_logged_in_demo',valueBase64='eA=='))]
         for index,mutation in enumerate(mutations):
             resolver=Resolver(change=mutation)

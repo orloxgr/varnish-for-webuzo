@@ -255,10 +255,12 @@ static int selection_headers(struct reader *r, struct delivery_public_selection 
             selection_prefix(text.data,n,"x-ultracache-public-selection-") ||
             (selection_prefix(text.data,n,"x-ultracache-delivery-") &&
              !selection_case(text.data,n,"x-ultracache-delivery-prepare"))) return selection_reject(reason,"header-forbidden-field");
-        if ((selection_case(text.data,n,"cache-control") || selection_case(text.data,n,"surrogate-control") ||
-             selection_case(text.data,n,"pragma")) && selection_private_directive(value))
-            return selection_reject(reason,selection_case(text.data,n,"pragma") ? "header-pragma-private" :
-                selection_case(text.data,n,"cache-control") ? "header-cache-control-private" : "header-surrogate-control-private");
+        /* This grammar belongs to an authenticated, bound public selection.
+         * Cache-Control/Pragma describe its browser policy; the selected
+         * publication's remaining lifetime owns shared storage. An explicit
+         * surrogate privacy refusal is still mandatory. */
+        if (selection_case(text.data,n,"surrogate-control") && selection_private_directive(value))
+            return selection_reject(reason,"header-surrogate-control-private");
         if (selection_case(text.data,n,"vary")) {
             const char *p = value;
             while (*p) {

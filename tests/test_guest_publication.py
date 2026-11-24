@@ -55,7 +55,7 @@ def register(get,**kwargs):
 class GuestPublication(unittest.TestCase):
     def test_failure_diagnostic_is_one_fixed_line_and_valid_delivery_stays_valid(self):
         app = Guests()
-        app.change = lambda value: value['guestPublic']['headers'].append('Pragma: no-cache, private-secret-marker')
+        app.change = lambda value: value['guestPublic']['headers'].append('Surrogate-Control: no-store, private-secret-marker')
         with proxy('ultracache', app) as get:
             self.assertEqual(register(get)[0], 200)
             self.assertEqual(get('/bad-diagnostic')[0], 503)
@@ -65,7 +65,7 @@ class GuestPublication(unittest.TestCase):
                 '-i', 'VCL_Log'], text=True)
             messages = [line.split('UltraCache delivery rejected: ', 1)[1] for line in log.splitlines()
                 if 'UltraCache delivery rejected: ' in line]
-            self.assertEqual(messages, ['stage=prepare role=guest reason=header-pragma-private'])
+            self.assertEqual(messages, ['stage=prepare role=guest reason=header-surrogate-control-private'])
             self.assertNotIn('private-secret-marker', '\n'.join(messages))
 
     def test_complete_guest_fill_then_two_independent_zero_origin_hits(self):

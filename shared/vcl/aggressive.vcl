@@ -12,7 +12,8 @@ sub scp_aggressive_backend_response {
         (bereq.http.X-SCP-Aggressive == "1" ||
          (bereq.http.X-SCP-Profile == "ultracache" &&
           beresp.http.X-UltraCache-Cacheable == "1" &&
-          beresp.http.X-UltraCache-Surrogate-TTL ~ "^[1-9][0-9]*$" &&
+          (beresp.http.X-UltraCache-Surrogate-TTL ~ "^[1-9][0-9]*$" ||
+           (beresp.http.X-UltraCache-Surrogate-TTL == "0" && cookie_handoff.selection_local())) &&
           beresp.http.Surrogate-Control !~ "(?i)(^|[[:space:],])(private|no-store)([[:space:],=]|$)"))) {
         # Store the application browser policy separately. Only Varnish's
         # internal storage decision changes; delivery restores every field.

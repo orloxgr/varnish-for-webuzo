@@ -135,7 +135,6 @@ class PublicSelection(unittest.TestCase):
         for field in ('Set-Cookie: visitor=alice','sEt-CoOkIe2: visitor=alice','Authorization: secret',
                       'WWW-Authenticate: Basic','Connection: keep-alive','Content-Encoding: gzip',
                       'X-UltraCache-Delivery-Authorization: secret','Content-Length: 12',
-                      'Cache-Control: max-age=100, private','Cache-Control: no-store',
                       'Surrogate-Control: no-store','Vary: Accept, *','Link: x\r\nSet-Cookie: evil=1'):
             value=sample();value['selectedPublic']['headers'].append(field)
             with self.subTest(field=field):self.assertIsNone(self.parse(value))

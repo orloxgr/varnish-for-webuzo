@@ -47,17 +47,22 @@ class SelectionDiagnostics(unittest.TestCase):
         for guest, value in ((True, guest_sample()), (False, self.source())):
             self.assertEqual(self.diagnostic(value, guest), (True, None))
 
-    def test_private_browser_headers_reject_both_roles_without_recording_values(self):
-        for name, code in (('Pragma', 'header-pragma-private'), ('Cache-Control', 'header-cache-control-private'),
-                ('Surrogate-Control', 'header-surrogate-control-private')):
+    def test_surrogate_privacy_rejects_both_roles_without_recording_values(self):
+        for name, code in (('Surrogate-Control', 'header-surrogate-control-private'),):
             for guest, value, key in ((True, guest_sample(), 'guestPublic'), (False, self.source(), 'selectedPublic')):
                 value[key]['headers'].append(name+': no-cache, private-secret-marker')
                 self.assertEqual(self.diagnostic(value, guest), (False, code))
 
     def test_guest_reports_first_header_failure_and_clears_it_next_call(self):
-        value = guest_sample(); value['guestPublic']['headers'] += ['Pragma: no-cache', 'Cache-Control: private']
-        self.assertEqual(self.diagnostic(value), (False, 'header-pragma-private'))
+        value = guest_sample(); value['guestPublic']['headers'] += ['Surrogate-Control: no-store', 'Set-Cookie: private=secret']
+        self.assertEqual(self.diagnostic(value), (False, 'header-surrogate-control-private'))
         self.assertEqual(self.diagnostic(guest_sample()), (True, None))
+
+    def test_bound_public_roles_preserve_restrictive_browser_policy(self):
+        for guest, value, key in ((True, guest_sample(), 'guestPublic'), (False, self.source(), 'selectedPublic')):
+            value[key]['headers'] += ['Cache-Control: private, no-store', 'Pragma: no-cache',
+                'Expires: Thu, 19 Nov 1981 08:52:00 GMT']
+            self.assertEqual(self.diagnostic(value, guest), (True, None))
 
     def test_guest_binding_digest_and_unexpanded_body_have_distinct_reasons(self):
         for key, code in (('policyDigest', 'guest-native-policy'), ('wordpressPolicyDigest', 'guest-wordpress-policy'),
@@ -87,14 +92,15 @@ class SelectionDiagnostics(unittest.TestCase):
         for invalid in (False, True):
             value = self.source(); value['selectedPublic']['resolvedPublic'] = dict(
                 version=1, bucket='orig', locale='en_US', language='en', cookieValues=[])
-            if invalid: value['selectedPublic']['headers'].append('Cache-Control: private, no-store')
+            value['selectedPublic']['headers'] += ['Cache-Control: private, no-store', 'Pragma: no-cache']
+            if invalid: value['selectedPublic']['headers'].append('Surrogate-Control: no-store')
             raw = json.dumps(value).encode(); selected = SelectionPointer(); document = DocumentPointer()
             projection = ctypes.c_void_p(); reason = ctypes.c_char_p()
             try:
                 accepted = function(raw, len(raw), b'42', SELECTED_URL.encode(), POLICY.encode(), WP.encode(),
                     1, ctypes.byref(selected), ctypes.byref(document), ctypes.byref(projection), ctypes.byref(reason))
                 self.assertEqual(bool(accepted), not invalid)
-                self.assertEqual(reason.value, b'header-cache-control-private' if invalid else None)
+                self.assertEqual(reason.value, b'header-surrogate-control-private' if invalid else None)
             finally:
                 self.lib.delivery_selection_free(selected); self.lib.delivery_private_document_free(document)
 

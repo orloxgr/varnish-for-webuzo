@@ -8,6 +8,9 @@
 struct delivery_snapshot_vcl { VCL_BACKEND backend; };
 struct delivery_snapshot_stream { uint64_t key; size_t offset; char *fragment_url; };
 static const hdr_t snapshot_surrogate_control = HDR("Surrogate-Control");
+static const hdr_t snapshot_surrogate_ttl = HDR("X-UltraCache-Surrogate-TTL");
+static const hdr_t snapshot_cacheable = HDR("X-UltraCache-Cacheable");
+static const hdr_t snapshot_pragma = HDR("Pragma");
 static const hdr_t private_object = HDR("X-SCP-Private-Object");
 static const hdr_t private_tags = HDR("X-UltraCache-Tags");
 
@@ -152,7 +155,20 @@ static int delivery_snapshot_gethdrs(VRT_CTX, VCL_BACKEND backend) {
         }
         remaining = d->public_deadline-ctx->now;
         if (!isfinite(remaining) || remaining < 0) remaining = 0;
-        http_PrintfHeader(ctx->http_beresp,"Cache-Control: public, max-age=%.0f",floor(remaining));
+        if (d->selection_entry) {
+            const char *browser_control;
+            /* The already-validated selected owner supplies the existing
+             * application storage approval, never a new browser policy. */
+            http_ForceHeader(ctx->http_beresp,snapshot_cacheable,"1");
+            http_Unset(ctx->http_beresp,snapshot_surrogate_ttl);
+            http_PrintfHeader(ctx->http_beresp,"X-UltraCache-Surrogate-TTL: %.0f",floor(remaining));
+            http_CollectHdr(ctx->http_beresp,H_Cache_Control);
+            http_CollectHdr(ctx->http_beresp,snapshot_pragma);
+            if (!http_GetHdr(ctx->http_beresp,H_Cache_Control,&browser_control))
+                http_PrintfHeader(ctx->http_beresp,"Cache-Control: public, max-age=%.0f",floor(remaining));
+        } else {
+            http_PrintfHeader(ctx->http_beresp,"Cache-Control: public, max-age=%.0f",floor(remaining));
+        }
         if (!d->selection_entry) http_ForceHeader(ctx->http_beresp,snapshot_surrogate_control,"ESI/1.0");
         http_ForceHeader(ctx->http_beresp,h_recovery,"request-snapshot-v1");
         http_ForceHeader(ctx->http_beresp,h_request,d->request_id);

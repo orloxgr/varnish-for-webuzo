@@ -116,7 +116,7 @@ class GuestEnvelope(unittest.TestCase):
     def test_no_private_transport_or_issuer_fields_in_guest_headers(self):
         for header in ('Set-Cookie: owner=x','Set-Cookie2: owner=x','X-UltraCache-Delivery-Prepare: /private',
             'X-UltraCache-ESI-Private-Count: 0','X-UltraCache-Cookie-Delivery: 1',
-            'Surrogate-Control: ESI/1.0','Cache-Control: private, no-store',
+            'Surrogate-Control: ESI/1.0',
             'Authorization: secret','X-SCP-Guest-Complete: 1','Vary: *'):
             v=sample();v['guestPublic']['headers'].append(header)
             with self.subTest(header=header):self.assertIsNone(self.parse(v))

@@ -1,5 +1,12 @@
 # Varnish for Webuzo
 
+Version **0.13.4** preserves browser Cache-Control, Pragma and Expires on bound,
+application-approved UltraCache public selections and complete guest snapshots.
+Their actual remaining publication lifetime controls shared storage through the
+existing application approval path. Surrogate privacy, authentication, cookie
+and publication-binding checks remain in force; Basic and legacy sources keep
+their existing policy.
+
 Version **0.13.3** adds one failure-only VSL diagnostic for an UltraCache prepare
 continuation rejection. It reports a fixed stage, role and first parser failure,
 without request values, cookies, credentials or body content. Existing acceptance,
