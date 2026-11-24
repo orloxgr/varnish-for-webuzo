@@ -1,4 +1,4 @@
-"""Real cold native fetch with active coverage at unmodified server budgets.
+"""Real cold native fetch with signed event contexts at unmodified budgets.
 
 The application/receipts are explicitly mock. Browser fields and long consent
 cookies are synthetic; no captured customer values or identities are included.
@@ -17,7 +17,8 @@ from test_cold_public_selection import choices
 from test_guest_publication import GUEST_POLICY
 from test_public_selection_runtime import control
 from test_public_source import SourceApplication
-import test_mutation_coverage_runtime as coverage
+from test_reuse_delivery_context import signed_context
+from test_mutation_backend import receipt
 import test_reuse_authority as authority
 
 
@@ -43,22 +44,19 @@ def browser_headers(extra_navigation=False):
 
 
 @unittest.skipUnless(shutil.which('varnishd') and os.environ.get('SCP_EXPERIMENTAL_REUSE_TEST') == '1',
-    'Matching native engine and real coverage required')
+    'Matching native engine required; application is an explicit mock')
 class ActiveMutationHeaderBudget(unittest.TestCase):
     def register(self, get):
         status, fields, _ = control(get, enabled=True, names='', extra={
             'X-UltraCache-Public-Selection-Reuse-Version':'1',
             'X-UltraCache-Public-Selection-Reuse-Policy':authority.REUSE_POLICY,
-            'X-UltraCache-Public-Selection-Coverage-Version':'1',
-            'X-UltraCache-Public-Selection-Coverage-Policy':coverage.POLICY,
-            'X-UltraCache-Public-Selection-Execution-Drain-Version':'1',
             'X-UltraCache-Public-Selection-Public-Source-Version':'1',
             'X-UltraCache-Public-Selection-Public-Source-Projection-Version':'1',
             'X-UltraCache-Public-Selection-Guest-Version':'1',
             'X-UltraCache-Public-Selection-Guest-Policy':GUEST_POLICY})
         self.assertEqual(status, 200)
-        self.assertEqual(fields.get('X-UltraCache-VCL-Public-Selection-Coverage-Version'), '1')
-        self.assertEqual(fields.get('X-UltraCache-VCL-Public-Selection-Execution-Drain-Version'), '1')
+        self.assertNotIn('X-UltraCache-VCL-Public-Selection-Coverage-Version', fields)
+        self.assertNotIn('X-UltraCache-VCL-Public-Selection-Execution-Drain-Version', fields)
 
     def run_cold(self, extra_navigation=False, cookie_size=2315):
         source_app = SourceApplication()
@@ -87,9 +85,9 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
                         headers['X-UltraCache-Delivery-Public-Source-Projection']))
                     body = json.dumps(value)
             if headers.get('X-UltraCache-Mutation-Context'):
-                value = coverage.context(self, headers, 'GET', path)
+                value = signed_context(self, headers, path, 'GET')
                 received_contexts.append(value)
-                fields = [*fields, coverage.response_receipt(value)]
+                fields = [*fields, ('X-UltraCache-Mutation-Receipt', receipt(value, 'none', ()))]
             return body, fields
         policies = choices(*[(name, 'variant') for name in (
             'cmplz_consented_services', 'cmplz_policy_id', 'cmplz_functional',
@@ -106,11 +104,11 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
                 '-i','Error,VCL_Error,LostHeader,RespReason,BerespReason'],text=True)
             self.assertEqual(status, 200, trace+'\nMock executions: '+str(len(received)))
             self.assertIn('private:guest', body)
-            self.assertTrue(received_contexts, 'Coverage must stamp the actual backend execution')
+            self.assertTrue(received_contexts, 'The actual backend request must have its signed event context')
             self.assertEqual(received[0].get('X-UltraCache-Delivery-Phase'), 'public-select')
             self.assertEqual(received[0].get('X-UltraCache-Delivery-Public-Source-Role'), 'resolver-v1')
             self.assertEqual(received[0].get('Cookie'), raw, 'Original consent cookie wire must reach PHP unchanged')
-            self.assertEqual(received[0].get('X-UltraCache-VCL-Execution-Drain-Version'), '1')
+            self.assertNotIn('X-UltraCache-VCL-Execution-Drain-Version', received[0])
             self.assertTrue(received[0].get('X-UltraCache-Delivery-Authorization'))
             for name, value in browser_headers(extra_navigation).items():
                 if name not in ('X-Forwarded-For','Via','Accept-Encoding'):
@@ -122,16 +120,16 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
                     'Uncacheable owned prepare does not store a Vary representation: '+name)
             self.assertNotIn('header slots or workspace exhausted', trace)
 
-    def test_first_cold_consent_navigation_with_actual_coverage_and_execution_drain(self):
+    def test_first_cold_consent_navigation_with_actual_signed_event_context(self):
         self.run_cold()
 
-    def test_cold_covered_navigation_keeps_pragma_and_referer(self):
+    def test_cold_signed_navigation_keeps_pragma_and_referer(self):
         self.run_cold(extra_navigation=True)
 
-    def test_large_cold_consent_navigation_with_actual_coverage_and_execution_drain(self):
+    def test_large_cold_consent_navigation_with_actual_signed_event_context(self):
         self.run_cold(cookie_size=6144)
 
-    def test_large_cold_covered_navigation_keeps_pragma_and_referer(self):
+    def test_large_cold_signed_navigation_keeps_pragma_and_referer(self):
         self.run_cold(extra_navigation=True, cookie_size=6144)
 
     def test_ordinary_authenticated_post_preserves_cookie_url_and_form_body(self):
@@ -140,10 +138,11 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
         body = b'name=fixture&message=%CE%B4%CE%BF%CE%BA%CE%B9%CE%BC%CE%AE&empty='
         raw = synthetic_consent_cookie()
         def origin(url, headers, request_body):
-            value = coverage.context(self, headers, 'POST', url)
+            value = signed_context(self, headers, url, 'POST')
             received.append((url, dict(headers), request_body))
             return 'ordinary form response', [
-                ('Cache-Control', 'private, no-store'), coverage.response_receipt(value)]
+                ('Cache-Control', 'private, no-store'),
+                ('X-UltraCache-Mutation-Receipt', receipt(value, 'none', ()))]
         with proxy('ultracache', origin, allow_post=True, request_body=True,
                 site_settings={'cms_installations':[{'cms':'wordpress','base':'/'}]},
                 daemon_parameters=('http_max_hdr=64','workspace_backend=96k',

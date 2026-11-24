@@ -228,25 +228,22 @@ class NativePublicSource(unittest.TestCase):
                 self.assertEqual(len(app.wire), count)
 
     def test_source_mutation_context_signs_actual_source_url_without_private_candidate(self):
-        import test_mutation_coverage_runtime as coverage
         import test_reuse_authority as authority
-        from test_execution_drain_runtime import NativeExecutionDrain
+        from test_reuse_delivery_context import signed_context
+        from test_mutation_backend import receipt
         app = SourceApplication(); seen = []
         def origin(path, headers):
-            context = coverage.context(self, headers, 'GET', path)
+            context = signed_context(self, headers, path, 'GET')
             seen.append(context)
             result = app(path, headers)
-            return result[0], result[1]+[coverage.response_receipt(context)]
+            return result[0], result[1]+[('X-UltraCache-Mutation-Receipt', receipt(context, 'none', ()))]
         with proxy('ultracache', origin) as get:
             status, fields, _ = control(get, enabled=True, names='', extra={
                 'X-UltraCache-Public-Selection-Public-Source-Version': '1',
                 'X-UltraCache-Public-Selection-Reuse-Version': '1',
-                'X-UltraCache-Public-Selection-Reuse-Policy': authority.REUSE_POLICY,
-                'X-UltraCache-Public-Selection-Coverage-Version': '1',
-                'X-UltraCache-Public-Selection-Coverage-Policy': coverage.POLICY,
-                'X-UltraCache-Public-Selection-Execution-Drain-Version': '1'})
+                'X-UltraCache-Public-Selection-Reuse-Policy': authority.REUSE_POLICY})
             self.assertEqual(status, 200)
-            gate = NativeExecutionDrain(); gate.ready(get)
+            registry = authority.NativeReuseAuthority(); before = registry.observe(get)
             status, _, _ = get('/signed-source?utm_source=original')
             self.assertEqual(status, 200)
             self.assertEqual(len(seen), 2)
@@ -256,10 +253,11 @@ class NativePublicSource(unittest.TestCase):
             self.assertNotIn('X-UltraCache-Delivery-Reuse-Candidate-Version', source[1])
             self.assertNotIn('X-UltraCache-Delivery-Reuse-Context', source[1])
             self.assertEqual(personal[1].get('X-UltraCache-Delivery-Reuse-Candidate-Version'), '1')
-            pending = gate.ended(get)
-            self.assertEqual(pending.get('temporaryHolds'), 2)
-            for execution in seen: gate.drain(get, execution)
-            self.assertEqual(gate.observe(get).get('temporaryHolds', 0), 0)
+            self.assertEqual(len({context['requestId'] for context in seen}), 2)
+            after = registry.observe(get)
+            self.assertNotIn('temporaryHolds', after)
+            self.assertNotIn('unsettledExecutions', after)
+            self.assertEqual(before['scopeRevision'], after['scopeRevision'])
 
 
 if __name__ == '__main__': unittest.main()

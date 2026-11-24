@@ -10,12 +10,12 @@ import cookie_catalogue
 
 
 class NativePolicyIdentity(unittest.TestCase):
-    def test_drain_authority_and_sdk_only_changes_force_generated_policy_activation(self):
+    def test_event_authority_and_sdk_only_changes_force_generated_policy_activation(self):
         catalogue = cookie_catalogue.load_catalogue()
         with tempfile.TemporaryDirectory(prefix='native-policy-identity-') as folder:
             root = Path(folder)
-            names = ('native_build.py', 'native/cookie_handoff.c', 'native/execution_drain.c',
-                'native/reuse_authority.c', 'native/delivery_held.c', 'native/engine/exact/cache_objhead.h',
+            names = ('native_build.py', 'native/cookie_handoff.c', 'native/mutation_backend.c',
+                'native/reuse_authority.c', 'native/delivery_reuse_engine.c', 'native/engine/exact/cache_objhead.h',
                 'native/engine/exact/cache_pool.h', 'native/engine/exact/VSC_main.h', 'native/engine/exact/engine.json')
             for name in names:
                 path = root/name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(name.encode())

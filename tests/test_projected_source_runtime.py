@@ -231,25 +231,22 @@ class ProjectedSourceRuntime(unittest.TestCase):
             self.assertNotEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
 
     def test_each_real_phase_has_exact_execution_and_only_personal_attaches_private_candidate(self):
-        import test_mutation_coverage_runtime as coverage
         import test_reuse_authority as authority
-        from test_execution_drain_runtime import NativeExecutionDrain
+        from test_reuse_delivery_context import signed_context
+        from test_mutation_backend import receipt
         app = ProjectedApplication(); seen = []
         def origin(path, headers):
-            context = coverage.context(self, headers, 'GET', path); seen.append(context)
+            context = signed_context(self, headers, path, 'GET'); seen.append(context)
             body, fields = app(path, headers)
-            return body, fields+[coverage.response_receipt(context)]
+            return body, fields+[('X-UltraCache-Mutation-Receipt', receipt(context, 'none', ()))]
         with proxy('ultracache', origin, policies=self.policy()) as get:
             status, _, _ = control(get, enabled=True, names='brandCurrency', extra={
                 'X-UltraCache-Public-Selection-Public-Source-Version': '1',
                 'X-UltraCache-Public-Selection-Public-Source-Projection-Version': '1',
                 'X-UltraCache-Public-Selection-Reuse-Version': '1',
-                'X-UltraCache-Public-Selection-Reuse-Policy': authority.REUSE_POLICY,
-                'X-UltraCache-Public-Selection-Coverage-Version': '1',
-                'X-UltraCache-Public-Selection-Coverage-Policy': coverage.POLICY,
-                'X-UltraCache-Public-Selection-Execution-Drain-Version': '1'})
+                'X-UltraCache-Public-Selection-Reuse-Policy': authority.REUSE_POLICY})
             self.assertEqual(status, 200)
-            gate = NativeExecutionDrain(); before = gate.ready(get)
+            registry = authority.NativeReuseAuthority(); before = registry.observe(get)
             status, _, _ = get('/projected-proof?utm_source=actual',
                 'brandCurrency=USD; cmp_language=el; cart=actual-owner')
             self.assertEqual(status, 200)
@@ -260,10 +257,10 @@ class ProjectedSourceRuntime(unittest.TestCase):
                 self.assertNotIn('X-UltraCache-Delivery-Reuse-Context', fields)
             self.assertEqual(app.calls[2][1].get('X-UltraCache-Delivery-Reuse-Candidate-Version'), '1')
             self.assertEqual(len(seen), 3)
-            self.assertEqual(gate.ended(get).get('temporaryHolds'), 3)
-            for context in seen: gate.drain(get, context)
-            after = gate.observe(get)
-            self.assertEqual(after.get('temporaryHolds', 0), 0)
+            self.assertEqual(len({context['requestId'] for context in seen}), 3)
+            after = registry.observe(get)
+            self.assertNotIn('temporaryHolds', after)
+            self.assertNotIn('unsettledExecutions', after)
             self.assertEqual(before['scopeRevision'], after['scopeRevision'])
 
 

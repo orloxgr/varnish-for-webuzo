@@ -54,10 +54,10 @@ are native mock-producer checks, not a claim of live WordPress acceptance or
 production deployment. This correction does not repair missing application
 publication manifests; that is a separate producer issue.
 
-## Covered projected selection and retained consent cookies
+## Projected selection and retained consent cookies
 
-Active mutation coverage, execution-drain negotiation and public-source
-projection add their own authenticated context to a cold prepare. The native
+Signed event contexts and public-source projection add their own authenticated
+context to a cold prepare. The native
 module removes four backend-only storage carriers before stamping that context:
 `X-SCP-Vary-Accept`, `X-SCP-Vary-Accept-Language`, `X-SCP-Vary-Cookie` and
 `X-SCP-Vary-ESI-Cookie`. This applies only to the owned `D_PREPARE` phase, whose
@@ -73,7 +73,7 @@ single header and unchanged URL. Changed or duplicate headers still use normal
 replacement; absent and empty values remain distinct.
 
 `test_backend_mutation_header_budget.py` exercises both stages with a synthetic
-2315-byte consent Cookie, full browser fields, real native signed-coverage
+2315-byte consent Cookie, full browser fields, real native signed-event-context
 verification and an explicitly mock resolver/source/application. Both the
 ordinary navigation and the Pragma/Referer case use unchanged `http_max_hdr=64`,
 96 KiB client/backend workspaces and 8 KiB/32 KiB request limits. A separate
@@ -84,7 +84,7 @@ acceptance. The earlier header-capacity negative control remains active.
 
 ## Large Variant values through the complete continuation
 
-The active-coverage fixture additionally exercises a6144-byte incoming Cookie.
+The signed-event fixture additionally exercises a6144-byte incoming Cookie.
 The historical245-method run on770309a did not cover that size: the older
 workspace loop covered600/1200/1800/2400 bytes. Its passing result must not be
 reported as6144-byte acceptance.
@@ -112,3 +112,13 @@ TTL changes. Normal and disabled-engine modules share these helpers.
 against the original VCL operations, including empty/delimiter/Latin1/random
 inputs and a large value. These are explicitly native mock-application checks;
 matching real WordPress/browser and normal installer acceptance remain separate.
+
+The current transport tests do not negotiate the retired application-coverage
+or execution-drain protocols. Source and projected-source phase tests still
+verify the exact signed URL and distinct request identity for each real origin
+execution, and that only personal preparation requests a private candidate.
+Read-only execution does not change the scope revision or create a global hold.
+This retires only those obsolete prerequisites; it does not remove request
+authentication, real dependency invalidation, body preservation or header-budget
+assertions. Other historical universal-hold test modules are not qualified by
+these transport tests and must not be counted as current acceptance.
