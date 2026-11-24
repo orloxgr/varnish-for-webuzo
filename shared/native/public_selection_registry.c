@@ -385,6 +385,27 @@ VCL_STRING vmod_selection_actions(VRT_CTX, VCL_STRING rules, VCL_STRING names) {
     out = WS_Copy(ctx->ws,actions,-1); free(actions);
     return out;
 }
+/* A projected fill and its first lookup must use the same existing Variant
+ * codec. Only the classified key changes; the application's Cookie is intact. */
+static int public_projection_lookup_variant(VRT_CTX, const char *rules, struct guest_request *g) {
+    const char *current = NULL, *key;
+    char *canonical, *snapshot = NULL;
+    int snapshot_changed = 0;
+    if (!http_GetHdr(ctx->http_req,h_lookup_variant,&current)) return 1;
+    canonical = delivery_selection_projection(current,rules);
+    if (!canonical) return 0;
+    key = *canonical ? canonical : NULL;
+    if (g && g->classified && ((key && (!g->classified_variant || strcmp(key,g->classified_variant))) ||
+        (!key && g->classified_variant))) {
+        if (key && !(snapshot = strdup(key))) { free(canonical); return 0; }
+        snapshot_changed = 1;
+    }
+    if ((!key || strcmp(current,key)) && !delivery_restore_header(ctx,h_lookup_variant,key)) {
+        free(snapshot); free(canonical); return 0;
+    }
+    if (snapshot_changed) { free(g->classified_variant); g->classified_variant = snapshot; }
+    free(canonical); return 1;
+}
 VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     VCL_STRING site, VCL_STRING policy, VCL_STRING rules, VCL_BOOL cold, VCL_BOOL reselect) {
     struct continuation *d = priv->priv;
@@ -416,6 +437,10 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     if (!names || !wordpress_policy || !scope) { free(names); free(wordpress_policy); free(scope); return -1; }
     actions = public_actions(rules,names,&has_variant); free(names);
     if (!actions) { free(wordpress_policy); free(scope); return -1; }
+    if (!reselect && source_available && projection_available &&
+        !public_projection_lookup_variant(ctx,rules,g)) {
+        free(actions); free(wordpress_policy); free(scope); return -1;
+    }
     guest = !reselect && g && g->eligible && !g->disabled && g->key &&
         !strcmp(g->wordpress_policy,wordpress_policy) && !strcmp(g->scope,scope);
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
