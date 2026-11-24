@@ -22,14 +22,12 @@ struct handoff {
     uint64_t key;
     struct fields *fields;
     struct continuation *delivery; /* PRIV_TOP-owned; only accessed under lock. */
-    struct delivery_execution_drain *execution_drain; /* same client-task owner */
 };
 struct task {
     struct handoff *owner; uint64_t key;
     char *control_body; size_t control_length;
     char *cookie_variant, *cookie_variant_names; size_t cookie_variant_length;
     struct mutation_execution *mutation;
-    unsigned execution_drain_sent;
 };
 static void mutation_task_fini(VRT_CTX, struct task *);
 #define BUCKETS 1024
@@ -50,7 +48,6 @@ static void close_owner(struct task *task) {
         while (*p && *p != task->owner) p = &(*p)->next;
         if (*p) { *p = task->owner->next; --live; }
         clear_fields(task->owner->fields);
-        delivery_execution_drain_free(task->owner->execution_drain);
         free(task->owner);
         task->owner = NULL; task->key = 0;
         pthread_mutex_unlock(&lock);

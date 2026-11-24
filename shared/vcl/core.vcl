@@ -230,13 +230,6 @@ sub scp_backend_fetch {
     cookie_handoff.bind(bereq.http.X-SCP-Cookie-Handoff);
     if (cookie_handoff.delivery_public_source_backend()) {}
     call scp_delivery_authorization;
-    set bereq.http.X-SCP-Execution-Drain = cookie_handoff.execution_drain_backend(bereq.http.X-UltraCache-Delivery-Authorization);
-    if (bereq.http.X-SCP-Execution-Drain == "-1") { return (abandon); }
-    if (bereq.http.X-SCP-Execution-Drain == "1") {
-        unset bereq.http.X-SCP-Execution-Drain;
-        return;
-    }
-    unset bereq.http.X-SCP-Execution-Drain;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     call scp_mutation_backend_fetch;
     unset bereq.http.X-SCP-Cookie-Handoff;
@@ -351,22 +344,6 @@ sub scp_backend_fetch {
     unset bereq.http.X-SCP-Warm-Projection-Supported;
 }
 sub scp_backend_response {
-    set beresp.http.X-SCP-Execution-Drain = cookie_handoff.execution_drain_response();
-    if (beresp.http.X-SCP-Execution-Drain == "-1") { return (abandon); }
-    if (beresp.http.X-SCP-Execution-Drain == "2") {
-        unset beresp.http.X-SCP-Execution-Drain;
-        return (retry);
-    }
-    if (beresp.http.X-SCP-Execution-Drain == "1") {
-        unset beresp.http.X-SCP-Execution-Drain;
-        set beresp.uncacheable = true;
-        set beresp.ttl = 0s;
-        set beresp.do_esi = false;
-        set beresp.http.Cache-Control = "no-store";
-        set beresp.http.Surrogate-Control = "no-store";
-        return (deliver);
-    }
-    unset beresp.http.X-SCP-Execution-Drain;
     if (cookie_handoff.mutation_backend_response()) {}
     unset beresp.http.X-UltraCache-Guest-Issuer-Version;
     unset beresp.http.X-UltraCache-Guest-Issuer-Canonical-URL;

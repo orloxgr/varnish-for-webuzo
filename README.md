@@ -1,5 +1,7 @@
 # Varnish for Webuzo
 
+Version **0.13.10** removes whole-application execution holds from private cache reuse. Actual owner/content tag events invalidate only their dependents; valid complete deliveries do not wait for unrelated backend requests. The native/WordPress producer contract uses signed schema 1.
+
 Version **0.13.9** serves existing public source maps through the existing Nginx
 static handler. Missing files retain the original dynamic fallback and query
 string. This prevents those static responses from entering the WordPress

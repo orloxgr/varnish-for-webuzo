@@ -142,8 +142,7 @@ static int delivery_reuse_record_current_reason(const struct continuation *d, co
     size_t i;
     double now = VTIM_real();
     if (!scope) return delivery_reuse_record_reject(reason,"scope-unavailable");
-    if (!delivery_reuse_scope_ready(d,scope)) return delivery_reuse_record_reject(reason,"scope-not-ready");
-    if (scope->lost_execution_context) return delivery_reuse_record_reject(reason,"scope-lost-execution");
+    if (!reuse_scope_ready(scope)) return delivery_reuse_record_reject(reason,"scope-not-ready");
     if (!record) return delivery_reuse_record_reject(reason,"record-unavailable");
     if (record->valid_until <= now) return delivery_reuse_record_reject(reason,"record-expired");
     if (d->public_deadline <= now) return delivery_reuse_record_reject(reason,"parent-expired");
@@ -211,7 +210,6 @@ static int delivery_reuse_finish(VRT_CTX, struct continuation *d) {
                 ctx->req->objcore->t_origin+ctx->req->objcore->ttl),1) &&
             delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),1)) {
             if (delivery_reuse_publish_discovery(d,delivery_reuse_current_scope(d),record)) {
-                (void)reuse_identity_install(delivery_reuse_current_scope(d),record);
                 delivery_reuse_record_free(d->reuse_record); d->reuse_record = record; record = NULL;
             }
         }
@@ -247,14 +245,12 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     scope = declaration ? reuse_scope_find(d->site,d->host,declaration->scope) : NULL;
     if (!scope) { reason = "scope-unavailable"; goto done_locked; }
     if (!scope->enabled) { reason = "scope-disabled"; goto done_locked; }
-    if (!scope->ready) { reason = "scope-not-ready"; goto done_locked; }
+    if (!reuse_scope_ready(scope)) { reason = "scope-not-ready"; goto done_locked; }
     if (scope->revision_pending) { reason = "scope-revision-pending"; goto done_locked; }
     if (strcmp(native_policy,scope->native_policy)) { reason = "scope-native-policy"; goto done_locked; }
     if (strcmp(declaration->wordpress_policy,scope->wordpress_policy)) { reason = "scope-wordpress-policy"; goto done_locked; }
     if (!(discovery = delivery_reuse_discovery(scope,d))) { reason = "discovery-unavailable"; goto done_locked; }
     if (discovery->recipe->occurrences != d->occurrences) { reason = "discovery-occurrences"; goto done_locked; }
-    d->reuse_cut_active = 1; d->reuse_cut_provisional = 1;
-    d->reuse_execution_cut = scope->execution_sequence;
     page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
         scope->native_policy,scope->wordpress_policy,scope->policy,d->reuse_publication,d->reuse_representation,discovery->recipe->digest};
     reason = "metadata-input-binding-unavailable";
@@ -325,27 +321,24 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
         if (current) (void)HSH_DerefObjCore(ctx->req->wrk,&current);
     }
     if (valid) {
-        d->reuse_record = record; record = NULL;
-        d->reuse_cut_provisional = 0;
-        if (!delivery_reuse_scope_ready(d,scope)) {
-            d->held_parent = ctx->req->objcore; HSH_Ref(d->held_parent);
-            d->held_metadata = wire.object; wire.object = NULL;
-            reason = "held-schedule-unavailable";
-            if (delivery_held_schedule(ctx,d,scope)) outcome = REUSE_PLAN_HELD;
-            else valid = 0;
-        } else { d->reuse_cut_active = 0; outcome = REUSE_PLAN_HIT; }
+        d->reuse_record = record; record = NULL; outcome = REUSE_PLAN_HIT;
     }
 done_locked:
-    d->reuse_cut_provisional = 0;
     pthread_mutex_unlock(&lock);
     delivery_reuse_frame_free(frame,length);
     delivery_reuse_record_free(record); free(wire.copy);
     if (wire.object) (void)HSH_DerefObjCore(ctx->req->wrk,&wire.object);
     if (!valid) {
-        delivery_held_drop(ctx,d);
+        /* A real missing/invalidated object returns to the existing fill path.
+         * Release only this attempted plan, with no waiter or actor census. */
+        delivery_reuse_release(ctx,d->reuse_plan); d->reuse_plan = NULL;
+        delivery_reuse_record_free(d->reuse_record); d->reuse_record = NULL;
+        delivery_free_fragments(d->fragments); d->fragments = NULL;
+        d->reuse_fast = d->reuse_negotiated = 0;
+        free(d->reuse_scope); d->reuse_scope = NULL; d->reuse_recipe[0] = 0;
     }
     VSLb(ctx->vsl,SLT_Debug,"uc-reuse admission=%s reason=%s",
-        outcome == REUSE_PLAN_HELD ? "held" : outcome == REUSE_PLAN_HIT ? "hit" : "miss",
+        outcome == REUSE_PLAN_HIT ? "hit" : "miss",
         outcome != REUSE_PLAN_MISS ? "complete-plan" : reason);
     return outcome;
 }

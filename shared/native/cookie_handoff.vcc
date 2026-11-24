@@ -73,55 +73,21 @@ $Function BOOL mutation_backend_start(PRIV_TASK, STRING site, STRING native_poli
 $Restrict vcl_backend_fetch
 
 Called at the normal UltraCache dynamic backend boundary after negotiation.
-Own a request-bound revoke-only receipt context on the existing backend task.
-Unknown identity provenance unbinds only its registered application scope.
+Own signed original-delivery context on the existing backend task.
+This context neither invalidates a scope nor authorizes a cache HIT.
 
 $Function BOOL mutation_backend_response(PRIV_TASK)
 $Restrict vcl_backend_response
 
-Validate a receipt against this exact backend
-execution, revoke authority before browser headers, strip its transport fields.
+Validate an optional receipt against this exact backend execution and strip
+its transport fields. Only registered owner/tag events invalidate dependencies.
 Never grant CLEAN or change application status, body or Set-Cookie on failure.
-
-$Function BOOL execution_drain_available(STRING site, STRING host, STRING scope)
-$Restrict vcl_synth
-
-Accepted execution-drain dispatch negotiation for this exact application scope.
-
-$Function INT execution_drain_authorize(PRIV_TASK, STRING site, STRING native_policy, STRING credential)
-$Restrict vcl_recv
-
-Authenticate a strict producer dispatch and bind it to the existing client owner.
-Returns HTTP status, never an execution completion or cache admission.
-
-$Function INT execution_drain_backend(PRIV_TASK, STRING credential)
-$Restrict vcl_backend_fetch
-
-Return 1 for an owned metadata backend, 0 for ordinary, -1 for unavailable owner.
-
-$Function INT execution_drain_response(PRIV_TASK)
-$Restrict vcl_backend_response
-
-Return 2 for a genuine pending diagnostic on the same live dispatch (backend
-retry with unchanged engine budget), 1 for settled/unavailable diagnostic 204,
-0 for ordinary, -1 for invalid metadata reply. Never an admission grant.
 
 $Function INT delivery_recv(PRIV_TOP)
 $Restrict vcl_recv
 
 UltraCache only: 1 prepare PASS, 2 prepared fragment synth, -1 abort, 0 ordinary.
 The phase is request-owned, never inferred from client headers.
-
-$Function INT delivery_held_miss(PRIV_TOP)
-$Restrict vcl_miss
-
-Only the same top-request's owned held-read lookup may return 1 to restart.
-Returns 0 for ordinary misses and -1 for an invalid held-read reservation.
-
-$Function INT delivery_held_waiters()
-$Restrict vcl_synth vcl_deliver
-
-Read-only count of owned requests actually on the engine HSH waiting list.
 
 $Function BOOL delivery_guard(PRIV_TOP)
 $Restrict vcl_recv vcl_pass vcl_miss
@@ -402,11 +368,12 @@ $Restrict vcl_recv vcl_deliver vcl_synth
 Experimental resolver build capability, not negotiated producer reuse support.
 False unless the exact engine-source build receipt was explicitly supplied.
 
-$Function BOOL reuse_register(STRING site, STRING host, STRING scope, STRING native_policy, STRING wordpress_policy, STRING reuse_policy, BOOL enabled, STRING coverage_policy = "")
+$Function BOOL reuse_register(STRING site, STRING host, STRING scope, STRING native_policy, STRING wordpress_policy, STRING reuse_policy, BOOL enabled)
 $Restrict vcl_recv
 
-Authenticated capabilities only. New authority starts UNBOUND. Disabling and
-policy changes revoke scope readiness without forgetting outstanding writers.
+Authenticated capabilities only. Registration establishes the current policy
+namespace. New tags remain UNBOUND until their actual generation is published.
+Disabling and policy changes invalidate the previous namespace.
 
 $Function INT reuse_control(PRIV_TASK, STRING site, STRING native_policy)
 $Restrict vcl_recv
@@ -467,5 +434,3 @@ $Restrict vcl_backend_response
 Consume a genuine pending response for this live original's exact metadata
 fetch. Retry uses the same busyobj and unchanged engine retry budget; it never
 renders, grants admission, or transfers ownership beyond the original task.
-
-$Function STRING reuse_coverage_policy(STRING site, STRING host, STRING scope)

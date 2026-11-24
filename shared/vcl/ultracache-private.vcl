@@ -53,10 +53,6 @@ sub scp_private_hit {
 }
 
 sub scp_private_miss {
-    set req.http.X-SCP-Delivery-Held = cookie_handoff.delivery_held_miss();
-    if (req.http.X-SCP-Delivery-Held == "1") { return (restart); }
-    if (req.http.X-SCP-Delivery-Held == "-1") { return (synth(503, "Native wait reservation unavailable")); }
-    unset req.http.X-SCP-Delivery-Held;
     if (req.http.X-SCP-Private-Lookup == "1") { return (synth(404, "Private cache miss")); }
 }
 
