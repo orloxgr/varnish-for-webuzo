@@ -57,6 +57,40 @@ class NativeCoverageHolds(unittest.TestCase):
         return self.call(get,'private-authority-recover',self.observe(get),tag=None,
             extra={'X-UltraCache-Private-Drained':'1'},expected_status=409)
 
+    def test_complete_execution_list_is_explicit_before_during_and_after_last_retirement(self):
+        captured=[];entered=threading.Event();release=threading.Event();errors=[]
+        def origin(path,headers):
+            c=context(self,headers,'POST',path);captured.append(c);entered.set()
+            self.assertTrue(release.wait(10))
+            return 'actual',[('Cache-Control','private, no-store'),response_receipt(c)]
+        with proxy('ultracache',origin,transform=backend.actor_hooks,allow_post=True) as get:
+            register(self,get);old=self.ready(get)
+            self.assertEqual(old['unsettledExecutions'],[])
+            self.assertEqual(self.call(get,'private-authority-context',tag=None)['unsettledExecutions'],[])
+            def request():
+                try:self.assertEqual(backend.post(get)[0],200)
+                except BaseException as error:errors.append(error)
+            worker=threading.Thread(target=request);worker.start()
+            try:
+                self.assertTrue(entered.wait(10))
+                active=self.observe(get)['unsettledExecutions']
+                self.assertEqual(len(active),1)
+                self.assertEqual((active[0]['requestId'],active[0]['challenge']),
+                    (captured[0]['requestId'],captured[0]['challenge']))
+                self.assertTrue(active[0]['live']);self.assertTrue(active[0]['awaitingReceipt'])
+            finally:
+                release.set();worker.join(timeout=15)
+            self.assertFalse(worker.is_alive());self.assertEqual(errors,[])
+            self.assertEqual(len(self.ended(get)['unsettledExecutions']),1)
+            retired=self.drain(get,captured[0])
+            self.assertEqual(retired['unsettledExecutions'],[])
+            current=self.call(get,'private-authority-context',tag=None)
+            self.assertEqual(current['unsettledExecutions'],[])
+            self.assertEqual(current['scopeRevision'],old['scopeRevision'])
+            stale=self.drain(get,captured[0],status=409)
+            self.assertEqual(stale['reason'],'execution-unavailable')
+            self.assertEqual(stale['unsettledExecutions'],[])
+
     def test_qualified_receipt_and_native_fini_do_not_close_hold_but_exact_drain_preserves_revision(self):
         captured=[]
         def origin(path,headers):

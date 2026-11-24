@@ -204,7 +204,7 @@ class NativeMutationBackend(unittest.TestCase):
             self.assertTrue(marker['unknown'],'Backend end is not application drain')
             retired=self.drain(get,ended,marker)
             self.assertEqual(retired['scopeState'],'unbound')
-            self.assertNotIn('unsettledExecutions',retired)
+            self.assertEqual(retired['unsettledExecutions'],[])
 
     def test_exact_drained_marker_retirement_cannot_grant_clean_or_clear_other_scope(self):
         def origin(path,headers):
@@ -234,7 +234,7 @@ class NativeMutationBackend(unittest.TestCase):
             self.call(get,'private-authority-recover',first,scope='/shop/',tag=None,expected_status=409,
                 extra={'X-UltraCache-Private-Drained':'1'})
             final=self.drain(get,first,markers[1],scope='/shop/')
-            self.assertNotIn('unsettledExecutions',final)
+            self.assertEqual(final['unsettledExecutions'],[])
             self.assertEqual(final['scopeState'],'unbound')
             unchanged=self.observe(get,'/blog/')
             self.assertEqual((unchanged['state'],unchanged['generation'],unchanged['scopeRevision']),
