@@ -64,10 +64,17 @@ class NativeAggressive(unittest.TestCase):
             responses=[http.origin('/page','public',cache='no-store')]
             requests=[http.get('/page','public',cache='MISS')]
             for path,header in [('/wp-login.php',None),('/checkout/',None),('/?add-to-cart=1',None),
-                                ('/page','Cookie: wordpress_logged_in_abc=alice'),('/page','Cookie: woocommerce_items_in_cart=1'),
+                                ('/page','Cookie: wordpress_logged_in_abc=alice'),
                                 ('/page','Authorization: Bearer alice'),('/page','Cookie: private_choice=alice')]:
                 responses.append(http.origin(path,'private'))
                 requests.append(http.get(path,'private',[] if header is None else [header],cache='PASS'))
+            # Follow the catalog's separate profile decisions: cart cookies
+            # are Private in Basic and Shared with UltraCache fragment delivery.
+            if profile == 'basic':
+                responses.append(http.origin('/page','private'))
+                requests.append(http.get('/page','private',['Cookie: woocommerce_items_in_cart=1'],cache='PASS'))
+            else:
+                requests.append(http.get('/page','public',['Cookie: woocommerce_items_in_cart=1'],cache='HIT'))
             requests.append(http.get('/page','public',cache='HIT'))
             config={'cookie_policies':{'schemaVersion':1,'rules':[dict(id='choice',match=dict(kind='exact',value='private_choice'),description='Explicit Private',action='private')]}}
             self.aggressive(profile,responses,requests,config=config)

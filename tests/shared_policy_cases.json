@@ -1386,5 +1386,75 @@
       "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-Cache-Hits == \"4\"",
       "txreq -url \"/shared-cookie-vary-parent\" -hdr \"Host: example.test\" @@GET_HEADERS@@ -hdr \"Cookie:\"\nrxresp\nexpect resp.status == 200\nexpect resp.body == {<html>one-public-fragment</html>}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.X-Origin-Generation == \"one-parent-generation\"\nexpect resp.http.Vary ~ \"Cookie\"\nexpect resp.http.Vary !~ \"X-SCP\"\nexpect resp.http.X-Cache-Hits == \"5\""
     ]
+  },
+  {
+    "name": "application policy: approved HTML preserves browser headers and request-owned cookies",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -hdr {Pragma: no-cache} -hdr {Expires: Thu, 19 Nov 1981 08:52:00 GMT} -hdr {Set-Cookie: _ga=first; Path=/; HttpOnly} -body {public}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"MISS\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Set-Cookie == \"_ga=first; Path=/; HttpOnly\"",
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {public}\nexpect resp.http.X-Cache == \"HIT\"\nexpect resp.http.Cache-Control == \"private, no-store\"\nexpect resp.http.Set-Cookie == <undef>\nexpect resp.http.Pragma == \"no-cache\"\nexpect resp.http.Expires == \"Thu, 19 Nov 1981 08:52:00 GMT\"\nexpect resp.http.X-Cache-Mode == \"standard\"\nexpect resp.http.X-SCP-Browser-Cache-Control == <undef>"
+    ],
+    "tail": "varnish v1 -expect MAIN.backend_req == 1"
+  },
+  {
+    "name": "application policy: Basic retains ordinary browser privacy",
+    "profiles": [
+      "basic"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\"",
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\""
+    ]
+  },
+  {
+    "name": "application policy: explicit application refusal stays private",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 0} -hdr {X-UltraCache-Surrogate-TTL: 0} -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 0} -hdr {X-UltraCache-Surrogate-TTL: 0} -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\"",
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\""
+    ]
+  },
+  {
+    "name": "application policy: explicit surrogate refusal stays private",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -hdr {Surrogate-Control: no-store} -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -hdr {Surrogate-Control: no-store} -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\"",
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\""
+    ]
+  },
+  {
+    "name": "application policy: upstream expired approval does not restart freshness",
+    "profiles": [
+      "ultracache"
+    ],
+    "origin": [
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -hdr {Age: 121} -body {A}",
+      "accept\nrxreq\nexpect req.url == \"/application-policy\"\ntxresp -status 200 -hdr \"Connection: close\" -hdr \"Content-Type: text/html\" -hdr \"Cache-Control: private, no-store\" -hdr {X-UltraCache-Cacheable: 1} -hdr {X-UltraCache-Surrogate-TTL: 120} -hdr {X-UltraCache-Stale-While-Revalidate: 17} -hdr {Age: 121} -body {B}"
+    ],
+    "requests": [
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {A}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\"",
+      "txreq -req GET -url \"/application-policy\" -hdr \"Host: example.test\" @@GET_HEADERS@@\nrxresp\nexpect resp.status == 200\nexpect resp.body == {B}\nexpect resp.http.X-Cache == \"PASS\"\nexpect resp.http.Cache-Control == \"private, no-store\""
+    ]
   }
 ]
