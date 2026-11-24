@@ -37,6 +37,7 @@ static int mutation_context_current(const struct mutation_execution *);
 struct reuse_transaction {
     struct reuse_transaction *next;
     char id[65], lease[65], completed_revision[65];
+    char request_id[65], challenge[65]; /* optional exact V2 receipt owner */
     unsigned active;
 };
 struct reuse_tag {
@@ -217,6 +218,19 @@ static struct reuse_transaction *reuse_transaction_lookup(struct reuse_transacti
 }
 static struct reuse_transaction *reuse_transaction_find(struct reuse_tag *tag, const char *id) {
     return reuse_transaction_lookup(tag->transactions,id);
+}
+static int reuse_transaction_owned_by(const struct reuse_transaction *transaction,
+    const struct mutation_execution *execution) {
+    return *transaction->request_id && !strcmp(transaction->request_id,execution->request_id) &&
+        !strcmp(transaction->challenge,execution->challenge);
+}
+static int reuse_transaction_receipt_pending(const struct reuse_scope *scope,
+    const struct reuse_transaction *transaction) {
+    const struct mutation_execution *execution;
+    for (execution = scope->executions; execution; execution = execution->next)
+        if (execution->live && execution->awaiting_receipt &&
+            (!*transaction->request_id || !execution->hold || reuse_transaction_owned_by(transaction,execution))) return 1;
+    return 0;
 }
 static struct reuse_transaction *reuse_transaction_new(const char *id) {
     struct reuse_transaction *transaction = calloc(1,sizeof(*transaction));
@@ -558,6 +572,10 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
     if (transaction) {
         if (!tag) reuse_json_field(json,"transactionKind","scope");
         reuse_json_field(json,"transaction",transaction->id); reuse_json_field(json,"lease",transaction->lease);
+        if (*transaction->request_id) {
+            reuse_json_field(json,"requestId",transaction->request_id);
+            reuse_json_field(json,"challenge",transaction->challenge);
+        }
         VSB_printf(json,",\"active\":%s",transaction->active ? "true" : "false");
         if (!transaction->active) reuse_json_field(json,"committedRevision",transaction->completed_revision);
     }
@@ -835,12 +853,33 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         const char *lease = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Lease"));
         if (!public_policy(transaction_id)) goto reply;
         if (!strcmp(operation,"private-mutation-begin")) {
+            const char *request_id = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Request-Id"));
+            const char *challenge = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Challenge"));
+            struct mutation_execution *origin = NULL;
+            if (http_CountHdr(ctx->http_req,HDR("X-UltraCache-Private-Request-Id")) ||
+                http_CountHdr(ctx->http_req,HDR("X-UltraCache-Private-Challenge"))) {
+                if (!public_policy(request_id) || !public_policy(challenge)) goto reply;
+                for (origin = scope->executions; origin; origin = origin->next)
+                    if (!strcmp(origin->request_id,request_id) && !strcmp(origin->challenge,challenge)) break;
+                if (!origin || !origin->hold || !origin->live || !origin->awaiting_receipt || !mutation_context_current(origin)) {
+                    status = 409; reason = "mutation-execution-unavailable"; goto reply;
+                }
+            }
             transaction = reuse_transaction_find(tag,transaction_id);
+            if (transaction && origin && *transaction->request_id && !reuse_transaction_owned_by(transaction,origin)) {
+                status = 409; reason = "mutation-execution-changed"; goto reply;
+            }
             if (!transaction && (!expected || strcmp(expected,tag->revision))) {
                 status = 409; reason = "revision-changed"; goto reply;
             }
-            transaction = reuse_transaction_begin(tag,transaction_id);
-            if (!transaction) { reuse_scope_unbind(scope); status = 503; reason = "authority-memory"; goto reply; }
+            if (!transaction) {
+                transaction = reuse_transaction_begin(tag,transaction_id);
+                if (!transaction) { reuse_scope_unbind(scope); status = 503; reason = "authority-memory"; goto reply; }
+                if (origin) {
+                    memcpy(transaction->request_id,origin->request_id,65);
+                    memcpy(transaction->challenge,origin->challenge,65);
+                }
+            }
             status = 200; reason = "mutation-recorded"; goto reply;
         }
         transaction = reuse_transaction_find(tag,transaction_id);
@@ -855,10 +894,8 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         }
         if (!strcmp(operation,"private-mutation-ack")) {
             struct reuse_transaction **position = &tag->transactions;
-            const struct mutation_execution *execution;
             if (transaction->active) { status = 409; reason = "mutation-active"; goto reply; }
-            for (execution = scope->executions; execution; execution = execution->next)
-                if (execution->live && execution->awaiting_receipt) { status = 409; reason = "receipt-outstanding"; goto reply; }
+            if (reuse_transaction_receipt_pending(scope,transaction)) { status = 409; reason = "receipt-outstanding"; goto reply; }
             /* Invalidate even a completed-begin retry frame observed after a
              * later publication, before forgetting its idempotency record.
              * Content generation/clean state stay intact: this is CAS fencing. */

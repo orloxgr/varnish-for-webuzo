@@ -171,11 +171,15 @@ proof, checks the registry context again, applies DIRTY pairs idempotently under
 the existing lock, and strips both transport fields before cache/browser headers.
 It never closes a writer, publishes a generation or changes application status,
 body, Set-Cookie, streaming or checkout behavior. Completed transaction receipts
-do not reopen the writer. The native ACK operation now returns 409
-`receipt-outstanding` while any owned backend in that scope could still return
-a receipt: its completed idempotency record remains intact even if the original
-begin RPC outcome was unknown. This defers metadata GC, not current content
-generation or business writes.
+do not reopen the writer. For a transaction bound at native BEGIN to its exact
+V2 origin requestId/challenge, ACK returns 409 `receipt-outstanding` while that
+origin (or an ambiguous legacy execution) can still return a receipt. Other V2
+executions do not block its GC. V2 DIRTY pairs must already exist natively and
+must match any recorded origin; missing or mismatched pairs revoke scope and
+remain UNKNOWN rather than recreating a discarded writer. Unbound transactions
+retain the conservative scope-wide receipt guard, including unknown begin RPC
+outcomes. This defers metadata GC, not current content generation or business
+writes, and grants no independent execution drain.
 
 Missing/invalid expected receipt, stale context, backend error or unresolved
 backend-task finalization retains an own-scope unknown-execution marker. A native

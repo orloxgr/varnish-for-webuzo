@@ -62,6 +62,23 @@ meaning. `coverage` is exactly `qualified` or `unknown`. SCOPE requires UNKNOWN;
 NONE and DIRTY do not imply QUALIFIED. The coverage policy must equal the
 authenticated original execution's value.
 
+V2 DIRTY also requires each transaction to exist in the native registry. A
+transaction bound by authenticated BEGIN to an original requestId/challenge can
+only be reported by that execution. Missing or mismatched pairs revoke scope;
+they never recreate a transaction removed by GC. The tracked producer already
+declines to SCOPE/UNKNOWN when native BEGIN is unconfirmed. This enforcement
+lets exact-origin GC ignore unrelated overlapping V2 receipts without dropping
+the protection against delayed DIRTY frames. It does not close execution holds.
+
+Focused qualification, 24 November 2026: both methods in
+`tests/test_mutation_receipt_owners.py` passed against an isolated actual Varnish
+and a privately built matching-SDK VMOD (16.951 seconds, no skips). The original
+source reproduced `receipt-outstanding` for the unrelated overlapping actor.
+The candidate retained the exact-origin late-DIRTY fence, allowed GC while the
+unrelated V2 actor remained live, and rejected that actor's signed stale pair
+after GC without reopening a writer or closing its execution hold. Producers
+are explicit signed fixtures; this is not PHP/SQL drain or live site acceptance.
+
 Receipt MAC input:
 
 `LP("ultracache-mutation-response-v2") + LP(original context proof) +

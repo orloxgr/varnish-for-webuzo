@@ -192,6 +192,19 @@ VCL_BOOL vmod_mutation_backend_response(VRT_CTX, struct vmod_priv *priv) {
     if (receipt->state == MUTATION_SCOPE || (execution->hold && !receipt->coverage_qualified)) mutation_unknown(execution);
     else if (execution->hold) execution->coverage_qualified = 1;
     if (receipt->state == MUTATION_DIRTY) {
+        /* V2's tracked producer confirms native BEGIN before emitting DIRTY.
+         * It cannot resurrect a GC'd transaction or borrow another execution's
+         * registered receipt owner. Failure still revokes the actual scope;
+         * it never cancels the application response or grants CLEAN.
+         * Legacy receipts retain their original conservative GC boundary. */
+        for (pair = receipt->pairs; pair; pair = pair->next) {
+            struct reuse_tag *tag = reuse_tag_find(execution->scope,pair->tag,0);
+            struct reuse_transaction *transaction = tag ? reuse_transaction_find(tag,pair->transaction) : NULL;
+            if ((execution->hold && !transaction) ||
+                (transaction && *transaction->request_id && !reuse_transaction_owned_by(transaction,execution))) {
+                mutation_unknown(execution); valid = 0; goto done;
+            }
+        }
         for (pair = receipt->pairs; pair; pair = pair->next) {
             struct reuse_tag *tag = reuse_tag_find(execution->scope,pair->tag,1);
             if (!tag || !reuse_transaction_begin(tag,pair->transaction)) {
