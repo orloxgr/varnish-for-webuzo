@@ -1,5 +1,12 @@
 # Varnish for Webuzo
 
+Version **0.13.12**, paired with UltraCache WordPress dev.1360, keeps unchanged
+private fragment admissions reusable across public HTML rebuilds. The private
+input MAC and admission key retain the exact recipe, representation, owner
+inputs and policy but omit unrelated public generation. Original fill proofs
+still bind their publication; actual tag invalidation and expiry remain in
+force. This does not establish completion of the full live acceptance goal.
+
 Version **0.13.11** also permits the existing authenticated `UC-PRIVATE-GET` operation through the normal loopback application connector and uses the adapter's existing site/source gate for private lookups over Unix sockets. This repairs a real WordPress lookup returning 405 and a direct Unix lookup returning 403.
 
 Version **0.13.10** removes whole-application execution holds from private cache reuse. Actual owner/content tag events invalidate only their dependents; valid complete deliveries do not wait for unrelated backend requests. The native/WordPress producer contract uses signed schema 1.

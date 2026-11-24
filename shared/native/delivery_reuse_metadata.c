@@ -316,17 +316,18 @@ done:
 }
 int delivery_reuse_metadata_key(const struct delivery_reuse_context *context, const char *binding, char key[65]) {
     struct reuse_frame frame = {NULL,0,0};
-    const char *fields[11];
+    const char *fields[10];
     size_t i;
     int valid = 0;
     if (!context || !key || !mutation_hex(binding,64)) return 0;
     fields[0] = context->site_id; fields[1] = context->canonical_host; fields[2] = context->scope;
     fields[3] = context->epoch; fields[4] = context->native_policy; fields[5] = context->wordpress_policy;
-    fields[6] = context->reuse_policy; fields[7] = context->publication_digest;
-    fields[8] = context->representation; fields[9] = context->recipe_digest; fields[10] = binding;
-    /* Separate admissions made before anonymous content dependencies existed. */
-    if (!reuse_lp_string(&frame,"ultracache-private-admission-object-v2")) goto done;
-    for (i = 0; i < 11; ++i) if (!fields[i] || !*fields[i] || !reuse_lp_string(&frame,fields[i])) goto done;
+    fields[6] = context->reuse_policy; fields[7] = context->representation;
+    fields[8] = context->recipe_digest; fields[9] = binding;
+    /* Private admissions follow the exact recipe/representation and provider
+     * inputs, independently of an unrelated public HTML generation. */
+    if (!reuse_lp_string(&frame,"ultracache-private-admission-object-v3")) goto done;
+    for (i = 0; i < 10; ++i) if (!fields[i] || !*fields[i] || !reuse_lp_string(&frame,fields[i])) goto done;
     valid = delivery_selection_digest(frame.bytes,frame.length,key);
 done:
     delivery_reuse_frame_free(frame.bytes,frame.length); return valid;

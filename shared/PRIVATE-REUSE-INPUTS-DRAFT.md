@@ -78,14 +78,14 @@ Derived key is the raw 32 bytes of
 The lowercase-hex binding is HMAC-SHA256 with that key over:
 
 ```
-LP("ultracache-delivery-reuse-binding-v1")
+LP("ultracache-delivery-reuse-binding-v2")
 LP(siteId), LP(canonicalHost), LP(scope), LP(epoch)
 LP(nativePolicy), LP(wordpressPolicy), LP(reusePolicy)
-LP(publicationDigest), LP(representation), LP(recipeDigest)
+LP(representation), LP(recipeDigest)
 LP(binary projection frame)
 ```
 
-All ten context values must come from authenticated accepted native state.
+All nine context values must come from authenticated accepted native state.
 The framing function preserves them exactly; it neither normalizes them nor
 turns caller-supplied values into authority. The producer receives the actual
 adapter-owned siteId through the future authenticated reuse context, rather than
@@ -96,6 +96,11 @@ Existing purpose-separated portable HMAC code is reused; no new crypto ABI or
 browser credential is introduced. Temporary derived key/message buffers are
 cleared when this helper releases them. Cookie values remain request-local and
 are not logged or stored in public recipe metadata.
+
+Public generation is a publication/fill identity, not a private fragment
+lifetime. Rebuilding it does not change this MAC. Exact recipe, representation,
+owner inputs, policy, tag revisions and expiry remain required. Original
+producer/finalization proofs continue to bind their selected publication.
 
 ## Strict recipe metadata stage
 

@@ -121,7 +121,7 @@ class ReuseCookieInputs(unittest.TestCase):
         native=self.binding(row['context'],frame)
         self.assertEqual(native,row['binding'],'C MAC must match actual PHP production helper')
         key=hmac.digest(VECTORS['syntheticSecret'].encode(),b'ultracache-delivery-reuse-key-v1','sha256')
-        message=lp('ultracache-delivery-reuse-binding-v1')+b''.join(lp(row['context'][k]) for k in FIELDS)+lp(frame)
+        message=lp('ultracache-delivery-reuse-binding-v2')+b''.join(lp(row['context'][k]) for k in FIELDS if k!='publicationDigest')+lp(frame)
         self.assertEqual(native,hmac.new(key,message,hashlib.sha256).hexdigest())
 
     def identity_binding(self,context,frame,secret=None):
@@ -178,10 +178,12 @@ class ReuseCookieInputs(unittest.TestCase):
             self.assertEqual(page.value.decode(),row['binding'])
             self.assertEqual(identity.value.decode(),self.identity_binding(row['context'],frame)[1])
 
-    def test_all_accepted_context_dimensions_and_secret_change_mac(self):
+    def test_provider_inputs_and_recipe_bind_independently_of_public_generation(self):
         row=next(r for r in VECTORS['vectors'] if r['name']=='exact')
         frame=bytes.fromhex(row['projection']['frameHex']);baseline=self.binding(row['context'],frame)
-        for field in FIELDS:
+        changed=dict(row['context'],publicationDigest='new-public-generation')
+        self.assertEqual(self.binding(changed,frame),baseline)
+        for field in (k for k in FIELDS if k!='publicationDigest'):
             changed=dict(row['context']);changed[field]+='x'
             with self.subTest(field=field):self.assertNotEqual(self.binding(changed,frame),baseline)
         self.assertNotEqual(self.binding(row['context'],frame,b'other-synthetic-secret'),baseline)

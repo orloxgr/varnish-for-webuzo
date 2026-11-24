@@ -467,8 +467,7 @@ static int reuse_context_mac(const unsigned char key[32],
     if (!key || !context || !mac || (!projection && projection_length)) return 0;
     fields[0] = context->site_id; fields[1] = context->canonical_host; fields[2] = context->scope;
     fields[3] = context->epoch; fields[4] = context->native_policy; fields[5] = context->wordpress_policy;
-    fields[6] = context->reuse_policy; fields[7] = context->publication_digest;
-    fields[8] = context->representation; fields[9] = context->recipe_digest;
+    fields[6] = context->reuse_policy; fields[7] = context->representation; fields[8] = context->recipe_digest;
     for (i = 0; i < field_count; ++i) if (!fields[i] || !*fields[i]) return 0;
     if (!reuse_lp_string(&message,domain)) goto finished;
     for (i = 0; i < field_count; ++i) if (!reuse_lp_string(&message,fields[i])) goto finished;
@@ -493,7 +492,7 @@ static int reuse_context_binding(const unsigned char *secret, size_t secret_leng
 int delivery_reuse_input_binding(const unsigned char *secret, size_t secret_length,
     const struct delivery_reuse_context *context, const unsigned char *projection,
     size_t projection_length, char mac[65]) {
-    return reuse_context_binding(secret,secret_length,context,"ultracache-delivery-reuse-binding-v1",10,
+    return reuse_context_binding(secret,secret_length,context,"ultracache-delivery-reuse-binding-v2",9,
         projection,projection_length,mac);
 }
 int delivery_reuse_identity_binding(const unsigned char *secret, size_t secret_length,
@@ -504,7 +503,7 @@ int delivery_reuse_identity_binding(const unsigned char *secret, size_t secret_l
 }
 int delivery_reuse_input_mac(const unsigned char key[32], const struct delivery_reuse_context *context,
     const unsigned char *projection, size_t length, char mac[65]) {
-    return reuse_context_mac(key,context,"ultracache-delivery-reuse-binding-v1",10,projection,length,mac);
+    return reuse_context_mac(key,context,"ultracache-delivery-reuse-binding-v2",9,projection,length,mac);
 }
 int delivery_reuse_identity_mac(const unsigned char key[32], const struct delivery_reuse_context *context,
     const unsigned char *projection, size_t length, char mac[65]) {

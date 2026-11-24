@@ -116,7 +116,7 @@ normalized union of the real consumed renderer/claim inputs. A missing claim,
 TTL-0 provider, unsupported dependency or incomplete occurrence set cannot be
 silently omitted to label a partially cached document reusable.
 
-## Binding MACs (existing qualified domains, unchanged)
+## Binding MACs
 
 Let `reuseKey` be the raw 32-byte HMAC-SHA256 of the original accepted site
 credential bytes with message ASCII `ultracache-delivery-reuse-key-v1`.
@@ -126,10 +126,10 @@ The admission `binding` is the already qualified page-input binding:
 
 ```text
 lowercase_hex(HMAC-SHA256(reuseKey,
-    LP("ultracache-delivery-reuse-binding-v1")
+    LP("ultracache-delivery-reuse-binding-v2")
     LP(siteId) LP(canonicalHost) LP(scope) LP(epoch)
     LP(nativePolicy) LP(wordpressPolicy) LP(reusePolicy)
-    LP(publicationDigest) LP(representation) LP(recipeDigest)
+    LP(representation) LP(recipeDigest)
     LP(actual recipe-input projection frame)
 ))
 ```
@@ -376,7 +376,7 @@ relative header. The response body is exactly:
 
 The placeholders use the full strict objects defined above. Request ID/URI bind
 the first response to its owner; later native cache reads validate the reusable
-inner context/publication/representation/recipe/input binding rather than
+inner policy/representation/recipe/input binding rather than
 requiring another request's serial or replacing the incoming URI. They do not
 rewrite browser URLs or discard tracking functionality.
 
@@ -392,14 +392,20 @@ Typed metadata is mapped into the existing native private-object namespace:
 
 ```text
 metadataKey = SHA256(
-    LP("ultracache-private-admission-object-v1")
+    LP("ultracache-private-admission-object-v3")
     LP(siteId) LP(canonicalHost) LP(scope) LP(epoch)
     LP(nativePolicy) LP(wordpressPolicy) LP(reusePolicy)
-    LP(publicationDigest) LP(representation) LP(recipeDigest) LP(binding)
+    LP(representation) LP(recipeDigest) LP(binding)
 )
 metadataURI = "/__ultracache-native/reuse-v1/" + metadataKey
 HSH parts = "ultracache-private-v1", siteId, canonicalHost, metadataURI, metadataKey
 ```
+
+The metadata namespace v3 and input-binding domain v2 omit public generation.
+Original candidate/finalization proofs still require the exact publication.
+Later reads may reuse unchanged owner objects after the new public recipe has
+been discovered; no original proof is rebased. Actual dependency invalidation,
+policy, exact recipe/representation, consumed inputs and deadlines still apply.
 
 Use the existing engine `HSH_AddString` plus null separator convention for those
 five parts, exactly as private fragment objects already do. Only an actual owned

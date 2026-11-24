@@ -153,7 +153,15 @@ static int delivery_reuse_record_current_reason(const struct continuation *d, co
     fields[4] = scope->incarnation; fields[5] = scope->revision; fields[6] = scope->native_policy;
     fields[7] = scope->wordpress_policy; fields[8] = scope->policy; fields[9] = d->reuse_publication;
     fields[10] = d->reuse_representation; fields[11] = d->reuse_recipe;
-    for (i = 0; i < 12; ++i)
+    for (i = 0; i < 9; ++i)
+        if (strcmp(record->context[i],fields[i])) return delivery_reuse_record_reject(reason,context_reasons[i]);
+    /* A fresh producer/finalizer must belong to its exact selected publication.
+     * Cached private objects retain their own lifetime across a public rebuild;
+     * the authenticated exact recipe, representation, input MAC and actual tag
+     * revisions below still have to match. No source proof is rewritten. */
+    if (original && strcmp(record->context[9],fields[9]))
+        return delivery_reuse_record_reject(reason,context_reasons[9]);
+    for (i = 10; i < 12; ++i)
         if (strcmp(record->context[i],fields[i])) return delivery_reuse_record_reject(reason,context_reasons[i]);
     page = (struct delivery_reuse_context){fields[0],fields[1],fields[2],fields[3],fields[6],fields[7],fields[8],fields[9],fields[10],fields[11]};
     if (delivery_reuse_input_projection(record->recipe->inputs,(const unsigned char *)delivery_personal_cookie(d),

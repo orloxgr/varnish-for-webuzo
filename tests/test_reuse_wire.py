@@ -189,8 +189,8 @@ class ReuseWire(unittest.TestCase):
         values=self.metadata()['reuse']['context'];context=Context(*(values[n].encode() for n in fields))
         out=ctypes.create_string_buffer(65);binding=b'5'*64
         self.assertEqual(self.lib.delivery_reuse_metadata_key(ctypes.byref(context),binding,out),1)
-        suffix=b''.join(lp(values[n]) for n in fields)+lp(binding)
+        suffix=b''.join(lp(values[n]) for n in fields if n!='publicationDigest')+lp(binding)
         self.assertNotEqual(out.value.decode(),hashlib.sha256(lp('ultracache-private-admission-object-v1')+suffix).hexdigest())
-        self.assertEqual(out.value.decode(),hashlib.sha256(lp('ultracache-private-admission-object-v2')+suffix).hexdigest())
+        self.assertEqual(out.value.decode(),hashlib.sha256(lp('ultracache-private-admission-object-v3')+suffix).hexdigest())
 
 if __name__=='__main__':unittest.main()

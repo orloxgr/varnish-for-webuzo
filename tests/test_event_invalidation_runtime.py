@@ -17,6 +17,7 @@ import unittest
 from test_cookie_delivery import proxy
 from test_delivery_continuation import BODY, META, PARENT, PRIVATE, ADAPTIVE, envelope
 from test_mutation_backend import post, receipt, KEY
+from test_public_selection_runtime import control
 from test_mutation_wire import request_frame, FIELDS
 from test_private_fragment_ttl import exchange
 from test_reuse_authority import NativeReuseAuthority, TAG
@@ -43,19 +44,42 @@ class NativeEventInvalidation(unittest.TestCase):
     commit = NativeReuseAuthority.commit
 
     @contextmanager
-    def actor(self):
+    def actor(self, public_generation=None):
+        public_generation = public_generation or {"number": 1}
         holder = {}; calls = []; prepared = {}; versions = {'A': 1, 'B': 1}
         entered = threading.Event(); release = threading.Event()
         recipe = seal_recipe(dict(inputs=declaration(['owner']), fragments=[
             dict(url=PRIVATE, provider='personal', occurrences=2),
             dict(url=ADAPTIVE, provider='nonce', occurrences=1)]))
         def owner_tag(owner):
-            return TAG if owner == 'A' else hashlib.sha256(b'other-event-owner').hexdigest()
+            return TAG if owner == 'A' else hashlib.sha256(('other-event-owner:' + owner).encode()).hexdigest()
         def origin(path, headers):
             phase = headers.get('X-UltraCache-Delivery-Phase'); calls.append((path, phase))
             if path == '/__unrelated-server-error':
                 entered.set(); self.assertTrue(release.wait(10))
                 return 403, 'server directory response', [('Cache-Control', 'private, no-store')]
+            if phase == 'public-select':
+                signed = signed_context(self, headers, 'GET', path)
+                owner = headers['Cookie'].split('owner=', 1)[1].split(';', 1)[0]
+                generation = public_generation['number']
+                parent = BODY.replace('parent[', 'parent' + str(generation) + '[')
+                manifest = 'public-generation-' + str(generation)
+                fields = [(name, '/index.php?ultracache_delivery=' + manifest)
+                          if name == 'X-UltraCache-Delivery-Prepare' else (name, value) for name, value in META]
+                fragments = json.loads(envelope(headers, owner + '-v' + str(versions[owner])))['renderedFragments']
+                selected = dict(policyDigest=headers['X-UltraCache-Delivery-Policy'],
+                    wordpressPolicyDigest=headers['X-UltraCache-Delivery-WordPress-Policy'],
+                    cookieUpdates=[], manifest=manifest, occurrences=3,
+                    publicParent=dict(generation=hashlib.sha256(parent.encode()).hexdigest(),
+                        bodyBase64=base64.b64encode(parent.encode()).decode(), freshRemaining=120),
+                    headers=['Content-Type: text/html'] + [name + ': ' + value for name, value in fields],
+                    renderedFragments=fragments)
+                body = dict(schemaVersion=1, requestId=headers['X-UltraCache-Delivery-Request'],
+                    originalUrl=headers['X-UltraCache-Delivery-Original-URL'], selectedPublic=selected)
+                return json.dumps(body), [('Content-Type', 'application/vnd.ultracache.delivery+json'),
+                    ('Cache-Control', 'private, no-store'), ('Surrogate-Control', 'no-store'),
+                    ('X-UltraCache-Delivery-Public-Selection-Version', '1'), ('X-UltraCache-Delivery-Outcome', 'verified'),
+                    ('X-UltraCache-Mutation-Receipt', receipt(signed, 'none', ()))]
             if phase == 'prepare':
                 signed = signed_context(self, headers, 'GET', path)
                 context = self.call(holder['get'], 'delivery-reuse-context', tag=None, extra={
@@ -98,7 +122,12 @@ class NativeEventInvalidation(unittest.TestCase):
                 return json.dumps(record), [('Content-Type', 'application/vnd.ultracache.reuse+json'),
                     ('Cache-Control', 'private, no-store'), ('X-UltraCache-Delivery-Reuse-Outcome', 'finalized'),
                     ('X-UltraCache-Delivery-Reuse-Fresh-Remaining', '89')]
-            return (BODY, META) if path == PARENT else ('unexpected source', [('Cache-Control', 'private, no-store')])
+            if path == PARENT:
+                generation = public_generation['number']
+                fields = [(name, '/index.php?ultracache_delivery=public-generation-' + str(generation))
+                          if name == 'X-UltraCache-Delivery-Prepare' else (name, value) for name, value in META]
+                return BODY.replace('parent[', 'parent' + str(generation) + '['), fields
+            return 'unexpected source', [('Cache-Control', 'private, no-store')]
         with proxy('ultracache', origin, transform=all_origin_hooks, allow_post=True) as get:
             holder['get'] = get; get(PARENT); NativeReuseAuthority.register(self, get)
             bodies = {}
@@ -112,6 +141,28 @@ class NativeEventInvalidation(unittest.TestCase):
                     self.assertEqual(calls, [], 'A complete first fill must immediately become a zero-backend HIT')
                 yield get, calls, versions, bodies, entered, release, owner_tag
             finally: release.set()
+
+    def test_public_regeneration_reuses_private_owner_objects_after_recipe_discovery(self):
+        generation = {'number': 1}
+        with self.actor(generation) as (get, calls, versions, bodies, _, _, _):
+            generation['number'] = 2
+            self.assertEqual(control(get, operation='exact-purge', path=PARENT)[0], 200)
+            # An existing public Warm learns the new authenticated declaration
+            # through B. That must not revoke A's unchanged private fragments.
+            # Resolve the new public source first, then complete the same Warm
+            # through its cached parent and actual mock private producer.
+            get(PARENT, 'owner=B')
+            status, warm_headers, warm = get(PARENT, 'owner=B')
+            self.assertEqual(status, 200)
+            self.assertIn('parent2[', warm)
+            self.assertIn('private:B-v1', warm, repr({'calls': calls, 'headers': warm_headers}))
+            calls.clear()
+            status, _, reused = get(PARENT, 'owner=A')
+            self.assertEqual(status, 200)
+            self.assertIn('parent2[', reused)
+            self.assertIn('private:A-v1', reused)
+            self.assertNotIn('private:B-', reused)
+            self.assertEqual(calls, [], 'Public regeneration alone cannot require a private prepare')
 
     def test_ordinary_inflight_and_missing_receipt_do_not_gate_a_complete_hit(self):
         with self.actor() as (get, calls, _, bodies, entered, release, _):

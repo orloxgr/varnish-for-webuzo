@@ -92,8 +92,8 @@ class NativeReuseCandidate(unittest.TestCase):
                     b''.join(lp(c[n]) for n in CONTEXT_FIELDS)+lp(context['binding'])+lp(context['inputEvidence'])
                 self.assertEqual(context['proof'],hmac.new(KEY,frame,'sha256').hexdigest())
                 page=('siteId','canonicalHost','scope','epoch','nativePolicy','wordpressPolicy','reusePolicy','publicationDigest','representation','recipeDigest')
-                self.assertEqual(context['binding'],hmac.new(KEY,lp('ultracache-delivery-reuse-binding-v1')+
-                    b''.join(lp(c[n]) for n in page)+lp(seen[-1][1]),'sha256').hexdigest())
+                self.assertEqual(context['binding'],hmac.new(KEY,lp('ultracache-delivery-reuse-binding-v2')+
+                    b''.join(lp(c[n]) for n in page if n!='publicationDigest')+lp(seen[-1][1]),'sha256').hexdigest())
             self.assertEqual(len(finalized),1,'Only the valid request-owned candidate enters finalization')
 
 if __name__=='__main__':unittest.main()
