@@ -53,6 +53,21 @@ def register(get,**kwargs):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skips are not acceptance')
 class GuestPublication(unittest.TestCase):
+    def test_failure_diagnostic_is_one_fixed_line_and_valid_delivery_stays_valid(self):
+        app = Guests()
+        app.change = lambda value: value['guestPublic']['headers'].append('Pragma: no-cache, private-secret-marker')
+        with proxy('ultracache', app) as get:
+            self.assertEqual(register(get)[0], 200)
+            self.assertEqual(get('/bad-diagnostic')[0], 503)
+            app.change = None
+            self.assertEqual(get('/good-diagnostic')[0], 200)
+            log = subprocess.check_output(['varnishlog', '-n', str(get.instance), '-d', '-g', 'request',
+                '-i', 'VCL_Log'], text=True)
+            messages = [line.split('UltraCache delivery rejected: ', 1)[1] for line in log.splitlines()
+                if 'UltraCache delivery rejected: ' in line]
+            self.assertEqual(messages, ['stage=prepare role=guest reason=header-pragma-private'])
+            self.assertNotIn('private-secret-marker', '\n'.join(messages))
+
     def test_complete_guest_fill_then_two_independent_zero_origin_hits(self):
         app=Guests()
         with proxy('ultracache',app) as get:

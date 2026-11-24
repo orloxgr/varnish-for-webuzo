@@ -143,6 +143,7 @@ struct continuation {
     struct task association; /* only its owner slot is used */
     enum delivery_phase phase;
     unsigned restart, sent, complete, failed;
+    const char *diagnostic_reason; /* fixed literal only, never request data */
     unsigned recovery_ready, recovery_sent, recovery_received, recovery_restart;
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
@@ -365,11 +366,11 @@ static int delivery_parse(VRT_CTX, struct continuation *d) {
         d->source_next = SOURCE_PERSONAL;
         if (d->source_declined) ok = d->length == 0;
         else if (d->source_projected) {
-            ok = delivery_projected_selection_parse(d->body,d->length,d->request_id,
+            ok = delivery_projected_selection_parse_diagnostic(d->body,d->length,d->request_id,
                 d->source_stage == SOURCE_RESOLVER ? d->url : d->source_url,
                 d->selection_policy,d->wordpress_policy,
                 d->source_stage == SOURCE_RESOLVER ? DELIVERY_PROJECTED_RESOLVER : DELIVERY_PROJECTED_PARENT,
-                &source,&document,&resolved);
+                &source,&document,&resolved,&d->diagnostic_reason);
             if (ok && resolved) {
                 char *wire = delivery_public_projection_cookie(resolved,d->selection_rules);
                 ok = wire && d->source_resolved_response;
@@ -390,8 +391,8 @@ static int delivery_parse(VRT_CTX, struct continuation *d) {
                 }
             } else if (ok) ok = source && !d->source_resolved_response &&
                 delivery_public_projection_equal(source->resolved,d->projection);
-        } else ok = delivery_public_source_parse(d->body,d->length,d->request_id,d->source_url,
-            d->selection_policy,d->wordpress_policy,&source);
+        } else ok = delivery_public_source_parse_diagnostic(d->body,d->length,d->request_id,d->source_url,
+            d->selection_policy,d->wordpress_policy,&source,&d->diagnostic_reason);
         if (ok && source && !d->source_declined) {
             d->source_manifest = strdup(source->manifest);
             memcpy(d->source_generation,source->parent->generation,65);
@@ -1215,13 +1216,24 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         return 3; /* Retire exact A, then enter current-policy selection once. */
     }
     if (d->phase == D_PREPARE) {
-        int valid;
+        const char *reason = NULL;
+        int complete, failed;
         pthread_mutex_lock(&lock);
-        valid = d->complete && !d->failed;
+        complete = d->complete; failed = d->failed;
         pthread_mutex_unlock(&lock);
-        if (!valid || http_GetStatus(ctx->http_resp) !=
-                ((d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) && d->source_declined ? 409 : 200) ||
-            !delivery_parse(ctx,d) || !delivery_restore(ctx,d)) {
+        if (!complete) reason = "capture-incomplete";
+        else if (failed) reason = "capture-failed";
+        else if (http_GetStatus(ctx->http_resp) !=
+                ((d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) && d->source_declined ? 409 : 200))
+            reason = "response-status";
+        else if (!delivery_parse(ctx,d)) reason = d->diagnostic_reason ? d->diagnostic_reason : "envelope-parse";
+        else if (!delivery_restore(ctx,d)) reason = "request-restore-workspace";
+        if (reason) {
+            const char *role = d->source_stage == SOURCE_RESOLVER ? "resolver" :
+                d->source_stage == SOURCE_CAPTURE ? "parent" : d->guest_reply ? "guest" :
+                d->selection_entry ? "selection" : "legacy";
+            if (ctx->vsl) VSLb(ctx->vsl,SLT_VCL_Log,
+                "UltraCache delivery rejected: stage=prepare role=%s reason=%s",role,reason);
             d->phase = D_FAILED; return -1;
         }
         if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) {

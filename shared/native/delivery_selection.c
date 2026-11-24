@@ -222,7 +222,8 @@ static int selection_private_directive(const char *s) {
     }
     return 0;
 }
-static int selection_headers(struct reader *r, struct delivery_public_selection *s) {
+static int selection_reject(const char **reason, const char *value);
+static int selection_headers(struct reader *r, struct delivery_public_selection *s, const char **reason) {
     struct delivery_header **tail = &s->headers;
     if (!take(r,'[')) return 0;
     if (take(r,']')) return 1;
@@ -253,14 +254,16 @@ static int selection_headers(struct reader *r, struct delivery_public_selection 
             selection_prefix(text.data,n,"x-ultracache-vcl-") ||
             selection_prefix(text.data,n,"x-ultracache-public-selection-") ||
             (selection_prefix(text.data,n,"x-ultracache-delivery-") &&
-             !selection_case(text.data,n,"x-ultracache-delivery-prepare"))) return 0;
+             !selection_case(text.data,n,"x-ultracache-delivery-prepare"))) return selection_reject(reason,"header-forbidden-field");
         if ((selection_case(text.data,n,"cache-control") || selection_case(text.data,n,"surrogate-control") ||
-             selection_case(text.data,n,"pragma")) && selection_private_directive(value)) return 0;
+             selection_case(text.data,n,"pragma")) && selection_private_directive(value))
+            return selection_reject(reason,selection_case(text.data,n,"pragma") ? "header-pragma-private" :
+                selection_case(text.data,n,"cache-control") ? "header-cache-control-private" : "header-surrogate-control-private");
         if (selection_case(text.data,n,"vary")) {
             const char *p = value;
             while (*p) {
                 while (*p == ' ' || *p == '\t' || *p == ',') ++p;
-                if (*p == '*' && (!p[1] || p[1] == ',' || p[1] == ' ' || p[1] == '\t')) return 0;
+                if (*p == '*' && (!p[1] || p[1] == ',' || p[1] == ' ' || p[1] == '\t')) return selection_reject(reason,"header-vary-star");
                 p = strchr(p,','); if (!p) break;
             }
         }
@@ -342,8 +345,12 @@ static int selection_source_role(struct reader *r) {
         if (!take(r,',')) return 0;
     }
 }
+static int selection_reject(const char **reason, const char *value) {
+    if (reason && !*reason) *reason = value;
+    return 0;
+}
 static int selected_public(struct reader *r, const char *policy, const char *wordpress_policy,
-    struct delivery_public_selection **output, int source_only, int projected) {
+    struct delivery_public_selection **output, int source_only, int projected, const char **reason) {
     struct delivery_public_selection *s = calloc(1,sizeof(*s));
     unsigned seen = 0;
     uint64_t total = 0;
@@ -373,10 +380,14 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
             if (!selection_source_role(r)) goto invalid;
             s->source_only = 1;
         } else if (bit == 1) {
-            if (!string(r,&text) || !selection_hex(text) || !equal(text,policy)) goto invalid;
+            if (!string(r,&text) || !selection_hex(text) || !equal(text,policy)) {
+                selection_reject(reason,"selection-native-policy"); goto invalid;
+            }
             memcpy(s->policy,text.data,64);
         } else if (bit == 128) {
-            if (!string(r,&text) || !selection_hex(text) || !equal(text,wordpress_policy)) goto invalid;
+            if (!string(r,&text) || !selection_hex(text) || !equal(text,wordpress_policy)) {
+                selection_reject(reason,"selection-wordpress-policy"); goto invalid;
+            }
             memcpy(s->wordpress_policy,text.data,64);
         } else if (bit == 256) {
             if (!literal_true(r)) goto invalid;
@@ -389,32 +400,38 @@ static int selected_public(struct reader *r, const char *policy, const char *wor
             s->manifest = copy(text); if (!s->manifest) goto invalid;
         } else if (bit == 8) { if (!number(r,&s->occurrences)) goto invalid; }
         else if (bit == 16) { if (!public_parent(r,&s->parent)) goto invalid; }
-        else if (bit == 32) { if (!selection_headers(r,s)) goto invalid; }
+        else if (bit == 32) { if (!selection_headers(r,s,reason)) goto invalid; }
         else if (!selection_fragments(r,&s->fragments,&total)) goto invalid;
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if (seen != ((source_only ? 701u : 255u)+(s->cookie_delivery ? 256u : 0u)+(projected ? 1024u : 0u)) ||
-        (!source_only && total != s->occurrences) || !selection_header_binding(s) ||
-        !delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) goto invalid;
+    if (seen != ((source_only ? 701u : 255u)+(s->cookie_delivery ? 256u : 0u)+(projected ? 1024u : 0u))) {
+        selection_reject(reason,"selection-required-fields"); goto invalid;
+    }
+    if (!source_only && total != s->occurrences) { selection_reject(reason,"selection-occurrences"); goto invalid; }
+    if (!selection_header_binding(s)) { selection_reject(reason,"selection-header-binding"); goto invalid; }
+    if (!delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) {
+        selection_reject(reason,"selection-body-digest"); goto invalid;
+    }
     *output = s; return 1;
 invalid:
-    delivery_selection_free(s); return 0;
+    delivery_selection_free(s); return selection_reject(reason,"selection-grammar");
 }
 static int selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection, struct delivery_private_document **document,
-    int source_only, int projection_mode, struct delivery_public_projection **resolved_only) {
+    int source_only, int projection_mode, struct delivery_public_projection **resolved_only, const char **reason) {
     struct reader r;
     unsigned seen = 0;
     int ok = 0;
-    if (!selection || !document) return 0;
+    if (reason) *reason = NULL;
+    if (!selection || !document) return selection_reject(reason,"selection-input");
     *selection = NULL; *document = NULL;
     if (resolved_only) *resolved_only = NULL;
     if (!body || !length || length == SIZE_MAX || !request_id || !original_url || !policy || strlen(policy) != 64 ||
-        !wordpress_policy || strlen(wordpress_policy) != 64) return 0;
+        !wordpress_policy || strlen(wordpress_policy) != 64) return selection_reject(reason,"selection-input");
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
-    if (!r.buffer) return 0;
+    if (!r.buffer) return selection_reject(reason,"selection-allocation");
     memcpy(r.buffer,body,length); r.buffer[length] = 0;
     if (!take(&r,'{')) goto done;
     for (;;) {
@@ -433,8 +450,10 @@ static int selection_parse(const char *body, size_t length,
         seen |= bit;
         if (bit == 1) { if (!number(&r,&schema) || schema != 1) goto done; }
         else if (bit == 2 || bit == 4) {
-            if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) goto done;
-        } else if (bit == 8) { if (!selected_public(&r,policy,wordpress_policy,selection,source_only,projection_mode >= 0)) goto done; }
+            if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) {
+                selection_reject(reason,bit == 2 ? "selection-request-binding" : "selection-url-binding"); goto done;
+            }
+        } else if (bit == 8) { if (!selected_public(&r,policy,wordpress_policy,selection,source_only,projection_mode >= 0,reason)) goto done; }
         else if (bit == 32) { if (!selection_public_projection(&r,resolved_only)) goto done; }
         else if (!private_document_type(&r,document,0)) goto done;
         if (take(&r,'}')) break;
@@ -445,6 +464,7 @@ static int selection_parse(const char *body, size_t length,
 done:
     free(r.buffer);
     if (!ok) {
+        selection_reject(reason,"selection-outer-grammar");
         delivery_selection_free(*selection); *selection = NULL; delivery_private_document_free(*document); *document = NULL;
         if (resolved_only) { delivery_public_projection_free(*resolved_only); *resolved_only = NULL; }
     }
@@ -453,13 +473,13 @@ done:
 int delivery_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection, struct delivery_private_document **document) {
-    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,0,-1,NULL);
+    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,0,-1,NULL,NULL);
 }
 int delivery_public_source_parse(const char *body, size_t length,
     const char *request_id, const char *source_url, const char *policy, const char *wordpress_policy,
     struct delivery_public_selection **selection) {
     struct delivery_private_document *document = NULL;
-    return selection_parse(body,length,request_id,source_url,policy,wordpress_policy,selection,&document,1,-1,NULL);
+    return selection_parse(body,length,request_id,source_url,policy,wordpress_policy,selection,&document,1,-1,NULL,NULL);
 }
 int delivery_projected_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
@@ -467,7 +487,27 @@ int delivery_projected_selection_parse(const char *body, size_t length,
     struct delivery_private_document **document, struct delivery_public_projection **resolved_only) {
     if (role < DELIVERY_PROJECTED_PERSONAL || role > DELIVERY_PROJECTED_RESOLVER) return 0;
     return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,
-        role != DELIVERY_PROJECTED_PERSONAL,(int)role,resolved_only);
+        role != DELIVERY_PROJECTED_PERSONAL,(int)role,resolved_only,NULL);
+}
+int delivery_selection_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection, struct delivery_private_document **document, const char **reason) {
+    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,0,-1,NULL,reason);
+}
+int delivery_public_source_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *source_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection, const char **reason) {
+    struct delivery_private_document *document = NULL;
+    return selection_parse(body,length,request_id,source_url,policy,wordpress_policy,selection,&document,1,-1,NULL,reason);
+}
+int delivery_projected_selection_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    enum delivery_projected_role role, struct delivery_public_selection **selection,
+    struct delivery_private_document **document, struct delivery_public_projection **resolved_only, const char **reason) {
+    if (reason) *reason = NULL;
+    if (role < DELIVERY_PROJECTED_PERSONAL || role > DELIVERY_PROJECTED_RESOLVER) return selection_reject(reason,"selection-role");
+    return selection_parse(body,length,request_id,original_url,policy,wordpress_policy,selection,document,
+        role != DELIVERY_PROJECTED_PERSONAL,(int)role,resolved_only,reason);
 }
 /* Complete guest outcome is negotiated separately. Existing batch grammar is
  * intentionally unchanged: no private occurrence or issuer marker is erased. */
@@ -479,7 +519,7 @@ static int guest_token(struct reader *r, char **output) {
         if ((unsigned char)text.data[i] < 33 || (unsigned char)text.data[i] > 126) return 0;
     *output = copy(text); return *output != NULL;
 }
-static int guest_headers(struct delivery_public_selection *s) {
+static int guest_headers(struct delivery_public_selection *s, const char **reason) {
     struct delivery_header *h;
     unsigned types = 0;
     for (h = s->headers; h; h = h->next) {
@@ -488,19 +528,19 @@ static int guest_headers(struct delivery_public_selection *s) {
         while (*value == ' ' || *value == '\t') ++value;
         if (selection_case(h->line,n,"content-type")) {
             if (++types != 1 || strlen(value) < 9 || !selection_case(value,9,"text/html") ||
-                (value[9] && value[9] != ';' && value[9] != ' ' && value[9] != '\t')) return 0;
+                (value[9] && value[9] != ';' && value[9] != ' ' && value[9] != '\t')) return selection_reject(reason,"guest-content-type");
         }
         if (selection_prefix(h->line,n,"x-ultracache-esi-") ||
             selection_prefix(h->line,n,"x-ultracache-guest-") ||
             selection_case(h->line,n,"x-ultracache-delivery-prepare") ||
             selection_case(h->line,n,"x-ultracache-cookie-delivery") ||
             selection_case(h->line,n,"surrogate-control") ||
-            (selection_case(h->line,n,"x-ultracache-cookie-settings") && strcmp(value,s->wordpress_policy))) return 0;
+            (selection_case(h->line,n,"x-ultracache-cookie-settings") && strcmp(value,s->wordpress_policy))) return selection_reject(reason,"guest-header-policy");
     }
-    return types == 1;
+    return types == 1 ? 1 : selection_reject(reason,"guest-content-type");
 }
 static int guest_public(struct reader *r, const char *policy, const char *wordpress_policy,
-    const char *guest_policy, const char *epoch, const char *scope, struct delivery_public_selection **output) {
+    const char *guest_policy, const char *epoch, const char *scope, struct delivery_public_selection **output, const char **reason) {
     struct delivery_public_selection *s = calloc(1,sizeof(*s));
     struct text text;
     unsigned seen = 0;
@@ -534,16 +574,19 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
             if (!string(r,&text)) goto invalid;
             if (bit <= 8) {
                 const char *expected = bit == 1 ? policy : bit == 2 ? wordpress_policy : bit == 4 ? guest_policy : epoch;
-                if (!selection_hex(text) || !equal(text,expected)) goto invalid;
+                if (!selection_hex(text) || !equal(text,expected)) {
+                    selection_reject(reason,bit == 1 ? "guest-native-policy" : bit == 2 ? "guest-wordpress-policy" :
+                        bit == 4 ? "guest-policy" : "guest-epoch"); goto invalid;
+                }
                 if (bit == 1) memcpy(s->policy,text.data,64);
                 if (bit == 2) memcpy(s->wordpress_policy,text.data,64);
-            } else if (bit == 16) { if (!equal(text,scope)) goto invalid; }
+            } else if (bit == 16) { if (!equal(text,scope)) { selection_reject(reason,"guest-scope"); goto invalid; } }
             else if (bit == 128) { if (!selection_hex(text)) goto invalid; }
             else if (!equal(text,"none") && !equal(text,"deferred")) goto invalid;
         } else if (bit == 32) { if (!guest_token(r,&s->manifest)) goto invalid; }
         else if (bit == 64) { if (!guest_token(r,&source_manifest)) goto invalid; }
         else if (bit == 256) { if (!number(r,&count)) goto invalid; }
-        else if (bit == 512) { if (!public_parent(r,&s->parent)) goto invalid; }
+        else if (bit == 512) { if (!public_parent(r,&s->parent)) { selection_reject(reason,"guest-parent-grammar"); goto invalid; } }
         else if (bit == 4096) {
             /* Boundary scanning must not mutate escaped recipe strings before
              * the existing canonical recipe parser receives their raw JSON. */
@@ -557,33 +600,43 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
             r->offset = scan.offset; free(scan.buffer);
             if (!valid) goto invalid;
         }
-        else if (!selection_headers(r,s)) goto invalid;
+        else if (!selection_headers(r,s,reason)) { selection_reject(reason,"guest-header-grammar"); goto invalid; }
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if ((seen & ~4096U) != 4095 || !guest_headers(s) || !delivery_selection_digest(s->parent->body,s->parent->length,digest) ||
-        strcmp(digest,s->parent->generation)) goto invalid;
+    if ((seen & ~4096U) != 4095) { selection_reject(reason,"guest-required-fields"); goto invalid; }
+    if (!guest_headers(s,reason)) goto invalid;
+    if (!delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) {
+        selection_reject(reason,"guest-body-digest"); goto invalid;
+    }
     for (i = 0; i+5 <= s->parent->length; ++i)
-        if (selection_case((const char *)s->parent->body+i,5,"<esi:")) goto invalid;
+        if (selection_case((const char *)s->parent->body+i,5,"<esi:")) { selection_reject(reason,"guest-unexpanded-esi"); goto invalid; }
     if (inputs_length && !inputs_duplicate)
         s->guest_inputs = guest_inputs_read(r->buffer+inputs_start,inputs_length,count);
     s->target = copy((struct text){s->manifest,strlen(s->manifest)}); if (!s->target) goto invalid;
     s->guest = 1; *output = s; free(source_manifest); return 1;
 invalid:
-    free(source_manifest); delivery_selection_free(s); return 0;
+    free(source_manifest); delivery_selection_free(s); return selection_reject(reason,"guest-grammar");
 }
 int delivery_guest_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     const char *guest_policy, const char *epoch, const char *scope, struct delivery_public_selection **selection) {
+    return delivery_guest_selection_parse_diagnostic(body,length,request_id,original_url,policy,wordpress_policy,
+        guest_policy,epoch,scope,selection,NULL);
+}
+int delivery_guest_selection_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    const char *guest_policy, const char *epoch, const char *scope, struct delivery_public_selection **selection, const char **reason) {
     struct reader r;
     unsigned seen = 0;
     int ok = 0;
-    if (!selection) return 0;
+    if (reason) *reason = NULL;
+    if (!selection) return selection_reject(reason,"guest-input");
     *selection = NULL;
     if (!body || !length || length == SIZE_MAX || !request_id || !original_url || !policy ||
-        !wordpress_policy || !guest_policy || !epoch || !delivery_selection_scope_valid(scope)) return 0;
+        !wordpress_policy || !guest_policy || !epoch || !delivery_selection_scope_valid(scope)) return selection_reject(reason,"guest-input");
     r.buffer = malloc(length+1); r.length = length; r.offset = 0;
-    if (!r.buffer) return 0;
+    if (!r.buffer) return selection_reject(reason,"guest-allocation");
     memcpy(r.buffer,body,length); r.buffer[length] = 0;
     if (!take(&r,'{')) goto done;
     for (;;) {
@@ -600,15 +653,17 @@ int delivery_guest_selection_parse(const char *body, size_t length,
         seen |= bit;
         if (bit == 1) { if (!number(&r,&schema) || schema != 1) goto done; }
         else if (bit == 2 || bit == 4) {
-            if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) goto done;
-        } else if (!guest_public(&r,policy,wordpress_policy,guest_policy,epoch,scope,selection)) goto done;
+            if (!string(&r,&text) || !equal(text,bit == 2 ? request_id : original_url)) {
+                selection_reject(reason,bit == 2 ? "guest-request-binding" : "guest-url-binding"); goto done;
+            }
+        } else if (!guest_public(&r,policy,wordpress_policy,guest_policy,epoch,scope,selection,reason)) goto done;
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
     }
     whitespace(&r); ok = seen == 15 && r.offset == length;
 done:
     free(r.buffer);
-    if (!ok) { delivery_selection_free(*selection); *selection = NULL; }
+    if (!ok) { selection_reject(reason,"guest-outer-grammar"); delivery_selection_free(*selection); *selection = NULL; }
     return ok;
 }
 

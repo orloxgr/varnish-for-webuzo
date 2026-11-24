@@ -517,38 +517,41 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
     struct delivery_header *header;
     struct fields **tail = &d->public_headers;
     if (d->guest_reply) {
-        if (!d->guest_requested || !delivery_guest_selection_parse(d->body,d->length,d->request_id,d->url,
-            d->selection_policy,d->wordpress_policy,d->guest_policy,d->guest_epoch,d->selection_scope,&d->selection)) return 0;
+        if (!d->guest_requested) { d->diagnostic_reason = "guest-not-requested"; return 0; }
+        if (!delivery_guest_selection_parse_diagnostic(d->body,d->length,d->request_id,d->url,
+            d->selection_policy,d->wordpress_policy,d->guest_policy,d->guest_epoch,d->selection_scope,&d->selection,&d->diagnostic_reason)) return 0;
     } else {
         if (d->source_projected) {
             struct delivery_public_projection *resolved = NULL;
-            if (!delivery_projected_selection_parse(d->body,d->length,d->request_id,d->url,
-                d->selection_policy,d->wordpress_policy,DELIVERY_PROJECTED_PERSONAL,&d->selection,&d->document,&resolved)) return 0;
+            if (!delivery_projected_selection_parse_diagnostic(d->body,d->length,d->request_id,d->url,
+                d->selection_policy,d->wordpress_policy,DELIVERY_PROJECTED_PERSONAL,&d->selection,&d->document,&resolved,&d->diagnostic_reason)) return 0;
             delivery_public_projection_free(resolved);
-        } else if (!delivery_selection_parse(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
-            &d->selection,&d->document)) return 0;
+        } else if (!delivery_selection_parse_diagnostic(d->body,d->length,d->request_id,d->url,d->selection_policy,d->wordpress_policy,
+            &d->selection,&d->document,&d->diagnostic_reason)) return 0;
         if (d->guest_requested) { guest_disable(ctx); d->cold_entry = !d->guest_has_variant; }
     }
     if (d->document) return 1;
     /* An unavailable source supplied no public-parent provenance. Complete the
      * same real visitor privately; never publish its newly rendered page as
      * an inferred replacement for the missing pure public source. */
-    if (d->source_declined) return 0;
+    if (d->source_declined) { d->diagnostic_reason = "source-declined"; return 0; }
     s = d->selection;
     if (d->source_projected && (d->source_unstable ||
-        !delivery_public_projection_equal(s->resolved,d->projection))) return 0;
+        !delivery_public_projection_equal(s->resolved,d->projection))) { d->diagnostic_reason = "selection-public-projection"; return 0; }
     if (d->source_stage == SOURCE_PERSONAL && !d->source_declined &&
         (!d->source_manifest || strcmp(s->manifest,d->source_manifest) ||
-         strcmp(s->parent->generation,d->source_generation))) return 0;
+         strcmp(s->parent->generation,d->source_generation))) { d->diagnostic_reason = "selection-source-binding"; return 0; }
     d->guest_complete = s->guest;
-    if (!delivery_selection_candidate(s,d->resolver_cookie ? d->resolver_cookie : d->cookie,d->selection_rules,&d->candidate)) return 0;
+    if (!delivery_selection_candidate(s,d->resolver_cookie ? d->resolver_cookie : d->cookie,d->selection_rules,&d->candidate)) {
+        d->diagnostic_reason = "selection-cookie-candidate"; return 0;
+    }
     d->variant = delivery_selection_projection(d->candidate,d->selection_rules);
     if (d->cold_entry) {
         char *original = d->source_projected ? delivery_public_projection_cookie(d->projection,d->selection_rules) :
             delivery_selection_projection(d->cookie,d->selection_rules);
         int same = original && d->variant && !strcmp(original,d->variant);
         free(original);
-        if (!same) return 0;
+        if (!same) { d->diagnostic_reason = "selection-cold-variant"; return 0; }
     }
     d->target = strdup(s->target); d->manifest = strdup(s->manifest);
     if (!d->variant || !d->target || !d->manifest) return 0;

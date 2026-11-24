@@ -1,5 +1,10 @@
 # Varnish for Webuzo
 
+Version **0.13.3** adds one failure-only VSL diagnostic for an UltraCache prepare
+continuation rejection. It reports a fixed stage, role and first parser failure,
+without request values, cookies, credentials or body content. Existing acceptance,
+fallbacks and protocol remain unchanged.
+
 Version **0.13.2** separates the UltraCache application's storage approval from
 the browser's cache headers and aligns the first projected Variant lookup with
 publication. The existing serializer produces a request-owned hash input without

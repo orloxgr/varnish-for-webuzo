@@ -84,6 +84,24 @@ int delivery_guest_selection_parse(const char *body, size_t length,
     const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
     const char *guest_policy, const char *epoch, const char *scope,
     struct delivery_public_selection **selection);
+/* Optional caller-owned first failure. Only fixed diagnostic literals are
+ * returned; the existing Boolean parser entry points remain unchanged. */
+int delivery_selection_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection, struct delivery_private_document **document,
+    const char **reason);
+int delivery_public_source_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *source_url, const char *policy, const char *wordpress_policy,
+    struct delivery_public_selection **selection, const char **reason);
+int delivery_projected_selection_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    enum delivery_projected_role role, struct delivery_public_selection **selection,
+    struct delivery_private_document **document, struct delivery_public_projection **resolved_only,
+    const char **reason);
+int delivery_guest_selection_parse_diagnostic(const char *body, size_t length,
+    const char *request_id, const char *original_url, const char *policy, const char *wordpress_policy,
+    const char *guest_policy, const char *epoch, const char *scope,
+    struct delivery_public_selection **selection, const char **reason);
 void delivery_selection_free(struct delivery_public_selection *selection);
 /* Ordered action TAB kind TAB literal-name LF, from the effective resolver. */
 int delivery_selection_candidate(const struct delivery_public_selection *selection,
