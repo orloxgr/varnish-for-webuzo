@@ -1,5 +1,10 @@
 # Varnish for Webuzo
 
+Version **0.13.5** preserves the canonical public cookie lookup key across the
+existing private-fragment continuation. Returning from prepare rejoins the same
+public parent instead of creating a second MISS from cookie-pair ordering.
+Cookie choices, public freshness and Basic profile behavior are unchanged.
+
 Version **0.13.4** preserves browser Cache-Control, Pragma and Expires on bound,
 application-approved UltraCache public selections and complete guest snapshots.
 Their actual remaining publication lifetime controls shared storage through the

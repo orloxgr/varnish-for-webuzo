@@ -1156,6 +1156,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     if (d && d->phase == D_FINALIZE) return delivery_reuse_finish(ctx,d);
     if (!d) {
         struct handoff *entry;
+        const struct guest_request *g = guest_context(ctx);
         int cookie_delivery, reuse_result;
         if (!begin || !target || !*target) return 0;
         cookie_delivery = delivery_cookie_marker(ctx->http_resp);
@@ -1169,6 +1170,13 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b);
         d->target = strdup(target);
         d->manifest = delivery_manifest_token(target);
+        /* A public lookup may have canonicalized policy-owned Variant pairs.
+         * Bind that same lookup input before the private continuation restarts;
+         * its return must not hash the classifier's different pair order. */
+        if (g && g->projected_variant && g->projected_variant_restart == ctx->req->restarts) {
+            d->lookup_variant = strdup(g->projected_variant);
+            if (!d->lookup_variant) return -1;
+        }
         if (!d->url || !d->target || !d->manifest || !delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
             !delivery_copy_header(ctx->http_req,h_adapter_site,&d->site) ||
             !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||

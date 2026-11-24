@@ -449,6 +449,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         close_owner(&d->association);
         free(d->target); d->target = NULL;
         free(d->manifest); d->manifest = NULL;
+        free(d->lookup_variant); d->lookup_variant = NULL;
         free(d->body); d->body = NULL; d->length = d->capacity = 0;
         clear_fields(d->public_headers); d->public_headers = NULL;
         free(d->retire_expression); d->retire_expression = NULL;
@@ -593,6 +594,9 @@ VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     if (ctx->req->esi_level) return NULL;
     if (!d) {
         value = g && g->projected_variant_restart == ctx->req->restarts ? g->projected_variant : NULL;
+    } else if (!d->selection_entry) {
+        if (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED) return NULL;
+        value = d->lookup_variant;
     } else {
         if (!d->selection_entry || !d->variant ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;

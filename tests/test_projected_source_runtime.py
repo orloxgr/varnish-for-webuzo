@@ -112,6 +112,24 @@ class ProjectedSourceRuntime(unittest.TestCase):
             self.assertEqual(len(app.calls), 4)
             self.assertEqual(app.calls[-1][1].get('X-UltraCache-Delivery-Phase'), 'prepare')
 
+    def test_private_prepare_return_keeps_the_canonical_public_lookup_key(self):
+        app = ProjectedApplication()
+        # The classifier follows rule order; publication sorts literal names.
+        # A real personal continuation must return to that same public object.
+        policy = choices(('cmp_language', 'variant'), ('brandCurrency', 'variant'),
+            ('optional', 'variant'), ('cart', 'shared'), ('tracking', 'shared'))
+        with proxy('ultracache', app, policies=policy) as get:
+            self.declare(get)
+            cookie = 'cart=A; cmp_language=el; brandCurrency=EUR'
+            first = get('/canonical-return', cookie, extra={'X-Test-Visitor': 'A'})
+            self.assertEqual((first[0], cache(first[1])), (200, 'MISS'))
+            repeated = get('/canonical-return', cookie, extra={'X-Test-Visitor': 'A'})
+            self.assertEqual((repeated[0], cache(repeated[1])), (200, 'HIT'))
+            self.assertIn('private:A', repeated[2])
+            self.assertEqual(app.resolvers, 1)
+            self.assertEqual(len(app.calls), 4)
+            self.assertEqual(app.calls[-1][1].get('X-UltraCache-Delivery-Phase'), 'prepare')
+
     def test_changed_source_returns_to_real_visitor_issuer_once_without_replaying_source_cookie(self):
         app = ProjectedApplication(change=True)
         with proxy('ultracache', app, policies=self.policy()) as get:
