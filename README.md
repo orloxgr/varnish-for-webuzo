@@ -1,5 +1,11 @@
 # Varnish for Webuzo
 
+Version **0.13.9** serves existing public source maps through the existing Nginx
+static handler. Missing files retain the original dynamic fallback and query
+string. This prevents those static responses from entering the WordPress
+mutation receipt boundary; it does not retire existing unknown executions or
+resolve directory error responses that lack an application receipt.
+
 Version **0.13.8** correlates a missing or rejected native mutation receipt with
 its actual backend transaction using an opaque execution ID and fixed failure
 reason in the existing VSL error channel. No cookies, credentials or request

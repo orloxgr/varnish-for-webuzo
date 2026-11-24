@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Varnish for Webuzo
-Version: 0.13.8
+Version: 0.13.9
 Description: Serve static files with Nginx and cache public HTTP responses with Varnish.
 Author: Byron Iniotakis
 Author URI: https://www.iniotakis.com
