@@ -457,13 +457,15 @@ static void reuse_json_field(struct vsb *json, const char *name, const char *val
 static int reuse_control_reply(struct task *task, int status, const char *reason,
     const struct reuse_scope *scope, const struct reuse_tag *tag, const struct reuse_transaction *transaction,
     const struct mutation_execution *drained, const struct mutation_execution *context_owner,
-    const struct continuation *delivery) {
+    const struct continuation *delivery, const char *observation, const char *observation_target) {
     struct vsb *json = VSB_new_auto();
     char *body = NULL;
     if (!json) return 503;
     VSB_printf(json,"{\"schemaVersion\":1,\"accepted\":%s",status == 200 ? "true" : "false");
     reuse_json_field(json,"reason",reason);
     reuse_json_field(json,"epoch",public_registry_epoch);
+    if (observation) reuse_json_field(json,"observation",observation);
+    if (observation_target) reuse_json_field(json,"observationTarget",observation_target);
     if (drained) {
         reuse_json_field(json,"requestId",drained->request_id);
         reuse_json_field(json,"challenge",drained->challenge);
@@ -494,12 +496,27 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
         if (*scope->coverage_policy) {
             VSB_cat(json,",\"coverageVersion\":1"); reuse_json_field(json,"coveragePolicy",scope->coverage_policy);
         }
-        /* Empty is a complete observation; omission cannot prove retirement. */
-        {
+        /* Projections describe their exact observed set. Omission is never an
+         * empty census; old callers retain the complete original response. */
+        if (observation && !strcmp(observation,"quiescence")) {
             const struct mutation_execution *execution;
+            const struct reuse_transaction *writer;
+            size_t executions = 0, writers = 0, active = 0;
+            for (execution = scope->executions; execution; execution = execution->next) ++executions;
+            for (writer = scope->scope_mutations; writer; writer = writer->next) {
+                ++writers; if (writer->active) ++active;
+            }
+            VSB_printf(json,",\"unsettledExecutionCount\":%ju,\"scopeMutationCount\":%ju,\"activeScopeMutationCount\":%ju",
+                (uintmax_t)executions,(uintmax_t)writers,(uintmax_t)active);
+        }
+        if (!observation || !strcmp(observation,"all") || !strcmp(observation,"execution")) {
+            const struct mutation_execution *execution;
+            size_t emitted = 0;
             VSB_cat(json,",\"unsettledExecutions\":[");
             for (execution = scope->executions; execution; execution = execution->next) {
-                if (execution != scope->executions) VSB_putc(json,',');
+                if (observation && !strcmp(observation,"execution") &&
+                    (!observation_target || strcmp(execution->request_id,observation_target))) continue;
+                if (emitted++) VSB_putc(json,',');
                 VSB_cat(json,"{\"requestId\":"); reuse_json(json,execution->request_id);
                 reuse_json_field(json,"challenge",execution->challenge);
                 VSB_printf(json,",\"live\":%s,\"awaitingReceipt\":%s,\"unknown\":%s",
@@ -513,19 +530,22 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
             }
             VSB_putc(json,']');
         }
-        VSB_cat(json,",\"scopeMutations\":[");
-        {
+        if (!observation || !strcmp(observation,"all") || !strcmp(observation,"scope-transaction")) {
             const struct reuse_transaction *writer;
+            size_t emitted = 0;
+            VSB_cat(json,",\"scopeMutations\":[");
             for (writer = scope->scope_mutations; writer; writer = writer->next) {
-                if (writer != scope->scope_mutations) VSB_putc(json,',');
+                if (observation && !strcmp(observation,"scope-transaction") &&
+                    (!observation_target || strcmp(writer->id,observation_target))) continue;
+                if (emitted++) VSB_putc(json,',');
                 VSB_cat(json,"{\"transaction\":"); reuse_json(json,writer->id);
                 reuse_json_field(json,"lease",writer->lease);
                 VSB_printf(json,",\"active\":%s",writer->active ? "true" : "false");
                 if (!writer->active) reuse_json_field(json,"committedRevision",writer->completed_revision);
                 VSB_putc(json,'}');
             }
+            VSB_putc(json,']');
         }
-        VSB_putc(json,']');
         if (scope->lost_execution_context) VSB_cat(json,",\"lostExecutionContext\":true");
     }
     if (tag) {
@@ -565,6 +585,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     struct mutation_execution *context_owner = NULL;
     struct continuation *delivery = NULL;
     const char *operation, *application_scope, *id, *epoch, *incarnation, *expected_scope, *expected;
+    const char *observation, *observation_target = NULL;
     const char *reason = "invalid-control";
     int status = 400;
     if (!task) return 503;
@@ -576,6 +597,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     incarnation = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Incarnation"));
     expected_scope = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Scope-Revision"));
     expected = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Expected-Revision"));
+    observation = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Observation"));
     pthread_mutex_lock(&lock);
 #ifndef UC_NATIVE_PRIVATE_REUSE
     status = 501; reason = "reuse-not-enabled"; goto reply;
@@ -599,6 +621,26 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
     }
     if (!reuse_scope_revision_repair(scope)) {
         status = 503; reason = "scope-revision-unavailable"; goto reply;
+    }
+    if (observation) {
+        int context = !strcmp(operation,"private-authority-context");
+        int scope_operation = !strcmp(operation,"private-scope-mutation-begin") ||
+            !strcmp(operation,"private-scope-mutation-commit") || !strcmp(operation,"private-scope-mutation-ack");
+        if (!strcmp(observation,"execution")) {
+            observation_target = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Request-Id"));
+            if (!context || !public_policy(observation_target)) {
+                status = 400; reason = "invalid-observation-target"; goto reply;
+            }
+        } else if (!strcmp(observation,"scope-transaction")) {
+            observation_target = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Transaction"));
+            if ((!context && !scope_operation) || !public_policy(observation_target)) {
+                status = 400; reason = "invalid-observation-target"; goto reply;
+            }
+        } else if (!strcmp(observation,"quiescence")) {
+            if (!context) { status = 400; reason = "invalid-observation-operation"; goto reply; }
+        } else if (strcmp(observation,"all") && strcmp(observation,"identity")) {
+            status = 400; reason = "invalid-observation"; goto reply;
+        }
     }
     if (!strcmp(operation,"delivery-reuse-context")) {
         const char *request_id = reuse_single(ctx->http_req,HDR("X-UltraCache-Private-Request-Id"));
@@ -829,7 +871,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
 reply:
     if (scope && operation && strcmp(operation,"private-authority-context") &&
         strcmp(operation,"delivery-reuse-context")) delivery_held_notify(scope);
-    status = reuse_control_reply(task,status,reason,scope,tag,transaction,drained,context_owner,delivery);
+    status = reuse_control_reply(task,status,reason,scope,tag,transaction,drained,context_owner,delivery,observation,observation_target);
     mutation_execution_free(drained);
     pthread_mutex_unlock(&lock); return status;
 }

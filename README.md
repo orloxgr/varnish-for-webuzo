@@ -1,5 +1,11 @@
 # Varnish for Webuzo
 
+Version **0.13.6** offers explicit identity, exact execution/transaction and counted
+quiescence observations through the existing authenticated native control path.
+Mutation receipts no longer need to transfer a full scope census on every call.
+Native readiness, pending writers, invalidation and complete legacy replies remain
+unchanged. Pair with UltraCache WordPress **3.13.13-dev.1338**.
+
 Version **0.13.5** preserves the canonical public cookie lookup key across the
 existing private-fragment continuation. Returning from prepare rejoins the same
 public parent instead of creating a second MISS from cookie-pair ordering.
