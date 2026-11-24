@@ -338,11 +338,12 @@ sub scp_ultracache_backend_response {
 sub scp_ultracache_deliver {
     if (req.esi_level > 0 && resp.status != 200 && resp.status != 204 &&
         req.http.X-SCP-Query ~ "(^|&)(ultracache_esi|ultracache_esi_probe_private_fragment)=[^&]+(?:&|$)") {
-        # Only this native child, not an external request or full private
-        # document, becomes an empty delivery. Preserve the original status
-        # in the native log; never embed a backend error page into its parent.
+        # Preserve this child's actual failure. A late ESI include cannot
+        # rewrite its parent's already-sent headers, so its safe error component
+        # must be visible in the delivered HTML instead of a silent empty200.
+        # Never embed the original error page, provider cookies or redirect.
         set req.http.X-SCP-Fragment-HTTP-Failure = resp.status;
-        return (synth(200, "UltraCache fragment unavailable"));
+        return (synth(resp.status, "UltraCache fragment unavailable"));
     }
     if (req.esi_level == 0 && req.method == "GET" &&
         (obj.hits > 0 || resp.http.X-SCP-Delivery-Public-Snapshot == "1") &&
@@ -398,12 +399,16 @@ sub vcl_synth {
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level > 0 &&
         req.http.X-SCP-Fragment-HTTP-Failure ~ "^[1-5][0-9][0-9]$") {
         std.log("UltraCache signed child HTTP failure " + req.http.X-SCP-Fragment-HTTP-Failure);
-        unset req.http.X-SCP-Fragment-HTTP-Failure;
+        set resp.status = std.integer(req.http.X-SCP-Fragment-HTTP-Failure,503);
         set resp.http.Cache-Control = "private, no-store";
         set resp.http.Surrogate-Control = "no-store";
+        set resp.http.Content-Type = "text/html; charset=utf-8";
         set resp.http.X-UltraCache-ESI-Error-Contained = "1";
         set resp.http.X-Cache = "PASS";
-        set resp.body = "";
+        set resp.body = "<span role=alert data-ultracache-fragment-http-error=" +
+            req.http.X-SCP-Fragment-HTTP-Failure + ">Page component unavailable (HTTP " +
+            req.http.X-SCP-Fragment-HTTP-Failure + ").</span>";
+        unset req.http.X-SCP-Fragment-HTTP-Failure;
         return (deliver);
     }
     if (req.http.X-SCP-Profile == "ultracache" && cookie_handoff.delivery_synth()) {

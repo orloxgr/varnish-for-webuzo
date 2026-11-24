@@ -39,6 +39,24 @@ owned document. It does not certify later ordinary public ESI subrequests.
 Helper-free/late private ESI has no completed prepare verdict. Warm-up reporting
 must keep parent HIT separate from verification of required private fragments.
 
+Late UltraCache endpoint HTTP failures retain their actual child status and
+produce a fixed visible component with `data-ultracache-fragment-http-error`
+containing that status. They no longer become silent empty HTTP200 children.
+The component contains no original error-page bytes, cookies, redirect or URL.
+HTTP200 application fallbacks and bodyless204 remain application decisions.
+Basic and generic ESI retain their existing behavior; no global onerror setting
+is changed.
+
+The cached parent shell's headers can already have been sent when a public ESI
+child fails. The parent can therefore still report HTTP200/HIT, and an earlier
+`verified` prepared-private outcome still covers only its private dependencies.
+The visible failure component is failed required content, not proof of complete
+page success. Parent/Warm acceptance must account for that distinction. Failure
+inside the negotiated required prepare instead retains its existing pre-header
+rejection path and cannot use the late component as a successful substitute.
+Native and real-application qualification of this changed failure path remains
+separate from the previously qualified prepare-outcome contract.
+
 Qualification uses isolated Varnish 9.1 and real HTTP/VSL: seven outcome methods
 and seven existing prepare diagnostic/recovery methods pass per adapter, without
 skips. These cover Debug OFF/ON, strict fields, failed/bad-bound/incomplete

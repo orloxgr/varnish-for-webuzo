@@ -427,8 +427,10 @@ Absent, zero, malformed or duplicate markers add no diagnostic and do not alter
 validation. An HTTP409/500, malformed envelope or incorrect owner binding still
 fails through the existing prepare rejection, without a degraded-success log.
 An application status inside a valid privateDocument retains its existing
-semantics. The ordinary child HTTP-failure containment and its existing logs are
-unchanged. Load measurements can correlate this VSL event with the request to
+semantics. A later ordinary UltraCache child HTTP failure retains its actual
+status and returns a fixed visible error component; it does not become an empty
+HTTP200. Its raw backend error page and cookies are not embedded. Load
+measurements can correlate the existing VSL event with the request to
 distinguish degraded delivery from a parent HTTP200/HIT; no late browser header,
 new control, background automation or new envelope field is introduced.
 
