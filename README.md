@@ -1,5 +1,12 @@
 # Varnish for Webuzo
 
+Version **0.13.7** binds provider mutation receipt cleanup to its actual native
+execution owner. Unrelated V2 requests no longer delay that cleanup; the
+original pending receipt and legacy/unbound callers retain their required
+barriers. A stale V2 DIRTY receipt cannot recreate a collected transaction.
+Pair with UltraCache WordPress **3.13.13-dev.1348**. This does not resolve missing
+producer journals or by itself prove complete zero-PHP personal cache HITs.
+
 Version **0.13.6** offers explicit identity, exact execution/transaction and counted
 quiescence observations through the existing authenticated native control path.
 Mutation receipts no longer need to transfer a full scope census on every call.
