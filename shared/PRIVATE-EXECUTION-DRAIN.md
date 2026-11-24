@@ -1,4 +1,11 @@
-# Original execution drain dispatch, version 1
+# Retired draft: original execution drain dispatch
+
+The universal native execution-hold/dispatch design below was withdrawn by
+the event-driven architecture correction in UltraCache #1044. It is historical
+design context, not the active protocol or a prerequisite for HIT. Current
+native code does not maintain an all-application execution census. A real fill
+observes its recorded producer; actual owner/content events invalidate only
+their dependencies. Do not restore this draft's controls, dispatch or holds.
 
 This extends the existing producer early metadata/reconciliation owner. It does
 not schedule a native worker, maintain another queue or introduce a body recipe.

@@ -1,4 +1,9 @@
-# Supported native-provider mutation coverage (proposed wire v2)
+# Retired draft: universal provider coverage, wire v2
+
+This proposed coverage negotiation and whole-application hold contract was
+withdrawn in UltraCache #1044. The active event-driven mutation producer uses
+signed schema 1 and invalidates actual owner/content dependencies. The draft
+below is historical context, not an active capability or a fallback to restore.
 
 This extends the existing registered scope, signed mutation execution, SQL
 journal and exact execution-drain operation. It is not another coordinator,
