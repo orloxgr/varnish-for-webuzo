@@ -150,11 +150,18 @@ class NativeFullReuse(unittest.TestCase):
     def test_pending_finalizer_cannot_retry_past_actual_fragment_deadline(self):
         self.run_full_actor(anonymous_nonce=True,pending_case='expired',body_budget=1)
 
+    def test_complete_plan_direct_reads_promote_private_bodies_and_metadata_in_native_lru(self):
+        self.run_full_actor(anonymous_nonce=True,lru_case='moves')
+
+    def test_hot_complete_plan_survives_cold_pressure_in_unchanged_native_cache(self):
+        self.run_full_actor(anonymous_nonce=True,lru_case='pressure')
+
     def run_full_actor(self,anonymous_nonce=False,scope_fence=False,covered=False,namespace_keys=False,projected=False,
                        anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False,
-                       held_case='read',diagnostic_only=None,pending_case=None):
+                       held_case='read',diagnostic_only=None,pending_case=None,lru_case=None):
         holder={};calls=[];prepared={};prepared_accepts={};generation=[1];records=[];armed=[]
         finalize_attempts={};finalize_headers={}
+        cold_calls=[]
         held_entered=threading.Event();held_release=threading.Event();held_original=[]
         later_entered=threading.Event();later_release=threading.Event();later_original=[]
         if held_case=='ended-late-write':held_release.set()
@@ -171,6 +178,12 @@ class NativeFullReuse(unittest.TestCase):
         def read_context(headers,path):
             return coverage.context(self,headers,'GET',path) if covered else signed_context(self,headers,path,'GET')
         def origin(path,headers):
+            if lru_case and path.startswith('/__owned_lru/'):
+                # Ordinary Basic-site bytes share the fixture's unchanged
+                # malloc16MB storage, without creating a private mutation owner.
+                self.assertEqual(headers.get('Host'),'other.test')
+                cold_calls.append(path)
+                return b'x'*(512*1024),[('Content-Type','application/octet-stream'),('Cache-Control','public, max-age=120')]
             phase=headers.get('X-UltraCache-Delivery-Phase');calls.append((path,phase))
             if phase=='prepare':
                 if holder.get('waiting_reader_started') is not None and 'fallback_started' not in holder:
@@ -294,7 +307,8 @@ class NativeFullReuse(unittest.TestCase):
             if held_case=='deadline':source=re.sub(r'set sess.send_timeout = [^;]+;', 'set sess.send_timeout = 0.2s;',source)
             return source
         with proxy('ultracache',origin,transform=actor_policy,policies=policies,
-                   management=held_case in ('reload','cancel'),daemon_parameters=(
+                   other_profile='basic' if lru_case else None,
+                   management=bool(lru_case) or held_case in ('reload','cancel'),daemon_parameters=(
                        (('vsl_mask=+Debug',) if diagnostic_only is not False else ())+
                        (('send_timeout=1',) if held_case=='deadline' else
                         ('debug=+vclrel',) if held_case in ('reload','cancel') else ()))) as get:
@@ -339,6 +353,54 @@ class NativeFullReuse(unittest.TestCase):
             self.assertEqual((status,body2),(200,body));self.assertEqual(cookies(headers),[])
             self.assertEqual(calls,[],'A complete native HIT must invoke no origin, prepare or finalizer')
             if pending_case=='settled':return
+            if lru_case:
+                def counters():
+                    raw=json.loads(subprocess.check_output(
+                        ['varnishstat','-n',str(get.instance),'-1','-j'],text=True))
+                    rows=raw.get('counters',raw)
+                    return {name:int(rows['MAIN.'+name]['value']) for name in ('n_lru_moved','n_lru_nuked')}
+                interval_report=get.adm('param.show','lru_interval')
+                match=re.search(r'Value is:\s*([0-9]+(?:\.[0-9]+)?)\s*\[seconds\]',interval_report)
+                self.assertIsNotNone(match,interval_report)
+                interval=float(match.group(1))
+                self.assertLess(interval+1,body_budget,'Fixture must retain its existing grants beyond the native LRU interval')
+                scope_before=self.observe(get)
+                def cold(path):
+                    result=get(path,extra={'Host':'other.test'})
+                    self.assertEqual((result[0],len(result[2])),(200,512*1024))
+                    return dict(result[1])['X-Cache']
+                if lru_case=='pressure':
+                    for i in range(24):self.assertEqual(cold('/__owned_lru/seed-'+str(i)),'MISS')
+                # Read, never set, the engine's own interval. No cache/TTL or
+                # daemon parameter change makes the test artificially pass.
+                time.sleep(interval+0.15)
+                before=counters()
+                if lru_case=='pressure':
+                    self.assertEqual(before['n_lru_nuked'],0,'Seed objects must fit before the controlled pressure starts')
+                refreshed=get(PARENT,'owner=A; _fbp=lru')
+                self.assertEqual((refreshed[0],refreshed[2]),(200,body))
+                self.assertEqual(calls,[],'A touch must not call the original application')
+                moved=counters()['n_lru_moved']-before['n_lru_moved']
+                if lru_case=='moves':
+                    # Parent normally touches itself. The additional three are
+                    # the actual cached reuse metadata and two distinct bodies.
+                    self.assertGreaterEqual(moved,4,'Parent-only LRU activity hides cold private dependencies')
+                    self.assertEqual(get.adm('param.show','lru_interval'),interval_report)
+                    return
+                for i in range(16):self.assertEqual(cold('/__owned_lru/pressure-'+str(i)),'MISS')
+                self.assertGreater(counters()['n_lru_nuked'],before['n_lru_nuked'],
+                    'The unchanged16MB stevedore must actually evict objects')
+                scope_after=self.observe(get)
+                self.assertEqual(scope_after['scopeRevision'],scope_before['scopeRevision'])
+                hot=get(PARENT,'owner=A; _fbp=after-pressure')
+                self.assertEqual((hot[0],hot[2]),(200,body));self.assertEqual(cookies(hot[1]),[])
+                self.assertEqual(calls,[],
+                    'Hot parent, reuse metadata and bodies must survive cold pressure; native moved='+str(moved))
+                previous=len(cold_calls)
+                self.assertEqual(cold('/__owned_lru/seed-0'),'MISS','An actually cold object must remain evictable')
+                self.assertEqual(len(cold_calls),previous+1)
+                self.assertEqual(get.adm('param.show','lru_interval'),interval_report)
+                return
             if diagnostic_only is not None:
                 status,_,other=get(PARENT,'owner=B')
                 self.assertEqual(status,200);self.assertIn('private:B-generation1',other)

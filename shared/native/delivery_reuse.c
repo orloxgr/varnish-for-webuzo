@@ -137,6 +137,10 @@ static struct objcore *delivery_reuse_lookup(VRT_CTX, const struct continuation 
         object == parent->objcore && object->t_origin+object->ttl > VTIM_real()) &&
         !HTTP_GetHdrPack(worker,object,H_Set_Cookie) &&
         !HTTP_GetHdrPack(worker,object,h_set_cookie2);
+    /* HSH_Lookup/ObjIterate do not perform cnt_deliver's normal recency touch.
+     * Keep validated direct HITs in the engine's own LRU policy. ObjTouch uses
+     * its existing interval/trylock and never extends freshness or ownership. */
+    if (valid) ObjTouch(worker,object,r->t_req);
     outcome = valid ? "hit" : "object-contract-rejected";
 done:
     VSLb(r->vsl,SLT_Debug,"uc-reuse-lookup kind=%s outcome=%s",
