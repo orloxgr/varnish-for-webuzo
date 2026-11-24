@@ -1,15 +1,13 @@
 # UltraCache scoped native private objects. Isolated candidate; actual application qualification remains required.
 # No cookie-based identity or content cache inside the VMOD.
-acl uc_private_local { "127.0.0.1"; "::1"; }
 
 # Adapter invokes this ONLY after its native site-secret/control-source gate.
 sub scp_private_lookup {
     if (req.url ~ "^/__ultracache-native/held-v1/") { return (synth(403, "Native wait source denied")); }
     if (req.url ~ "^/__ultracache-native/reuse-v1/") { return (synth(403, "Native metadata source denied")); }
-    if (req.http.X-SCP-Profile != "ultracache" || req.esi_level > 0 ||
-        client.ip !~ uc_private_local ||
-        (req.http.X-Real-IP && req.http.X-Real-IP !~ "^(127[.]0[.]0[.]1|::1)$") ||
-        (req.http.X-Forwarded-For && req.http.X-Forwarded-For !~ "^(127[.]0[.]0[.]1|::1)$")) {
+    # Source and per-site token were checked by the adapter before this call.
+    # A Unix-socket application connection has no TCP loopback client address.
+    if (req.http.X-SCP-Profile != "ultracache" || req.esi_level > 0) {
         return (synth(403, "Private lookup source denied"));
     }
     if (req.http.X-UltraCache-Private-Key !~ "^[0-9a-f]{64}$") {

@@ -50,7 +50,7 @@ server {
   return 204;
  }
  location / {
-  if ($request_method !~ ^(HEAD|PURGE|BAN)$) { return 405; }
+  if ($request_method !~ ^(HEAD|PURGE|BAN|UC-PRIVATE-GET)$) { return 405; }
   set $wv_control_token $http_x_webuzo_varnish_token;
   if ($wv_control_token = "") { set $wv_control_token $http_x_ultracache_token; }
   proxy_pass http://unix:/run/varnish-for-webuzo-cache/frontend.sock:;

@@ -36,7 +36,7 @@ class Connections(unittest.TestCase):
         with patch.object(Path,'read_text',return_value='1024'):
             text=connections.render(dict(control_port=82,control_marker='a'*32))
         self.assertIn('listen 127.0.0.1:82;',text)
-        self.assertIn('^(HEAD|PURGE|BAN)$',text)
+        self.assertIn('^(HEAD|PURGE|BAN|UC-PRIVATE-GET)$',text)
         self.assertIn('proxy_set_header Host $http_host;',text)
         self.assertIn('frontend.sock:',text)
         self.assertNotIn('admin.secret',text)

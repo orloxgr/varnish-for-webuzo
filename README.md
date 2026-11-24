@@ -1,5 +1,7 @@
 # Varnish for Webuzo
 
+Version **0.13.11** also permits the existing authenticated `UC-PRIVATE-GET` operation through the normal loopback application connector and uses the adapter's existing site/source gate for private lookups over Unix sockets. This repairs a real WordPress lookup returning 405 and a direct Unix lookup returning 403.
+
 Version **0.13.10** removes whole-application execution holds from private cache reuse. Actual owner/content tag events invalidate only their dependents; valid complete deliveries do not wait for unrelated backend requests. The native/WordPress producer contract uses signed schema 1.
 
 Version **0.13.9** serves existing public source maps through the existing Nginx
