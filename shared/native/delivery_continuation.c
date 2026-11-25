@@ -1284,6 +1284,10 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
          * A recovered fetch additionally requires the bound snapshot response. */
         if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) ||
             !delivery_restore(ctx,d)) { d->phase = D_FAILED; return -1; }
+        /* The authenticated snapshot has now completed the parent fetch.
+         * Its original fragment producer can settle on this response just as
+         * on an ordinary parent HIT; do not defer admission to another visit. */
+        if (d->phase == D_RECOVERY) d->phase = D_READY;
         /* Before the first ESI child runs, append authentic provider headers. */
         if (d->phase == D_READY && !d->reuse_done && delivery_reuse_schedule(ctx,priv,d)) return 1;
         if (!delivery_append_cookies(ctx,d)) { d->phase = D_FAILED; return -1; }

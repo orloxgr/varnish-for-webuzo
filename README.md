@@ -1,5 +1,10 @@
 # Varnish for Webuzo
 
+Version **0.13.14** settles the original private fragment producer after its
+authenticated parent snapshot completes. The next complete HIT no longer needs
+an extra prepare/finalize cycle solely because its first fill recovered a parent.
+Existing publication, owner, input and provider validation remain unchanged.
+
 Version **0.13.13** keeps verified publication reselection on the ordinary
 projected public cache key. It separates that lookup namespace from cold
 input validation, so a replacement does not require repeated prepare/reselection.

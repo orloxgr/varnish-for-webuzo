@@ -44,7 +44,7 @@ class NativeEventInvalidation(unittest.TestCase):
     commit = NativeReuseAuthority.commit
 
     @contextmanager
-    def actor(self, public_generation=None):
+    def actor(self, public_generation=None, selection_candidate=False):
         public_generation = public_generation or {"number": 1}
         holder = {}; calls = []; prepared = {}; versions = {'A': 1, 'B': 1}
         entered = threading.Event(); release = threading.Event()
@@ -53,6 +53,20 @@ class NativeEventInvalidation(unittest.TestCase):
             dict(url=ADAPTIVE, provider='nonce', occurrences=1)]))
         def owner_tag(owner):
             return TAG if owner == 'A' else hashlib.sha256(('other-event-owner:' + owner).encode()).hexdigest()
+        def retain_candidate(body, signed, owner):
+            context = self.call(holder['get'], 'delivery-reuse-context', tag=None, extra={
+                'X-UltraCache-Private-Request-Id': signed['requestId'],
+                'X-UltraCache-Private-Challenge': signed['challenge'],
+                'X-UltraCache-Private-Epoch': signed['epoch'],
+                'X-UltraCache-Private-Incarnation': signed['incarnation'],
+                'X-UltraCache-Delivery-Reuse-Recipe': recipe['digest']})
+            rendered = body.get('selectedPublic', body)['renderedFragments']
+            for fragment in rendered:
+                fragment['cache'] = dict(ttl=120, tags='owner:' + owner,
+                    key=hashlib.sha256((fragment['url'] + owner + str(versions[owner])).encode()).hexdigest())
+            body['reuseCandidate'] = dict(version=1, requestId=signed['requestId'], challenge=signed['challenge'],
+                recipe=recipe, inputEvidence=identity_mac(context, owner, recipe['inputs']))
+            prepared[signed['requestId']] = (dict(renderedFragments=copy.deepcopy(rendered)), owner)
         def origin(path, headers):
             phase = headers.get('X-UltraCache-Delivery-Phase'); calls.append((path, phase))
             if path == '/__unrelated-server-error':
@@ -76,26 +90,17 @@ class NativeEventInvalidation(unittest.TestCase):
                     renderedFragments=fragments)
                 body = dict(schemaVersion=1, requestId=headers['X-UltraCache-Delivery-Request'],
                     originalUrl=headers['X-UltraCache-Delivery-Original-URL'], selectedPublic=selected)
+                if selection_candidate:
+                    retain_candidate(body, signed, owner)
                 return json.dumps(body), [('Content-Type', 'application/vnd.ultracache.delivery+json'),
                     ('Cache-Control', 'private, no-store'), ('Surrogate-Control', 'no-store'),
                     ('X-UltraCache-Delivery-Public-Selection-Version', '1'), ('X-UltraCache-Delivery-Outcome', 'verified'),
                     ('X-UltraCache-Mutation-Receipt', receipt(signed, 'none', ()))]
             if phase == 'prepare':
                 signed = signed_context(self, headers, 'GET', path)
-                context = self.call(holder['get'], 'delivery-reuse-context', tag=None, extra={
-                    'X-UltraCache-Private-Request-Id': signed['requestId'],
-                    'X-UltraCache-Private-Challenge': signed['challenge'],
-                    'X-UltraCache-Private-Epoch': signed['epoch'],
-                    'X-UltraCache-Private-Incarnation': signed['incarnation'],
-                    'X-UltraCache-Delivery-Reuse-Recipe': recipe['digest']})
                 owner = headers['Cookie'].split('owner=', 1)[1].split(';', 1)[0]
                 body = json.loads(envelope(headers, owner + '-v' + str(versions[owner])))
-                for fragment in body['renderedFragments']:
-                    fragment['cache'] = dict(ttl=120, tags='owner:' + owner,
-                        key=hashlib.sha256((fragment['url'] + owner + str(versions[owner])).encode()).hexdigest())
-                body['reuseCandidate'] = dict(version=1, requestId=signed['requestId'], challenge=signed['challenge'],
-                    recipe=recipe, inputEvidence=identity_mac(context, owner, recipe['inputs']))
-                prepared[signed['requestId']] = (copy.deepcopy(body), owner)
+                retain_candidate(body, signed, owner)
                 return json.dumps(body), [('Cache-Control', 'private, no-store'), ('X-UltraCache-Mutation-Receipt', receipt(signed, 'none', ()))]
             if phase == 'reuse-finalize':
                 self.assertIsNone(headers.get('Cookie'))
@@ -141,6 +146,23 @@ class NativeEventInvalidation(unittest.TestCase):
                     self.assertEqual(calls, [], 'A complete first fill must immediately become a zero-backend HIT')
                 yield get, calls, versions, bodies, entered, release, owner_tag
             finally: release.set()
+
+    def test_snapshot_producer_settles_before_the_next_visit(self):
+        generation = {'number': 1}
+        with self.actor(generation, selection_candidate=True) as (get, calls, _, _, _, _, _):
+            generation['number'] = 2
+            self.assertEqual(control(get, operation='exact-purge', path=PARENT)[0], 200)
+            calls.clear()
+            status, _, filled = get(PARENT, 'owner=B')
+            self.assertEqual(status, 200)
+            self.assertIn('parent2[', filled)
+            self.assertIn('private:B-v1', filled)
+            self.assertEqual(calls, [(PARENT, 'public-select'), (PARENT, 'reuse-finalize')],
+                             'The actual snapshot producer must settle before completing this response')
+            calls.clear()
+            status, _, following = get(PARENT, 'owner=B')
+            self.assertEqual((status, following), (200, filled))
+            self.assertEqual(calls, [], 'The immediately following complete HIT needs no prepare/finalize')
 
     def test_public_regeneration_reuses_private_owner_objects_after_recipe_discovery(self):
         generation = {'number': 1}
