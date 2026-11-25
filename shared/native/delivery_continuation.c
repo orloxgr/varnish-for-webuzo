@@ -1316,6 +1316,13 @@ VCL_STRING vmod_delivery_outcome(VRT_CTX, struct vmod_priv *priv) {
     return "unverified";
 }
 
+VCL_STRING vmod_delivery_cache_outcome(VRT_CTX, struct vmod_priv *priv) {
+    const struct continuation *d = priv->priv;
+    if (ctx->req->esi_level || !d || d->guest_complete) return "NOT-APPLICABLE";
+    if (d->failed || d->phase != D_DELIVERED || d->outcome != 1) return "UNVERIFIED";
+    return d->reuse_fast ? "HIT" : "FILL";
+}
+
 VCL_BOOL vmod_delivery_synth(VRT_CTX, struct vmod_priv *priv) {
     struct continuation *d = priv->priv;
     const struct delivery_fragment *f;

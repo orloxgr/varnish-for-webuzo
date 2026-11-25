@@ -208,6 +208,14 @@ Request-owned verified/degraded/unverified outcome after complete authenticated
 prepare and final delivery validation. Never reads a cached parent health field.
 An ordinary late ESI child or missing/invalid producer outcome stays unverified.
 
+$Function STRING delivery_cache_outcome(PRIV_TOP)
+$Restrict vcl_deliver
+
+Request-owned private composition result: HIT uses the complete native cached
+plan; FILL delivered through the origin path. NOT-APPLICABLE covers complete
+guest documents and requests without a private continuation. This diagnostic
+does not admit a cache entry or change ordinary request handling.
+
 $Function BOOL delivery_synth(PRIV_TOP)
 $Restrict vcl_synth
 

@@ -138,11 +138,14 @@ class NativeEventInvalidation(unittest.TestCase):
             bodies = {}
             try:
                 for owner in versions:
-                    calls.clear(); status, _, body = get(PARENT, 'owner=' + owner)
+                    calls.clear(); status, fields, body = get(PARENT, 'owner=' + owner)
                     self.assertEqual(status, 200); self.assertIn('private:' + owner + '-v1', body)
+                    self.assertEqual(dict(fields).get('X-UltraCache-Private-Cache'), 'FILL')
                     self.assertEqual(calls, [(PARENT, 'prepare'), (PARENT, 'reuse-finalize')])
                     bodies[owner] = body; calls.clear()
-                    self.assertEqual(get(PARENT, 'owner=' + owner)[2], body)
+                    status, fields, reused = get(PARENT, 'owner=' + owner)
+                    self.assertEqual((status, reused), (200, body))
+                    self.assertEqual(dict(fields).get('X-UltraCache-Private-Cache'), 'HIT')
                     self.assertEqual(calls, [], 'A complete first fill must immediately become a zero-backend HIT')
                 yield get, calls, versions, bodies, entered, release, owner_tag
             finally: release.set()

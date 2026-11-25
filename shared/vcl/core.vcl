@@ -479,6 +479,10 @@ sub scp_deliver {
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_deliver; }
     else { unset resp.http.X-UltraCache-Cookie-Delivery; }
     call scp_public_source_diagnostic;
+    unset resp.http.X-UltraCache-Private-Cache;
+    if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0) {
+        set resp.http.X-UltraCache-Private-Cache = cookie_handoff.delivery_cache_outcome();
+    }
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level == 0 && !cookie_handoff.guest_result()) {
         set resp.http.X-UltraCache-Delivery-Outcome = cookie_handoff.delivery_outcome();
     }

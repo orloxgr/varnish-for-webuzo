@@ -1,5 +1,9 @@
 # Varnish for Webuzo
 
+Version **0.13.16** reports request-owned private cache HIT/FILL separately from
+correct fragment delivery. UltraCache WordPress dev.1365 uses this diagnostic
+to verify Warm readiness without changing ordinary cache admission.
+
 Version **0.13.15** preserves the original public lookup tuple when an actual
 issuer selects a different publication tuple. Publication and private input
 validation retain their original identities.
