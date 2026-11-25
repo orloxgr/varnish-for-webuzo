@@ -1,16 +1,16 @@
-"""Unmodified generated VCL, actual native module; MOCK covered origin/drain.
+"""Unmodified generated VCL, actual native module; mock signed event producer.
 
-Actual Nginx physical-file routing and PHP/SQL drain require installed Lab tests.
+Actual Nginx file routing and PHP/SQL persistence require installed Lab tests.
 """
 import os
 import shutil
 import unittest
 
 import test_mutation_backend as backend
-import test_mutation_coverage_runtime as coverage
 import test_reuse_authority as authority
 from test_cookie_delivery import proxy
 from test_public_selection_runtime import control
+from test_reuse_delivery_context import signed_context
 
 
 @unittest.skipUnless(shutil.which('varnishd') and os.environ.get('SCP_EXPERIMENTAL_REUSE_TEST')=='1',
@@ -18,13 +18,10 @@ from test_public_selection_runtime import control
 class NormalGeneratedMutationBoundary(unittest.TestCase):
     call=authority.NativeReuseAuthority.call
     observe=authority.NativeReuseAuthority.observe
-    recover=authority.NativeReuseAuthority.recover
     publish=authority.NativeReuseAuthority.publish
     ready=authority.NativeReuseAuthority.ready
-    ended=backend.NativeMutationBackend.ended
-    drain=coverage.NativeCoverageHolds.drain
 
-    def test_normal_dynamic_get_and_post_use_signed_coverage_without_test_vcl_injection(self):
+    def test_normal_dynamic_get_and_post_use_signed_context_without_test_vcl_injection(self):
         for method,path in (('GET','/wp-json/wp/v2/types?context=view'),
                             ('GET','/wp-json/custom/dynamic.css'),
                             ('POST','/wp-admin/admin-ajax.php?action=owned_read')):
@@ -32,27 +29,27 @@ class NormalGeneratedMutationBoundary(unittest.TestCase):
                 captured=[]
                 def origin(actual,headers):
                     self.assertEqual(actual,path)
-                    c=coverage.context(self,headers,method,path);captured.append(c)
+                    c=signed_context(self,headers,path,method);captured.append(c)
+                    self.assertEqual(set(c),{'schemaVersion','proof',*backend.FIELDS[:-2]})
+                    self.assertEqual(c['schemaVersion'],1)
                     if headers.get('X-UltraCache-Delivery-Phase')=='public-select':
                         self.assertEqual(headers.get('X-UltraCache-Delivery-Authorization'),'b'*64)
                     else:
                         self.assertNotIn('X-UltraCache-Delivery-Authorization',headers)
                     return 'original application response',[
                         ('Content-Type','application/json'),('Cache-Control','private, no-store'),
-                        coverage.response_receipt(c)]
+                        ('X-UltraCache-Mutation-Receipt',backend.receipt(c,'none',()))]
                 with proxy('ultracache',origin,allow_post=True) as get:
-                    coverage.register(self,get);old=self.ready(get)
+                    authority.NativeReuseAuthority.register(self,get);old=self.ready(get)
                     response=get(path) if method=='GET' else backend.post(get,path)
                     self.assertEqual(response[0],200)
                     self.assertEqual(len(captured),1)
                     self.assertNotIn('X-UltraCache-Mutation-Receipt',dict(response[1]))
-                    pending=self.ended(get)
-                    self.assertEqual(pending['temporaryHolds'],1)
-                    self.assertEqual(pending['scopeRevision'],old['scopeRevision'])
-                    self.drain(get,captured[0])
                     current=self.observe(get)
-                    self.assertEqual((current['scopeState'],current.get('temporaryHolds',0),current['scopeRevision']),
-                                     ('ready',0,old['scopeRevision']))
+                    self.assertEqual((current['scopeState'],current['contentRevision'],current['scopeRevision']),
+                                     ('ready',old['contentRevision'],old['scopeRevision']))
+                    self.assertNotIn('temporaryHolds',current)
+                    self.assertNotIn('unsettledExecutions',current)
 
     def test_normal_basic_and_old_producers_do_not_receive_mutation_contract(self):
         for profile,old_declaration in (('basic',False),('ultracache',False),('ultracache',True)):

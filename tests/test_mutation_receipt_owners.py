@@ -1,11 +1,10 @@
-"""Real native transaction GC; mock signed V2 producer, no PHP/SQL drain claim."""
+"""Real native transaction GC; mock signed event producer, no PHP/SQL completion claim."""
 import os
 import shutil
 import threading
 import unittest
 
 import test_mutation_backend as backend
-import test_mutation_coverage_runtime as coverage
 from test_cookie_delivery import proxy
 from test_reuse_authority import NativeReuseAuthority, TAG
 
@@ -16,7 +15,6 @@ class NativeMutationReceiptOwners(unittest.TestCase):
     call = NativeReuseAuthority.call
     observe = NativeReuseAuthority.observe
     ready = NativeReuseAuthority.ready
-    recover = NativeReuseAuthority.recover
     publish = NativeReuseAuthority.publish
     commit = NativeReuseAuthority.commit
 
@@ -37,17 +35,17 @@ class NativeMutationReceiptOwners(unittest.TestCase):
         except BaseException as error:
             errors.append(error)
 
-    def test_exact_late_dirty_receipt_blocks_gc_and_cannot_reopen_completed_writer(self):
+    def test_exact_retained_receipt_accepts_only_its_completed_writer_before_gc(self):
         entered = threading.Event(); release = threading.Event()
         originals = []; results = []; errors = []
         def origin(path, headers):
-            original = coverage.context(self, headers, 'POST', path)
+            original = backend.producer_context(self, headers, 'POST', path)
             originals.append(original); entered.set()
             self.assertTrue(release.wait(10))
             return 'actual business response', [('Cache-Control', 'private, no-store'),
-                coverage.response_receipt(original, 'dirty', [(TAG, done['transaction'])])]
+                ('X-UltraCache-Mutation-Receipt',backend.receipt(original, 'dirty', [(TAG, done['transaction'])]))]
         with proxy('ultracache', origin, transform=backend.actor_hooks, allow_post=True) as get:
-            coverage.register(self, get); self.ready(get)
+            NativeReuseAuthority.register(self, get); self.ready(get)
             worker = threading.Thread(target=self.request, args=(get, '/__owned_mutation', results, errors))
             worker.start()
             try:
@@ -56,31 +54,31 @@ class NativeMutationReceiptOwners(unittest.TestCase):
                 self.assertEqual((begun['requestId'], begun['challenge']),
                                  (originals[0]['requestId'], originals[0]['challenge']))
                 done = self.commit(get, begun)
-                self.assertEqual(self.ack(get, done, 409)['reason'], 'receipt-outstanding')
+                self.assertEqual(self.observe(get)['remainingMutations'],0)
             finally:
                 release.set(); worker.join(timeout=15)
             self.assertFalse(worker.is_alive()); self.assertEqual(errors, [])
             self.assertEqual((results[0][0], results[0][2]), (200, b'actual business response'))
-            self.assertEqual(dict(results[0][1]).get('X-Actor-Receipt-Verified'), '1')
+            self.assertEqual(dict(results[0][1]).get('X-Actor-Receipt-Verified'),'1')
             self.assertEqual(self.observe(get)['remainingMutations'], 0)
             self.assertEqual(self.ack(get, done)['reason'], 'mutation-acknowledged')
             self.assertEqual(self.observe(get)['remainingMutations'], 0)
 
-    def test_unrelated_overlapping_v2_actor_does_not_block_gc_or_resurrect_retired_pair(self):
+    def test_unrelated_overlapping_actor_does_not_block_gc_or_resurrect_retired_pair(self):
         entered = [threading.Event(), threading.Event()]
         release = [threading.Event(), threading.Event()]
         originals = {}; results = [[], []]; errors = []
         def origin(path, headers):
             actor = int(path.rsplit('/', 1)[1])
-            original = coverage.context(self, headers, 'POST', path)
+            original = backend.producer_context(self, headers, 'POST', path)
             originals[actor] = original; entered[actor].set()
             self.assertTrue(release[actor].wait(10))
             # Actor 1 deliberately sends a correctly signed stale DIRTY pair
             # after GC. It is no longer an admitted native transaction.
             return 'actual actor ' + str(actor), [('Cache-Control', 'private, no-store'),
-                coverage.response_receipt(original, 'dirty', [(TAG, done['transaction'])])]
+                ('X-UltraCache-Mutation-Receipt',backend.receipt(original, 'dirty', [(TAG, done['transaction'])]))]
         with proxy('ultracache', origin, transform=backend.actor_hooks, allow_post=True) as get:
-            coverage.register(self, get); self.ready(get)
+            NativeReuseAuthority.register(self, get); self.ready(get)
             workers = [threading.Thread(target=self.request,
                 args=(get, '/__owned_mutation/' + str(actor), results[actor], errors)) for actor in range(2)]
             workers[0].start()
@@ -88,16 +86,15 @@ class NativeMutationReceiptOwners(unittest.TestCase):
                 self.assertTrue(entered[0].wait(10))
                 begun = self.begin_bound(get, originals[0]); done = self.commit(get, begun)
                 workers[1].start(); self.assertTrue(entered[1].wait(10))
-                self.assertEqual(self.ack(get, done, 409)['reason'], 'receipt-outstanding')
+                self.assertEqual(self.ack(get, done)['reason'], 'mutation-acknowledged')
                 release[0].set(); workers[0].join(timeout=15)
                 self.assertFalse(workers[0].is_alive()); self.assertEqual(errors, [])
-                self.assertEqual(dict(results[0][0][1]).get('X-Actor-Receipt-Verified'), '1')
+                self.assertNotIn('X-Actor-Receipt-Verified',dict(results[0][0][1]))
                 still_running = self.observe(get)
-                self.assertTrue(any(row['requestId'] == originals[1]['requestId'] and row['live']
-                                    and row['awaitingReceipt'] for row in still_running['unsettledExecutions']))
-                self.assertEqual(self.ack(get, done)['reason'], 'mutation-acknowledged')
+                self.assertNotIn('unsettledExecutions',still_running)
+                self.assertEqual(self.ack(get, done,409)['reason'], 'unknown-lease')
                 self.assertEqual(self.observe(get)['remainingMutations'], 0)
-                self.assertGreater(self.observe(get)['temporaryHolds'], 0, 'GC is not an execution-drain grant')
+                self.assertEqual(still_running['scopeState'],'ready')
             finally:
                 for gate in release: gate.set()
                 for worker in workers:
@@ -106,9 +103,35 @@ class NativeMutationReceiptOwners(unittest.TestCase):
             self.assertEqual((results[1][0][0], results[1][0][2]), (200, b'actual actor 1'))
             self.assertNotIn('X-Actor-Receipt-Verified', dict(results[1][0][1]))
             current = self.observe(get)
-            self.assertEqual((current['remainingMutations'], current['scopeState']), (0, 'unbound'))
-            self.assertTrue(any(row['requestId'] == originals[1]['requestId'] and row['unknown']
-                                for row in current['unsettledExecutions']))
+            self.assertEqual((current['remainingMutations'], current['scopeState']), (0, 'ready'))
+            self.assertNotIn('unsettledExecutions',current)
+
+    def test_correctly_signed_foreign_backend_cannot_acknowledge_another_requests_event(self):
+        entered=threading.Event();release=threading.Event()
+        originals=[];results=[];errors=[];holder={}
+        def origin(path,headers):
+            original=backend.producer_context(self,headers,'POST',path)
+            if path.endswith('/owner'):
+                originals.append(original);entered.set()
+                self.assertTrue(release.wait(10))
+            return 'actual response',[('Cache-Control','private, no-store'),
+                ('X-UltraCache-Mutation-Receipt',backend.receipt(original,'dirty',[(TAG,holder['done']['transaction'])]))]
+        with proxy('ultracache',origin,transform=backend.actor_hooks,allow_post=True) as get:
+            NativeReuseAuthority.register(self,get);self.ready(get)
+            worker=threading.Thread(target=self.request,args=(get,'/__owned_mutation/owner',results,errors))
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(10))
+                holder['done']=self.commit(get,self.begin_bound(get,originals[0]))
+                foreign=backend.post(get,'/__owned_mutation/foreign')
+                self.assertEqual((foreign[0],foreign[2]),(200,b'actual response'))
+                self.assertNotIn('X-Actor-Receipt-Verified',dict(foreign[1]))
+                self.assertEqual(self.observe(get)['remainingMutations'],0)
+            finally:
+                release.set();worker.join(timeout=15)
+            self.assertFalse(worker.is_alive());self.assertEqual(errors,[])
+            self.assertEqual(dict(results[0][1]).get('X-Actor-Receipt-Verified'),'1')
+            self.assertEqual(self.ack(get,holder['done'])['reason'],'mutation-acknowledged')
 
 
 if __name__ == '__main__':

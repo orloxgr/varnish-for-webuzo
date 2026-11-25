@@ -1,4 +1,4 @@
-"""Actual native control/CAS; mock producer persistence/drain attestations.
+"""Actual event-driven native control/CAS; explicit mock producer generations.
 
 No SQL proof or reusable body admission is inferred from these state actors.
 """
@@ -42,14 +42,10 @@ class NativeReuseAuthority(unittest.TestCase):
         self.assertEqual(result['accepted'],status==200)
         return result
     def observe(self,get,scope='/'):return self.call(get,'private-authority-context',scope=scope)
-    def recover(self,get,context,scope='/'):
-        return self.call(get,'private-authority-recover',context,scope=scope,tag=None,
-            extra={'X-UltraCache-Private-Drained':'1'})
     def publish(self,get,context,generation='d'*64,scope='/',status=200):
         return self.call(get,'private-generation-publish',context,scope=scope,expected_status=status,
             extra={'X-UltraCache-Private-Generation':generation})
     def ready(self,get,scope='/'):
-        context=self.observe(get,scope);self.recover(get,context,scope)
         return self.publish(get,self.observe(get,scope),scope=scope)
     def begin(self,get,context,label):
         return self.call(get,'private-mutation-begin',context,
@@ -62,12 +58,10 @@ class NativeReuseAuthority(unittest.TestCase):
         with proxy('ultracache',lambda p,h:('ordinary',[('Cache-Control','public, max-age=60')])) as get:
             self.register(get)
             context=self.observe(get)
-            self.assertEqual((context['scopeState'],context['state']),('unbound','unbound'))
+            self.assertEqual((context['scopeState'],context['state']),('ready','unbound'))
             self.assertEqual(self.observe(get)['revision'],context['revision'])
-            self.assertEqual(self.publish(get,context,status=409)['reason'],'scope-unbound')
-            self.call(get,'private-authority-recover',context,tag=None,expected_status=400)
-            recovered=self.recover(get,context)
-            self.assertEqual(recovered['scopeState'],'ready')
+            self.assertNotIn('temporaryHolds',context)
+            self.assertNotIn('scopeMutations',context)
             current=self.observe(get)
             self.assertEqual(current['state'],'unbound')
             self.assertEqual(self.publish(get,current)['state'],'clean')
@@ -107,7 +101,7 @@ class NativeReuseAuthority(unittest.TestCase):
             self.assertEqual(self.publish(get,changed,'e'*64,status=409)['reason'],'revision-changed')
             current=self.observe(get)
             published=self.publish(get,current,'e'*64)
-            self.assertNotEqual(published['revision'],current['revision'],'An UNBOUND post-write grant is still a new publication')
+            self.assertEqual(published['revision'],current['revision'],'Fresh publication binds the already invalidated content revision')
             self.assertEqual(self.publish(get,published,'e'*64)['revision'],published['revision'])
 
     def test_ack_gc_and_tag_recreation_have_no_implicit_clean_state(self):
@@ -163,18 +157,17 @@ class NativeReuseAuthority(unittest.TestCase):
         with proxy('ultracache',lambda p,h:('ordinary',[])) as get:
             self.register(get);current=self.observe(get)
             self.assertNotEqual(current['epoch'],old['epoch'])
-            self.assertEqual((current['state'],current['scopeState']),('unbound','unbound'))
+            self.assertEqual((current['state'],current['scopeState']),('unbound','ready'))
             self.assertEqual(self.publish(get,old,status=409)['reason'],'epoch-changed')
 
-    def test_scope_recovery_never_resurrects_old_tag_generation(self):
+    def test_policy_replacement_never_resurrects_old_tag_generation(self):
         with proxy('ultracache',lambda p,h:('ordinary',[])) as get:
             self.register(get);old=self.ready(get)
-            self.assertEqual(self.recover(get,old)['scopeRevision'],old['scopeRevision'],'Healthy recovery retry must be idempotent')
+            self.assertEqual(self.observe(get)['scopeRevision'],old['scopeRevision'])
             self.register(get,policy='f'*64)
             current=self.observe(get)
-            self.assertEqual((current['state'],current['scopeState']),('unbound','unbound'))
+            self.assertEqual((current['state'],current['scopeState']),('unbound','ready'))
             self.assertNotIn('generation',current)
-            self.recover(get,current)
             after=self.observe(get)
             self.assertEqual((after['state'],after['scopeState']),('unbound','ready'))
             self.assertNotIn('generation',after)
@@ -189,10 +182,8 @@ class NativeReuseAuthority(unittest.TestCase):
             self.register(get,wordpress_policy='e'*64)
             current=self.observe(get)
             self.assertEqual(current['remainingMutations'],1)
-            self.call(get,'private-authority-recover',current,tag=None,
-                extra={'X-UltraCache-Private-Drained':'1'},expected_status=409)
+            self.assertEqual(self.publish(get,current,status=409)['reason'],'mutation-active')
             self.commit(get,writer)
-            self.recover(get,self.observe(get))
             self.assertEqual(self.observe(get)['state'],'unbound')
 
 if __name__=='__main__':unittest.main()
