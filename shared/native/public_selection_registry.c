@@ -485,7 +485,13 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         (!reselect && (!delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
         !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
         !delivery_copy_header(ctx->http_req,H_Accept_Encoding,&d->encoding)))) return -1;
-    if (cold && !delivery_copy_header(ctx->http_req,h_lookup_variant,&d->lookup_variant)) return -1;
+    /* The issuer-resolved tuple describes the publication, not the key which
+     * this visitor looked up. Preserve that input across selection/reselection
+     * so the next identical visitor can find the resulting public object. */
+    if (projection_available) {
+        d->lookup_variant = delivery_selection_projection(d->cookie,d->selection_rules);
+        if (!d->lookup_variant) return -1;
+    } else if (cold && !delivery_copy_header(ctx->http_req,h_lookup_variant,&d->lookup_variant)) return -1;
     /* Same existing document eligibility; unresolved public resolvers retain
      * their existing actual route resolution. Generic Variant cookies are
      * projected by policy, never by a provider allowlist. */
@@ -606,7 +612,7 @@ VCL_STRING vmod_selection_variant(VRT_CTX, struct vmod_priv *priv) {
     } else {
         if (!d->selection_entry || !d->variant ||
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) return NULL;
-        value = d->cold_entry && !d->source_projected ? d->lookup_variant : d->variant;
+        value = d->projected_lookup || (d->cold_entry && !d->source_projected) ? d->lookup_variant : d->variant;
     }
     if (!value) return NULL;
     /* The owning top-request frame cannot change during vcl_hash. Hash its
@@ -620,7 +626,7 @@ VCL_VOID vmod_selection_variant_apply(VRT_CTX, struct vmod_priv *priv) {
         (d->phase != D_READY && d->phase != D_RECOVERY && d->phase != D_DELIVERED)) {
         VRT_fail(ctx,"Public selection variant unavailable"); return;
     }
-    value = d->cold_entry && !d->source_projected ? d->lookup_variant : d->variant;
+    value = d->projected_lookup || (d->cold_entry && !d->source_projected) ? d->lookup_variant : d->variant;
     if (value && !*value) value = NULL;
     if (!delivery_restore_header(ctx,h_lookup_variant,value))
         VRT_fail(ctx,"Public selection variant workspace exhausted");

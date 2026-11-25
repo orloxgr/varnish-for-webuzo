@@ -1,5 +1,9 @@
 # Varnish for Webuzo
 
+Version **0.13.15** preserves the original public lookup tuple when an actual
+issuer selects a different publication tuple. Publication and private input
+validation retain their original identities.
+
 Version **0.13.14** settles the original private fragment producer after its
 authenticated parent snapshot completes. The next complete HIT no longer needs
 an extra prepare/finalize cycle solely because its first fill recovered a parent.
