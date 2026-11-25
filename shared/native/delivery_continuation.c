@@ -146,7 +146,7 @@ struct continuation {
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
     unsigned reselect_attempted, conflict_verified;
-    unsigned cold_entry;
+    unsigned cold_entry, projected_lookup;
     enum public_source_stage source_stage;
     enum public_source_stage source_next;
     unsigned source_declined;

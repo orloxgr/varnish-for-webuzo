@@ -465,6 +465,12 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         cold = !has_variant;
     }
     d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;
+    /* A projected declaration uses the ordinary public tuple lookup. A
+     * verified reselection must return to that same namespace, rather than
+     * storing its replacement under a manifest-only key ordinary visits never
+     * request. Keep this separate from cold input-invariance validation: an
+     * authenticated current selection may legitimately update Vary cookies. */
+    d->projected_lookup = projection_available;
     if (guest) {
         d->guest_requested = 1; d->guest_has_variant = has_variant;
         d->guest_policy = strdup(g->policy); d->guest_epoch = strdup(g->epoch); d->guest_key = strdup(g->key);
@@ -577,7 +583,7 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
 }
 VCL_BOOL vmod_selection_cold(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
-    return ctx->req->esi_level == 0 && d && d->selection_entry && d->cold_entry &&
+    return ctx->req->esi_level == 0 && d && d->selection_entry && (d->cold_entry || d->projected_lookup) &&
         (d->phase == D_READY || d->phase == D_RECOVERY || d->phase == D_DELIVERED);
 }
 

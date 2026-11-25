@@ -1,5 +1,11 @@
 # Varnish for Webuzo
 
+Version **0.13.13** keeps verified publication reselection on the ordinary
+projected public cache key. It separates that lookup namespace from cold
+input validation, so a replacement does not require repeated prepare/reselection.
+Owner, nonce, policy and original-producer proof checks are unchanged. Runtime
+qualification for this change is tracked in UltraCache #1049.
+
 Version **0.13.12**, paired with UltraCache WordPress dev.1360, keeps unchanged
 private fragment admissions reusable across public HTML rebuilds. The private
 input MAC and admission key retain the exact recipe, representation, owner
