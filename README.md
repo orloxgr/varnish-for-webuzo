@@ -1,5 +1,12 @@
 # Varnish for Webuzo
 
+Version **0.13.20** connects the existing authenticated complete-guest recipe
+to discovery for its exact source parent after Warm. An existing valid private
+admission and its bodies can then be looked up without a new prepare just to
+learn that declaration. Missing owner admission still requires a real fill;
+input, authority, body and lifetime checks remain unchanged. This uses the
+existing UltraCache guest-input contract, with no new endpoint or setting.
+
 Version **0.13.19** separates private content invalidation from completed-event
 ACK bookkeeping. The existing CAS revision still fences delayed retries; the
 matching producer can use stable `contentRevision` for private cache namespaces.
