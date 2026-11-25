@@ -241,7 +241,7 @@ VCL_BOOL vmod_selection_public_projection(VRT_CTX, VCL_STRING site, VCL_STRING h
 /* An existing authenticated refill can prime the ordinary parent as well as
  * the complete guest object. The proof only selects this request's namespace;
  * it grants no route/cookie/privacy bypass and never reaches the application. */
-VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRING credential) {
+VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRING credential, VCL_STRING rules) {
     struct guest_request *g = guest_context(ctx);
     struct public_declaration *p;
     const char *host = NULL, *accept = "", *scheme = NULL, *message = NULL;
@@ -251,7 +251,11 @@ VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL
     if (!g || !g->warm_requested || ctx->req->esi_level) return 1;
     if (g->warm_checked) return g->warm_valid;
     g->warm_checked = 1;
-    if (!g->eligible || !g->warm_single || !g->warm_projection || strcmp(g->warm_projection,"parent-v1") ||
+    /* The authenticated parent Warm also fills measured public Variant tuples.
+     * Original Authorization/duplicate Cookie never create original_cookie;
+     * effective Private actions still cannot authorize this projection. */
+    if ((!g->eligible && (!g->original_cookie || !delivery_selection_all_public(g->original_cookie,rules))) ||
+        !g->warm_single || !g->warm_projection || strcmp(g->warm_projection,"parent-v1") ||
         !g->warm_authorization || strlen(g->warm_authorization) != 67 || strncmp(g->warm_authorization,"v1:",3) ||
         !site || !*site || !public_policy(policy) || !credential || !*credential || ctx->req->restarts ||
         strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") || !delivery_relative(url) ||

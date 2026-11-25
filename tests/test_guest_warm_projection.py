@@ -10,6 +10,8 @@ from test_cold_public_selection import choices
 from test_public_selection_runtime import control
 from test_cms_cookie_choices import cache
 from test_reuse_delivery_context import exact_authority_origin_hooks
+from test_projected_variant_lookup import NAMES, ProjectedVariants
+from test_guest_publication import GUEST_POLICY
 
 PROJECTION = 'X-UltraCache-Warm-Projection'
 AUTHORIZATION = PROJECTION + '-Authorization'
@@ -39,6 +41,37 @@ class RecordedGuests(Guests):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skips are not acceptance')
 class GuestWarmProjection(unittest.TestCase):
+    def test_authenticated_parent_warm_accepts_actual_public_variant_inputs(self):
+        app = ProjectedVariants()
+        policy = choices(*[(name, 'variant') for name in NAMES],
+            ('shared_metric', 'shared'), ('actual_private', 'private'))
+        with proxy('ultracache', app, policies=policy) as get:
+            status, caps, _ = control(get, enabled=True, names=','.join(NAMES), extra={
+                'X-UltraCache-Public-Selection-Public-Source-Version': '1',
+                'X-UltraCache-Public-Selection-Public-Source-Projection-Version': '1',
+                'X-UltraCache-Public-Selection-Guest-Version': '1',
+                'X-UltraCache-Public-Selection-Guest-Policy': GUEST_POLICY})
+            self.assertEqual(status, 200)
+            path = '/public-parent'; bodies = []
+            signed = proof(path, caps, accept='text/html')
+            for variant in ('one', 'two'):
+                raw = 'cmplz_id=' + variant + '; shared_metric=warm'
+                first = get(path, raw, signed)
+                self.assertEqual((first[0], cache(first[1])), (200, 'MISS'), first)
+                self.assertEqual(dict(first[1]).get(PROJECTION), 'parent-v1')
+                self.assertNotIn('X-UltraCache-Guest-Publication', dict(first[1]))
+                repeat = get(path, raw, signed)
+                self.assertEqual((repeat[0], cache(repeat[1]), repeat[2]), (200, 'HIT', first[2]))
+                bodies.append(first[2])
+            self.assertNotEqual(bodies[0], bodies[1])
+            before = len(app.calls)
+            self.assertEqual(get(path, 'cmplz_id=one', proof(path, caps, accept='text/html', key=b'wrong'))[0], 403)
+            self.assertEqual(len(app.calls), before)
+            private = get(path, 'actual_private=owner', signed)
+            self.assertEqual(private[0], 200)
+            self.assertNotIn(PROJECTION, dict(private[1]))
+            self.assertEqual(app.calls[-1][1].get('Cookie'), 'actual_private=owner')
+
     def test_exact_authority_warm_binds_accepted_host_and_all_real_accept_formats(self):
         app=RecordedGuests();app.formats=True
         authority='127.0.0.1:38751'
@@ -158,7 +191,7 @@ class GuestWarmProjection(unittest.TestCase):
             self.assertEqual(control(get,enabled=False)[0],200)
             self.assertEqual(get('/removed',extra=old)[0],403)
 
-    def test_malformed_duplicates_and_real_cookie_cannot_force_parent(self):
+    def test_malformed_duplicates_and_empty_cookie_cannot_force_parent(self):
         app=RecordedGuests()
         with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
             self.assertEqual(register(get)[0],200);caps=control(get)[1]
@@ -167,7 +200,7 @@ class GuestWarmProjection(unittest.TestCase):
                 {**proof('/bad',caps),AUTHORIZATION:'v1:bad'}):
                 self.assertEqual(get('/bad',extra=headers)[0],403)
             header=proof('/bad',caps)
-            self.assertEqual(get('/bad','shared_metric=present',header)[0],403)
+            self.assertEqual(get('/bad','',header)[0],403)
             for duplicated in (PROJECTION,AUTHORIZATION):
                 client=http.client.HTTPConnection(*get.endpoint,timeout=15)
                 try:

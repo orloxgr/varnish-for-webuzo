@@ -338,11 +338,13 @@ $Restrict vcl_recv vcl_miss
 
 Only that exact original request may enter selection after a guest-candidate fallback.
 
-$Function BOOL guest_warm_parent(STRING site, STRING policy, STRING credential)
+$Function BOOL guest_warm_parent(STRING site, STRING policy, STRING credential, STRING rules)
 $Restrict vcl_recv vcl_miss
 
 Validate a request-bound ordinary refill proof before selecting the existing
-private-capable parent namespace. No cookies, registry or origin fields change.
+private-capable parent namespace. Original inputs must be absent or resolve to
+public actions using the same effective rules. No cookies, registry or origin
+fields change; ordinary Private/Authorization decisions still precede it.
 
 $Function BOOL guest_warm_parent_result()
 $Restrict vcl_deliver

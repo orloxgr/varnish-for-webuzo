@@ -238,7 +238,14 @@ normalization nor proof verification; an exact-authority Lab vhost can therefore
 bind its real host and port without a test-only application override. Request,
 backend and ordinary response copies of this field are scrubbed.
 
-The native ingress fact must still be literal absent Cookie and Authorization.
+Native ingress must have absent Authorization and either absent Cookie or one
+Cookie header whose actual names all resolve to Shared/Variant using the same
+effective policy rules. The authenticated parent Warm may therefore fill the
+normal measured public Variant contexts too. Literal empty/duplicate Cookie
+does not satisfy this predicate. Ordinary Private and Authorization routing
+still precedes this owner and is not overridden. The HMAC message remains the
+same: current policy authenticates the action semantics; actual public values
+retain their ordinary separate Variant hash/source resolution.
 Capture selector/proof as native-owned request state before scrubbing both HTTP
 fields. Verify against the native adapter-owned site key and current actual
 registration before guest selection. Use a constant-time digest comparison.

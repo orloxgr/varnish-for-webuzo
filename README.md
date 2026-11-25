@@ -1,5 +1,9 @@
 # Varnish for Webuzo
 
+Version **0.13.18** lets the existing authenticated parent Warm fill active
+public Variant Cookie contexts. It keeps the same HMAC/request bindings and
+ordinary Private/Authorization routing.
+
 Version **0.13.17** extends complete guest publications to active public Variant
 tuples through the existing authenticated resolver/source projection. Original
 private provider inputs remain separate; literal no-Cookie guest evidence stays

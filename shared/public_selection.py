@@ -14,7 +14,7 @@ def compile_rules(groups,site_header,credentials=None):
         support=''.join('if (req.http.'+site_header+' == '+json.dumps(identity)+') { set req.http.X-SCP-Warm-Projection-Supported = "1"; }\n'
             for identity in identities if identity in credentials)
         warm=''.join('if (req.http.'+site_header+' == '+json.dumps(identity)+') {\n'
-            'if (!cookie_handoff.guest_warm_parent(req.http.X-SCP-Site,"'+digest+'",'+json.dumps(credentials[identity])+')) {\n'
+            'if (!cookie_handoff.guest_warm_parent(req.http.X-SCP-Site,"'+digest+'",'+json.dumps(credentials[identity])+',{"'+rules+'"})) {\n'
             'return (synth(403,"Invalid Warm projection"));\n}\n}\n'
             for identity in identities if identity in credentials)
         result.append('if ('+condition+') {\n'

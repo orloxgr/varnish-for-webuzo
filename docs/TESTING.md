@@ -1,5 +1,16 @@
 # Verification
 
+## Authenticated parent Warm with public Cookie input — 25 November 2026
+
+`GuestWarmProjection.test_authenticated_parent_warm_accepts_actual_public_variant_inputs`
+passed against an isolated native Varnish 9.1 daemon (one method, 9.249 seconds,
+no skips). The normal signed parent Warm filled two different active public
+Variant contexts and repeated each as its correct HIT. A wrong HMAC was rejected
+before origin work; an explicit Private cookie retained ordinary personal routing
+without the parent Warm marker. This is typed mock transport evidence, not a
+WordPress/live Warm or JavaScript browser acceptance claim. No installed service
+or live configuration was changed.
+
 ## Projected complete guest candidate — 25 November 2026
 
 The single focused method in `tests/test_guest_projected_variant.py` passed
