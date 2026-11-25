@@ -1,5 +1,17 @@
 # Verification
 
+## Optional metadata finalization diagnostics - #1054
+
+`test_reuse_finalization_diagnostics.NativeFinalizationDiagnostics` uses the
+current event-driven native HTTP actor and a controlled signed producer. It
+checks explicit finalizer refusal, preserved original delivery, recovery and
+subsequent zero-origin reuse, plus the normal masked Debug default. Two methods
+pass on each adapter (Hestia7.525s, Webuzo7.560s), no skips. Native build signature
+`77df774bf25835e8a55bda27399369b130191b99d136e51b001f338551b37e13`.
+Reason records contain fixed labels and HTTP status, without identifiers, cookie
+values or proofs. This is native controlled-producer evidence; the original
+actual WordPress/YITH browser failure remains under investigation.
+
 ## Complete guest recipe and source-parent discovery — 25 November 2026
 
 The causal `test_guest_source_discovery.GuestSourceDiscovery` actor first

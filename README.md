@@ -1,5 +1,12 @@
 # Varnish for Webuzo
 
+Version **0.13.21** records the exact native finalization acceptance or rejection
+reason under the existing masked Debug log. A delivered FILL does not by itself
+mean a reusable personal admission was published. Cookies, keys, lifetime,
+invalidation and the original response behavior are unchanged. This is
+diagnostic support for UltraCache #1054, not a claim that its initial browser
+failure is fixed.
+
 Version **0.13.20** connects the existing authenticated complete-guest recipe
 to discovery for its exact source parent after Warm. An existing valid private
 admission and its bodies can then be looked up without a new prepare just to

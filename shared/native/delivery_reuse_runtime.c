@@ -232,26 +232,41 @@ static int delivery_reuse_record_current(const struct continuation *d, const str
 static int delivery_reuse_finish(VRT_CTX, struct continuation *d) {
     struct delivery_reuse_record *record = NULL;
     struct delivery_reuse_pin wire = {0};
+    struct reuse_scope *scope;
     const char *marker = ctx->req->objcore ? HTTP_GetHdrPack(ctx->req->wrk,ctx->req->objcore,reuse_metadata_marker) : NULL;
-    int parsed = 0;
-    if (!d->reuse_failed && marker && !strcmp(marker,"1") && http_GetStatus(ctx->http_resp) == 200) {
-        if (d->reuse_fetched) {
-            parsed = d->complete && delivery_reuse_record_parse(d->body,d->length,&record) &&
-                !strcmp(record->request_id,d->request_id) && !strcmp(record->original_url,d->url);
-        } else if (!ObjIterate(ctx->req->wrk,ctx->req->objcore,&wire,delivery_reuse_chunk,1))
-            parsed = delivery_reuse_record_parse(wire.copy,wire.length,&record);
+    const char *reason = "metadata-unavailable";
+    int parsed = 0, accepted = 0;
+    if (d->reuse_failed) reason = "metadata-fetch-failed";
+    else if (!marker) reason = "metadata-marker-unavailable";
+    else if (strcmp(marker,"1")) reason = "metadata-marker-rejected";
+    else if (http_GetStatus(ctx->http_resp) != 200) reason = "metadata-status-not-200";
+    else if (d->reuse_fetched) {
+        if (!d->complete) reason = "metadata-body-incomplete";
+        else if (!delivery_reuse_record_parse(d->body,d->length,&record)) reason = "metadata-wire-rejected";
+        else if (strcmp(record->request_id,d->request_id)) reason = "metadata-request-mismatch";
+        else if (strcmp(record->original_url,d->url)) reason = "metadata-url-mismatch";
+        else parsed = 1;
+    } else {
+        if (ObjIterate(ctx->req->wrk,ctx->req->objcore,&wire,delivery_reuse_chunk,1)) reason = "metadata-body-unavailable";
+        else if (!delivery_reuse_record_parse(wire.copy,wire.length,&record)) reason = "metadata-wire-rejected";
+        else parsed = 1;
     }
     if (parsed) {
         pthread_mutex_lock(&lock);
-        if (delivery_reuse_bound_record(d,record,fmin(d->public_deadline,
-                ctx->req->objcore->t_origin+ctx->req->objcore->ttl),1) &&
-            delivery_reuse_record_current(d,record,delivery_reuse_current_scope(d),1)) {
-            if (delivery_reuse_publish_discovery(d,delivery_reuse_current_scope(d),record)) {
-                delivery_reuse_record_free(d->reuse_record); d->reuse_record = record; record = NULL;
-            }
+        scope = delivery_reuse_current_scope(d);
+        if (!delivery_reuse_bound_record(d,record,fmin(d->public_deadline,
+                ctx->req->objcore->t_origin+ctx->req->objcore->ttl),1)) reason = "metadata-bound-grant-rejected";
+        else if (!delivery_reuse_record_current_reason(d,record,scope,1,&reason)) {
+            /* The existing validator supplies its exact value-free reason. */
+        } else if (!delivery_reuse_publish_discovery(d,scope,record)) reason = "discovery-publication-rejected";
+        else {
+            delivery_reuse_record_free(d->reuse_record); d->reuse_record = record; record = NULL;
+            accepted = 1; reason = "accepted";
         }
         pthread_mutex_unlock(&lock);
     }
+    VSLb(ctx->vsl,SLT_Debug,"uc-reuse finalization=%s reason=%s status=%u",
+        accepted ? "accepted" : "declined",reason,(unsigned)http_GetStatus(ctx->http_resp));
     delivery_reuse_record_free(record); free(wire.copy);
     free(d->body); d->body = NULL; d->length = d->capacity = 0;
     /* Even 204, malformed metadata, cache pressure and backend failures resume
