@@ -113,7 +113,7 @@ class ActiveMutationHeaderBudget(unittest.TestCase):
             for name, value in browser_headers(extra_navigation).items():
                 if name not in ('X-Forwarded-For','Via','Accept-Encoding'):
                     self.assertEqual(received[0].get(name), value, name)
-            self.assertIsNotNone(received[0].get('X-SCP-HTML-Accept'))
+            self.assertIsNone(received[0].get('X-SCP-HTML-Accept'))
             for name in ('X-SCP-Vary-Accept', 'X-SCP-Vary-Accept-Language',
                          'X-SCP-Vary-Cookie', 'X-SCP-Vary-ESI-Cookie'):
                 self.assertIsNone(received[0].get(name),

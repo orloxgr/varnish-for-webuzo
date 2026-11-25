@@ -8,7 +8,7 @@ from test_profiles import origin, get, control
 
 WARM = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
 BROWSER = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,application/signed-exchange;v=b3;q=0.7,*/*;q=0.8'
-STATIC = ['X-Ultra-Cache-Source: apache-static','X-UltraCache-Cacheable: 1','X-UltraCache-Variant: avif','Vary: Accept, Cookie, Accept-Language']
+STATIC = ['X-Ultra-Cache-Source: apache-static','X-UltraCache-Cacheable: 1','Vary: Cookie, Accept-Language']
 
 @unittest.skipUnless(shutil.which('varnishtest'), 'Native varnishtest is required')
 class PublicPresets(unittest.TestCase):
@@ -52,7 +52,7 @@ class PublicPresets(unittest.TestCase):
             responses=[origin('/page','en',STATIC,expect=['expect req.http.Accept == "'+WARM+'"']),
                        origin('/page','fr',STATIC)]
             requests=[get('/page','en',['Accept: '+WARM,'Accept-Language: en','Cookie: _ga=A'],cache='MISS'),
-                      'expect resp.http.Vary ~ "Accept"','expect resp.http.Vary !~ "X-WV"',
+                      'expect resp.http.Vary ~ "Accept-Language"','expect resp.http.Vary !~ "X-SCP"',
                       get('/page','en',['Accept: '+BROWSER,'Accept-Language: en','Cookie: _ga=B'],cache='HIT'),
                       get('/page','fr',['Accept: '+BROWSER,'Accept-Language: fr'],cache='MISS'),
                       get('/page','fr',['Accept: '+WARM,'Accept-Language: fr'],cache='HIT')]
@@ -66,21 +66,13 @@ class PublicPresets(unittest.TestCase):
                  get('/page','browser',['Accept: '+BROWSER,*forged],cache='MISS'),
                  get('/page','browser',['Accept: '+BROWSER,*forged],cache='HIT')])
 
-    def test_codec_refusals_and_non_html_requests_keep_distinct_representations(self):
+    def test_genuine_accept_negotiation_keeps_html_json_and_xml_separate(self):
         for profile in profiles.NAMES:
-            denied='text/html,image/avif;q=0,image/webp'
-            duplicate='text/html,image/avif,image/avif;q=0,image/webp'
-            requests=[get('/page','avif',['Accept: '+WARM],cache='MISS'),
-                      get('/page','webp',['Accept: '+denied],cache='MISS'),
-                      get('/page','webp',['Accept: '+duplicate],cache='HIT'),
-                      get('/page','json',['Accept: application/json'],cache='MISS'),
-                      get('/page','xml',['Accept: application/xml'],cache='MISS'),
-                      get('/page','no-html',['Accept: text/html;q=0,application/json'],cache='MISS'),
-                      get('/page','avif',['Accept: '+BROWSER],cache='HIT')]
-            responses=[origin('/page','avif',STATIC),origin('/page','webp',[h.replace(': avif',': webp') for h in STATIC]),
-                       origin('/page','json',['Vary: Accept'],mime='application/json'),
-                       origin('/page','xml',['Vary: Accept'],mime='application/xml'),
-                       origin('/page','no-html',['Vary: Accept'],mime='application/json')]
+            accepts = ('text/html', 'application/json', 'application/xml', 'text/html;q=0,application/json')
+            responses = [origin('/data', str(i), ['Vary: Accept'], mime=a if i < 3 else 'application/json')
+                         for i, a in enumerate(accepts)]
+            requests = [get('/data', str(i), ['Accept: '+a], cache='MISS') for i, a in enumerate(accepts)]
+            requests += [get('/data', str(i), ['Accept: '+a], cache='HIT') for i, a in enumerate(accepts)]
             with self.subTest(profile=profile):self.run_policy(profile,responses,requests)
 
     def test_real_cookie_variation_is_not_removed_from_dynamic_html(self):
@@ -108,8 +100,8 @@ class PublicPresets(unittest.TestCase):
         unusual='text/html,image/avif;foo=q=0,image/webp'
         refused='text/html,image/avif;q=0,image/webp'
         for profile in profiles.NAMES:
-            self.run_policy(profile,[origin('/page','unusual-avif',STATIC),
-                                     origin('/page','refused-webp',[h.replace(': avif',': webp') for h in STATIC])],
+            self.run_policy(profile,[origin('/page','unusual-avif',STATIC+['Vary: Accept']),
+                                     origin('/page','refused-webp',STATIC+['Vary: Accept'])],
                 [get('/page','unusual-avif',['Accept: '+unusual],cache='MISS'),
                  get('/page','refused-webp',['Accept: '+refused],cache='MISS'),
                  get('/page','refused-webp',['Accept: '+refused],cache='HIT')])

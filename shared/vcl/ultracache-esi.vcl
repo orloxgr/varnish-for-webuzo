@@ -420,6 +420,3 @@ sub vcl_synth {
         return (deliver);
     }
 }
-
-# Keep raw Accept at the origin. Only an identified public stored HTML object
-# can substitute its known image-capability dimensions for the raw header.

@@ -1,4 +1,4 @@
-"""Publication metadata must preserve representation Vary even for identical HTML."""
+"""Unified HTML reuses its parent; genuine negotiation and personal output stay separate."""
 import hashlib
 import json
 import shutil
@@ -18,7 +18,7 @@ class ImagePublications(Application):
         self.inner_status=inner_status
     def __call__(self,path,headers):
         accept=headers.get('Accept','')
-        bucket='avif' if 'image/avif' in accept else 'webp' if 'image/webp' in accept else 'orig'
+        bucket=('avif' if 'image/avif' in accept else 'webp' if 'image/webp' in accept else 'orig') if self.image_vary else 'html'
         manifest='image-'+hashlib.sha256((path+'|'+bucket).encode()).hexdigest()
         if headers.get('X-UltraCache-Delivery-Phase')=='prepare':
             self.calls.append((path,'prepare',headers.get('Cookie')))
@@ -32,7 +32,7 @@ class ImagePublications(Application):
         selected['headers']=[line for line in selected['headers'] if not line.startswith(('Vary:','X-UltraCache-Delivery-Prepare:'))]
         selected['headers'] += ['Vary: '+('Accept, Cookie' if self.image_vary else 'Cookie'),
             'X-UltraCache-Delivery-Prepare: /index.php?ultracache_delivery='+quote(manifest,safe=''),
-            'X-UltraCache-Variant: '+bucket,'X-UltraCache-Cacheable: 1']
+            'X-UltraCache-Cacheable: 1']
         if self.inner_status is not None:selected['headers'].append('X-Ultra-Cache: '+self.inner_status)
         return json.dumps(output),fields
 
@@ -40,7 +40,7 @@ class ImagePublications(Application):
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required')
 class SelectionRepresentations(unittest.TestCase):
     def test_wildcard_document_reuses_warmed_original_publication(self):
-        app=ImagePublications()
+        app=ImagePublications(image_vary=False)
         with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
             self.assertEqual(control(get,enabled=True,names='')[0],200)
             status,fields,body=get('/wildcard-document',extra={'Accept':'text/html','X-Test-Visitor':'A'})
@@ -48,7 +48,7 @@ class SelectionRepresentations(unittest.TestCase):
             for accept in ('*/*',' */* ; q=1.0 '):
                 status,fields,body=get('/wildcard-document',extra={'Accept':accept,'X-Test-Visitor':'B'})
                 self.assertEqual((status,cache(fields)),(200,'HIT'))
-                self.assertEqual(dict(fields).get('X-UltraCache-Variant'),'orig')
+                self.assertNotIn('X-UltraCache-Variant',dict(fields))
                 self.assertEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
                 self.assertIn('private:B',body)
                 self.assertNotIn('private:A',body)
@@ -66,30 +66,48 @@ class SelectionRepresentations(unittest.TestCase):
                 status,fields,body=get('/exact-negotiation',extra=headers)
                 self.assertEqual((status,cache(fields)),(200,'PASS' if destination=='image' else 'MISS'))
 
-    def test_three_equal_body_publications_keep_their_own_locator_and_reuse_each_bucket(self):
+    def test_unified_html_keeps_one_publication_across_image_accepts_and_personal_owners(self):
+        self.exercise(ImagePublications(image_vary=False))
+
+    def test_real_origin_accept_vary_keeps_each_publication_separate(self):
         self.exercise(ImagePublications())
     def test_fresh_selected_snapshot_without_inner_hit_uses_its_actual_representation(self):
         for status in (None, 'STORE'):
-            with self.subTest(inner_status=status):self.exercise(ImagePublications(inner_status=status))
+            with self.subTest(inner_status=status):self.exercise(ImagePublications(image_vary=False,inner_status=status))
     def exercise(self,app):
         path='/same-body-three-publications'
         with proxy('ultracache',app,policies=choices(('shared_metric','shared'))) as get:
             self.assertEqual(control(get,enabled=True,names='')[0],200)
             visits=[('text/html','orig','MISS'),('text/html,image/webp','webp','MISS'),
                 ('text/html,image/avif,image/webp','avif','MISS'),
-                ('text/html,application/xhtml+xml,image/webp,*/*;q=0.8','webp','HIT'),
-                ('text/html,application/xhtml+xml,image/avif,image/webp,*/*;q=0.8','avif','HIT'),
-                ('text/html,application/xhtml+xml,*/*;q=0.8','orig','HIT')]
+                ('text/html,image/webp','webp','HIT'),
+                ('text/html,image/avif,image/webp','avif','HIT'),
+                ('text/html','orig','HIT')]
             for i,(accept,bucket,expected) in enumerate(visits):
+                if not app.image_vary:expected = 'MISS' if i == 0 else 'HIT'
                 visitor='A' if i%2==0 else 'B'
                 status,fields,body=get(path,'shared_metric='+visitor,extra={'Accept':accept,'X-Test-Visitor':visitor})
                 self.assertEqual((status,cache(fields)),(200,expected))
-                self.assertEqual(dict(fields).get('X-UltraCache-Variant'),bucket)
+                self.assertNotIn('X-UltraCache-Variant',dict(fields))
                 self.assertEqual(dict(fields).get('X-UltraCache-Delivery-Outcome'),'verified')
                 self.assertEqual(body.count('private:'+visitor),2)
                 self.assertEqual(body.count('nonce:'+visitor),1)
-                self.assertIn('Accept',dict(fields).get('Vary',''))
-            self.assertEqual([phase for _,phase,_ in app.calls],['public-select']*3+['prepare']*3)
+                self.assertEqual('Accept' in dict(fields).get('Vary',''), app.image_vary)
+            self.assertEqual(sum(phase=='public-select' for _,phase,_ in app.calls),3 if app.image_vary else 1)
+            self.assertEqual(sum(phase=='prepare' for _,phase,_ in app.calls),3 if app.image_vary else 5)
+
+    def test_unified_public_html_serves_other_image_accepts_after_origin_stops(self):
+        app = Application()
+        with proxy('ultracache', app) as get:
+            self.assertEqual(control(get, enabled=True, names='')[0], 200)
+            first = get('/unified', extra={'Accept': 'text/html'})
+            self.assertEqual((first[0], cache(first[1])), (200, 'MISS'))
+            get.stop_origin()
+            for accept in ('text/html,image/webp', 'text/html,image/avif,image/webp',
+                           'text/html,image/avif;q=0,image/webp', '*/*'):
+                repeated = get('/unified', extra={'Accept': accept})
+                self.assertEqual((repeated[0], cache(repeated[1]), repeated[2]), (200, 'HIT', first[2]))
+            self.assertEqual(len(app.calls), 1)
 
     def test_ordinary_store_and_client_marker_cannot_claim_authenticated_selection(self):
         for profile in ('basic','ultracache'):

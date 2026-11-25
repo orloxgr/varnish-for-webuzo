@@ -317,13 +317,16 @@ utm_*, gclid/dclid/fbclid/msclkid/gbraid/wbraid/igshid arguments. All functional
 arguments, including search, ref, language, currency, duplicate values and their
 order remain. Cookie variation omits only resolved Shared pairs; selected
 Variant pairs retain their values, and unclassified pairs retain ordinary
-HTTP Vary behavior. The public stored-HTML response
-contract can collapse equivalent HTML image capabilities. It accepts origin
-Apache-static provenance or an actual `X-Ultra-Cache: HIT`, with the existing
-public/cacheable/variant/no-Set-Cookie checks. This includes stored ESI parents;
-new dynamic `STORE` responses retain raw Accept variation. Static and dynamic
-HTML both retain the Cookie Database projection; no second analytics list
-can undo an explicit Variant or Private choice.
+HTTP Vary behavior. UltraCache publishes one HTML representation per URL and
+actual cookie/locale context. Its selected image main/fallback chain is described
+inside that HTML; image codec support does not create a separate native key.
+The producer omits image-only `Vary: Accept`. Genuine content negotiation still
+uses ordinary Accept Vary; the proxy never removes an application's real Vary
+or rewrites its Accept header. Static and dynamic HTML both retain the Cookie
+Database projection; no second analytics list can undo an explicit Variant or
+Private choice. Projection v1 uses the existing opaque `bucket` value `html`;
+locale, language and actual cookie values remain separate. The native private
+representation digest still binds the actual parent hash and stored Vary.
 For an approved ESI parent's Cookie Vary, both no Cookie and a fully Shared
 resolved remainder use an **absent** internal ESI vary carrier. Never assign an
 absent source into a present empty header: native Vary distinguishes those

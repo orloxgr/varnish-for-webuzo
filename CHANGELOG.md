@@ -5,6 +5,14 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## Unreleased
+
+- Remove image-codec-specific HTML cache carriers. Unified UltraCache HTML uses
+  one native object across image Accept differences; genuine origin Vary remains
+  authoritative, including cookie/locale contexts and HTTP compression.
+- Keep projection v1 with canonical `html` identity, exact Warm authentication,
+  private owner bindings and native representation digests unchanged.
+
 ## 0.13.22 — 2026-11-25
 
 - Remove the redundant cookie database status panel and its exclusive actions.

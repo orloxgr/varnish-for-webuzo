@@ -159,7 +159,7 @@ class BackendHeaderBudget(unittest.TestCase):
                 self.assertTrue(received.get('X-UltraCache-Delivery-Authorization'))
                 self.assertTrue(received.get('X-UltraCache-Delivery-Request'))
                 self.assertEqual(received.get('X-UltraCache-Delivery-Original-URL'),'/browser')
-            self.assertIsNotNone(app.requests[0].get('X-SCP-HTML-Accept'))
+            self.assertIsNone(app.requests[0].get('X-SCP-HTML-Accept'))
             for name in ('X-SCP-Vary-Accept','X-SCP-Vary-Accept-Language',
                          'X-SCP-Vary-Cookie','X-SCP-Vary-ESI-Cookie'):
                 self.assertIsNone(app.requests[0].get(name),

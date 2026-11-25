@@ -91,6 +91,20 @@ class PublicProjection(unittest.TestCase):
         restored = self.parse(header, header=True)
         self.assertEqual(self.lib.delivery_public_projection_equal(p, restored), 1)
 
+    def test_canonical_html_identity_roundtrips_in_existing_v1_without_codec_enum(self):
+        value = actual(); value['bucket'] = 'html'
+        p = self.parse(value); self.assertTrue(p)
+        self.assertEqual(p.contents.bucket, b'html')
+        header = self.string_result(self.lib.delivery_public_projection_header(p))
+        self.assertEqual(json.loads(base64.b64decode(header)), value)
+        restored = self.parse(header, header=True)
+        self.assertEqual(self.lib.delivery_public_projection_equal(p, restored), 1)
+        for key, replacement in [('locale', 'en_US'), ('language', 'en')]:
+            changed = copy.deepcopy(value); changed[key] = replacement
+            self.assertEqual(self.lib.delivery_public_projection_equal(p, self.parse(changed)), 0)
+        changed = copy.deepcopy(value); changed['cookieValues'][0]['valueBase64'] = 'VVNE'
+        self.assertEqual(self.lib.delivery_public_projection_equal(p, self.parse(changed)), 0)
+
     def test_key_order_whitespace_unicode_and_json_escaping_do_not_change_tuple(self):
         value = actual(); value.update(bucket='πραγματική "τιμή"', locale='', language='')
         raw = json.dumps(value, ensure_ascii=True, indent=2).replace('"bucket"', '"b\\u0075cket"').encode()

@@ -154,7 +154,6 @@ sub scp_init {
     unset req.http.X-SCP-Vary-Accept;
     unset req.http.X-SCP-Vary-Accept-Language;
     unset req.http.X-SCP-Normalize-Value;
-    unset req.http.X-SCP-HTML-Accept;
     unset req.http.X-SCP-Fbp-Enabled;
     unset req.http.X-SCP-Fbp-Consent;
     unset req.http.X-SCP-Fbp-Domain;
@@ -162,7 +161,6 @@ sub scp_init {
     unset req.http.X-SCP-Fbp-New;
     unset req.http.X-UltraCache-Cookie-Policy;
     unset req.http.X-UltraCache-Cookie-Delivery;
-    unset req.http.X-SCP-Accept-Check;
     unset req.http.X-ESI-Private-Request;
     unset req.http.X-ESI-Request-Level;
     unset req.http.X-ESI-Original-Cookie;
@@ -421,7 +419,6 @@ sub scp_backend_response {
     unset beresp.http.X-UltraCache-VCL-Cookie-Delivery-Version;
     # Static and dynamic responses both retain functional Cookie variation.
     # Only resolved Shared pairs are omitted from the internal Cookie key.
-    call scp_representation_response;
     call scp_response_variants;
 }
 sub scp_deliver {
@@ -547,7 +544,6 @@ sub scp_deliver {
     unset resp.http.X-SCP-Profile;
     unset resp.http.X-SCP-Vary-Cookie;
     unset resp.http.X-SCP-Vary-ESI-Cookie;
-    unset resp.http.X-SCP-HTML-Accept;
     unset resp.http.X-UltraCache-ESI-Shared-Parent;
     unset resp.http.X-UltraCache-ESI-Candidate;
     unset resp.http.X-UltraCache-ESI-Opt-In;

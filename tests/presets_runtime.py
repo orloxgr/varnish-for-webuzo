@@ -49,8 +49,7 @@ class Origin(BaseHTTPRequestHandler):
         if not private:
             self.send_header('X-Ultra-Cache-Source','apache-static')
             self.send_header('X-UltraCache-Cacheable','1')
-            self.send_header('X-UltraCache-Variant','orig')
-            self.send_header('Vary','Accept, Cookie')
+            self.send_header('Vary','Cookie')
         self.send_header('Content-Length',str(len(body)))
         self.end_headers();self.wfile.write(body)
 

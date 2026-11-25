@@ -36,17 +36,13 @@ continuation, owner-binding and outcome regressions also remain applicable.
 
 ## Representation metadata on selected public snapshots
 
-The producer must rebuild its normal owned Vary contract when stored source
-headers intentionally omit it. Include actual image-bucket/cacheability and
-cookie-policy ownership fields with the public parent. Different representation
-contexts retain different signed manifests even when HTML bytes are identical.
-Missing Accept Vary can select another bucket's parent and must never be worked
-around by relaxing the manifest/publication binding.
+The producer preserves the real cookie, locale and content-negotiation Vary
+contract with the public parent. Unified HTML contains its image main/fallback
+chain and has no image-only Accept variation or codec-specific manifest.
+Projection v1 uses canonical `bucket: "html"` with the actual locale, language
+and cookie values. Different real contexts retain separate manifests and signed
+prepare pointers even when some HTML bytes happen to match. Native publication
+binding and private owner isolation remain unchanged.
 
-An authenticated native selected-public snapshot is actual public artifact
-provenance even when freshly created. Semantic image-Accept projection accepts
-that native-owned source alongside actual page-cache HIT/apache-static sources,
-while retaining Cacheable:1, known bucket, public storage and no Set-Cookie checks.
-The producer does not fabricate an inner HIT. Ordinary origin STORE and client
-markers cannot claim this provenance. Equivalent browser Accept forms reuse the
-appropriate warmed bucket with its original signed prepare pointer.
+Ordinary dynamic responses and selected snapshots both follow their actual
+Vary fields. No response label or browser marker can erase genuine negotiation.

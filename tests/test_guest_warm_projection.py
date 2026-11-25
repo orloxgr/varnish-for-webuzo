@@ -41,6 +41,27 @@ class RecordedGuests(Guests):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; skips are not acceptance')
 class GuestWarmProjection(unittest.TestCase):
+    def test_one_parent_warm_covers_image_accepts_but_proof_still_binds_actual_accept(self):
+        app = RecordedGuests()
+        with proxy('ultracache', app) as get:
+            self.assertEqual(register(get)[0], 200)
+            caps = control(get)[1]
+            path = '/unified-parent'
+            self.assertEqual(get(path, extra={'Accept': 'text/html'})[0], 200)
+            parent = get(path, extra=proof(path, caps, accept='text/html'))
+            self.assertEqual(parent[0], 200)
+            self.assertEqual(dict(parent[1]).get(PROJECTION), 'parent-v1')
+            before = len(app.calls)
+            forged = proof(path, caps, accept='text/html')
+            forged['Accept'] = 'text/html,image/webp'
+            self.assertEqual(get(path, extra=forged)[0], 403)
+            self.assertEqual(len(app.calls), before)
+            get.stop_origin()
+            for accept in FORMATS:
+                guest = get(path, extra={'Accept': accept})
+                self.assertEqual((guest[0], cache(guest[1]), guest[2]), (200, 'HIT', GUEST_BODY))
+            self.assertEqual(len(app.calls), before)
+
     def test_authenticated_parent_warm_accepts_actual_public_variant_inputs(self):
         app = ProjectedVariants()
         policy = choices(*[(name, 'variant') for name in NAMES],

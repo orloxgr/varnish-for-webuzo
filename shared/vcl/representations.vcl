@@ -48,6 +48,7 @@ sub scp_normalize_key_copy {
     unset req.http.X-SCP-Key-Query;
 }
 sub scp_response_variants {
+    std.collect(beresp.http.Vary);
     if (!beresp.uncacheable && beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Accept[[:blank:]]*(,|$)") {
         set beresp.http.Vary = regsuball(beresp.http.Vary,
             "(?i)(^|,)[[:blank:]]*Accept[[:blank:]]*(?=,|$)", "\1X-SCP-Vary-Accept");
@@ -131,60 +132,5 @@ sub scp_representation_recv {
             set req.http.X-SCP-Vary-Accept-Language = req.http.X-SCP-Normalize-Value;
         }
         unset req.http.X-SCP-Normalize-Value;
-    }
-    # An unrestricted document request accepts the same original HTML bucket.
-    # Response normalization still requires an actual public HTML publication;
-    # JSON preferences, q=0, parameters and non-document fetches retain raw Vary.
-    if ((!req.http.Accept || req.http.Accept ~ "(?i)^[[:blank:]]*[*]/[*][[:blank:]]*(;[[:blank:]]*q[[:blank:]]*=[[:blank:]]*1([.]0*)?[[:blank:]]*)?$") &&
-        (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$")) {
-        set req.http.X-SCP-HTML-Accept = "html";
-    }
-    if (req.http.Accept ~ "(?i)^[[:blank:]]*text/html[[:blank:]]*(;[[:blank:]]*q[[:blank:]]*=[[:blank:]]*1([.]0*)?[[:blank:]]*)?(,|$)") {
-        # Match the origin's explicit codec support and q=0 rules. Unusual
-        # media parameters retain raw Vary matching rather than being guessed.
-        set req.http.X-SCP-Accept-Check = regsuball(req.http.Accept,
-            "(?i)(^|,)[[:blank:]]*image/(avif|webp)[[:blank:]]*(;[[:blank:]]*q[[:blank:]]*=[[:blank:]]*(0([.][0-9]+)?|1([.]0+)?)[[:blank:]]*)?(?=,|$)", "\1");
-        if (req.http.X-SCP-Accept-Check ~ "(?i)(^|,)[[:blank:]]*image/(avif|webp)(;|[[:blank:]]|,|$)") {
-            unset req.http.X-SCP-Accept-Check;
-            return;
-        }
-        set req.http.X-SCP-HTML-Accept = "html";
-        if (req.http.Accept ~ "(?i)(^|,)[[:blank:]]*image/avif[[:blank:]]*(;|,|$)" &&
-            req.http.Accept !~ "(?i)(^|,)[[:blank:]]*image/avif[[:blank:]]*;[^,]*q[[:blank:]]*=[[:blank:]]*0([.]0*)?[[:blank:]]*(;|,|$)") {
-            set req.http.X-SCP-HTML-Accept = req.http.X-SCP-HTML-Accept + ";avif";
-        }
-        if (req.http.Accept ~ "(?i)(^|,)[[:blank:]]*image/webp[[:blank:]]*(;|,|$)" &&
-            req.http.Accept !~ "(?i)(^|,)[[:blank:]]*image/webp[[:blank:]]*;[^,]*q[[:blank:]]*=[[:blank:]]*0([.]0*)?[[:blank:]]*(;|,|$)") {
-            set req.http.X-SCP-HTML-Accept = req.http.X-SCP-HTML-Accept + ";webp";
-        }
-    }
-    unset req.http.X-SCP-Accept-Check;
-}
-sub scp_representation_response {
-    std.collect(beresp.http.Vary);
-    # Apache static, an actual page-cache HIT, or this authenticated selected
-    # public snapshot identifies the publication's real image representation.
-    # An ordinary dynamic STORE or a request/response marker cannot attest it.
-    if (bereq.http.X-SCP-HTML-Accept && !beresp.uncacheable &&
-        beresp.status == 200 && beresp.http.Content-Type ~ "(?i)^text/html(;|$)" &&
-        (cookie_handoff.selection_local() ||
-         beresp.http.X-Ultra-Cache-Source == "apache-static" || beresp.http.X-UltraCache-Source == "apache-static" ||
-         beresp.http.X-Ultra-Cache == "HIT") &&
-        beresp.http.X-UltraCache-Cacheable == "1" &&
-        beresp.http.X-UltraCache-Variant ~ "^(orig|webp|avif)$" &&
-        (beresp.http.X-UltraCache-Variant != "avif" || bereq.http.X-SCP-HTML-Accept ~ ";avif") &&
-        (beresp.http.X-UltraCache-Variant != "webp" || bereq.http.X-SCP-HTML-Accept ~ ";webp") &&
-        beresp.http.Cache-Control ~ "(?i)(^|,)[[:blank:]]*public([[:blank:]]*,|[[:blank:]]*$)" &&
-        !beresp.http.Set-Cookie &&
-        beresp.http.Cache-Control !~ "(?i)(private|no-cache|no-store)" &&
-        beresp.http.Vary !~ "(^|,)[[:blank:]]*[*][[:blank:]]*(,|$)") {
-        if (beresp.http.Vary ~ "(?i)(^|,)[[:blank:]]*Accept[[:blank:]]*(,|$)") {
-            set beresp.http.X-SCP-Client-Vary = beresp.http.Vary;
-            set beresp.http.Vary = regsuball(beresp.http.Vary,
-                "(?i)(^|,)[[:blank:]]*Accept[[:blank:]]*(?=,|$)", "\1X-SCP-HTML-Accept");
-            set beresp.http.Vary = regsuball(beresp.http.Vary, ",[[:blank:]]*,", ",");
-            set beresp.http.Vary = regsuball(beresp.http.Vary, "^[[:blank:],]+|[[:blank:],]+$", "");
-            if (beresp.http.Vary == "") { unset beresp.http.Vary; }
-        }
     }
 }

@@ -112,6 +112,9 @@ class NativeFullReuse(unittest.TestCase):
         self.run_full_actor(anonymous_nonce=True)
 
 
+    def test_unified_html_reuses_across_image_accepts_without_origin_or_owner_mixing(self):
+        self.run_full_actor(anonymous_nonce=True,unified_html=True)
+
     def test_interleaved_owners_and_all_formats_reuse_without_origin(self):
         self.run_full_actor(anonymous_nonce=True,formats=True)
 
@@ -174,7 +177,7 @@ class NativeFullReuse(unittest.TestCase):
 
     def run_full_actor(self,anonymous_nonce=False,formats=False,projected=False,
                        anonymous_content=False,content_failure=None,ahead_absolute=False,body_budget=120,verify_budget_expiry=False,
-                       diagnostic_only=None,pending_case=None,lru_case=None):
+                       diagnostic_only=None,pending_case=None,lru_case=None,unified_html=False):
         holder={};calls=[];prepared={};prepared_accepts={};generation=[1];records=[];armed=[]
         finalize_attempts={};finalize_headers={}
         cold_calls=[]
@@ -461,12 +464,13 @@ class NativeFullReuse(unittest.TestCase):
             status,_,again=get(PARENT,'owner=A')
             self.assertEqual(status,200);self.assertIn('private:A-generation2',again);self.assertNotIn('private:B-',again)
             self.assertEqual(calls,[],'Filling B must preserve A admission without rebasing its authority')
-            if formats:
+            if formats or unified_html:
                 stable=self.observe(get)['scopeRevision']
                 for owner in ('A','B'):
                     for accept in accepts:
-                        get(PARENT,'owner='+owner,{'Accept':accept})
-                        calls.clear()
+                        if not unified_html:
+                            get(PARENT,'owner='+owner,{'Accept':accept})
+                            calls.clear()
                         status,_,html=get(PARENT,'owner='+owner,{'Accept':accept})
                         self.assertEqual(status,200);self.assertIn('private:'+owner+'-generation2',html)
                         self.assertEqual(calls,[],'Second request per owner/format must use complete native HIT')
