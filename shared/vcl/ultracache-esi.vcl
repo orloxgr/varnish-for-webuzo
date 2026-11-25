@@ -345,7 +345,13 @@ sub scp_ultracache_deliver {
         set req.http.X-SCP-Fragment-HTTP-Failure = resp.status;
         return (synth(resp.status, "UltraCache fragment unavailable"));
     }
-    if (req.esi_level == 0 && req.method == "GET" &&
+    if (cookie_handoff.guest_warm_parent_result()) {
+        # Drive an existing cold snapshot continuation, but never begin a
+        # personal continuation on a hot authenticated parent refill.
+        set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver(
+            resp.http.X-UltraCache-Delivery-Prepare,
+            std.integer(resp.http.X-UltraCache-ESI-Private-Count, 0), false);
+    } else if (req.esi_level == 0 && req.method == "GET" &&
         (obj.hits > 0 || resp.http.X-SCP-Delivery-Public-Snapshot == "1") &&
         req.http.X-SCP-Pass != "1" && !obj.uncacheable && resp.status == 200 &&
         ((resp.http.X-UltraCache-ESI-Shared-Parent == "1" &&
@@ -370,6 +376,12 @@ sub scp_ultracache_deliver {
     if (req.http.X-SCP-Delivery-State == "2") { return (synth(200, "Private document")); }
     if (req.http.X-SCP-Delivery-State == "-1") { return (synth(503, "Delivery continuation failed")); }
     unset req.http.X-SCP-Delivery-State;
+    if (cookie_handoff.delivery_warm_parent_result()) {
+        # Response-only: the stored parent retains its ESI parsing/capability
+        # for the ordinary visitor. Set before any delivery filters are read.
+        set resp.do_esi = false;
+        set resp.http.X-UltraCache-Warm-Delivery = "public-parent-only";
+    }
     if (resp.http.X-UltraCache-Cookie-Delivery == "1") { call scp_private_delivery; }
     unset resp.http.X-UltraCache-Delivery-Prepare;
     unset resp.http.X-UltraCache-Delivery-Version;

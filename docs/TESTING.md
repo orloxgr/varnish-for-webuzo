@@ -1,5 +1,32 @@
 # Verification
 
+## Authenticated public-parent-only Warm — 26 November 2026
+
+Seventeen distinct focused native methods passed without skips on an isolated
+Varnish 9.1 build: eleven Warm authentication/context methods, one exact plain
+and ESI-comment parent method, three normal public-source/projected-return
+methods and two complete private-reuse methods. The two batches took 41.090 and
+26.811 seconds. The final native source/ABI build signature was
+`dc901a262ac955d2557fbba6205e099bbce1f35d2db13922cf64b7871b0e911b`.
+The three public-parent-only methods also passed against source extracted from
+the actual candidate ZIP (16.240 seconds), producing that same native build
+identity and module bytes.
+
+Cold authenticated Warm captures only the actual resolver/public source, fills
+the ordinary parent object through the request-owned snapshot backend and returns
+its exact original bytes. A repeat is a real fresh HIT with no origin or private
+child calls, no provider-cookie replay, and explicit `not-executed` personal
+delivery status. The same stored ESI parent then composes two ordinary owners'
+private fragments/nonces correctly. Exact invalidation forces a new source fill.
+Plain HTML and ESI-comment wrappers retain their exact bytes on both MISS/HIT.
+Invalid proofs, private contexts and Basic retain their existing behavior.
+
+These are controlled-producer native transport checks, not live WordPress or
+browser acceptance. They ran in a private mount namespace with a private module
+build and disposable HTTP daemons; the installed service/configuration was not
+changed. Matching WordPress parent-body/context verification and coordinated
+application acceptance are still required before release. See [issue #17](https://github.com/orloxgr/varnish-for-webuzo/issues/17).
+
 ## Optional metadata finalization diagnostics - #1054
 
 `test_reuse_finalization_diagnostics.NativeFinalizationDiagnostics` uses the

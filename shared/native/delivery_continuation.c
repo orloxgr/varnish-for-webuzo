@@ -19,7 +19,7 @@ struct guest_request {
     char *classified_cookie, *classified_variant, *projected_variant;
     unsigned classified, projected_variant_restart;
     char shared_manifest[65];
-    unsigned warm_requested, warm_single, warm_checked, warm_valid;
+    unsigned warm_requested, warm_single, warm_checked, warm_valid, warm_delivered;
     char *warm_projection, *warm_authorization;
     char *key, *policy, *wordpress_policy, *epoch, *scope;
 };
@@ -146,7 +146,7 @@ struct continuation {
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
     unsigned reselect_attempted, conflict_verified;
-    unsigned cold_entry, projected_lookup;
+    unsigned cold_entry, projected_lookup, warm_parent_only;
     enum public_source_stage source_stage;
     enum public_source_stage source_next;
     unsigned source_declined;
@@ -201,6 +201,7 @@ static const char *delivery_personal_cookie(const struct continuation *d) {
 }
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static int public_selection_parse(VRT_CTX, struct continuation *);
+static int public_selection_accept(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
 static void reuse_registry_free(void);
 static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *);
@@ -383,6 +384,20 @@ static int delivery_parse(VRT_CTX, struct continuation *d) {
             memcpy(d->source_generation,source->parent->generation,65);
             d->source_deadline = d->prepare_response_time+(double)source->parent->fresh_remaining;
             ok = d->source_manifest != NULL;
+            /* This existing authenticated refill owner needs the public ESI
+             * representation, not a personal rendering. Keep the verified
+             * source in the same request-owned snapshot path as normal
+             * selection; never manufacture fragments or replay source cookies. */
+            if (ok && d->source_stage == SOURCE_CAPTURE && source->source_only &&
+                vmod_guest_warm_parent_result(ctx)) {
+                d->selection = source; source = NULL;
+                ok = public_selection_accept(ctx,d);
+                if (ok) {
+                    d->warm_parent_only = 1;
+                    d->source_stage = SOURCE_COMPLETE;
+                    if (d->source_deadline < d->public_deadline) d->public_deadline = d->source_deadline;
+                }
+            }
         }
         delivery_private_document_free(document); delivery_public_projection_free(resolved);
         delivery_selection_free(source);
@@ -1150,6 +1165,13 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         struct handoff *entry;
         const struct guest_request *g = guest_context(ctx);
         int cookie_delivery, reuse_result;
+        if (!begin && vmod_guest_warm_parent_result(ctx) && target && delivery_relative(target) &&
+            http_GetStatus(ctx->http_resp) == 200 && !VRT_r_obj_uncacheable(ctx) && VRT_r_obj_ttl(ctx) > 0 &&
+            (delivery_header_equals(ctx->http_resp,HDR("X-UltraCache-ESI-Shared-Parent"),"1") || occurrences == 0) &&
+            occurrences >= 0) {
+            guest_context(ctx)->warm_delivered = 1;
+            return 0; /* Authenticated parent HIT: no personal continuation. */
+        }
         if (!begin || !target || !*target) return 0;
         cookie_delivery = delivery_cookie_marker(ctx->http_resp);
         if (cookie_delivery < 0 || !delivery_relative(target) || occurrences < 0 ||
@@ -1298,6 +1320,12 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
          * A recovered fetch additionally requires the bound snapshot response. */
         if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) ||
             !delivery_restore(ctx,d)) { d->phase = D_FAILED; return -1; }
+        if (d->warm_parent_only) {
+            if (!vmod_guest_warm_parent_result(ctx)) { d->phase = D_FAILED; return -1; }
+            d->phase = D_DELIVERED;
+            guest_context(ctx)->warm_delivered = 1;
+            return 0; /* Actual stored parent, no private admission/cookie replay. */
+        }
         /* The authenticated snapshot has now completed the parent fetch.
          * Its original fragment producer can settle on this response just as
          * on an ordinary parent HIT; do not defer admission to another visit. */
@@ -1311,6 +1339,11 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
     return -1;
 }
 
+VCL_BOOL vmod_delivery_warm_parent_result(VRT_CTX) {
+    const struct guest_request *g = guest_context(ctx);
+    return vmod_guest_warm_parent_result(ctx) && g->warm_delivered;
+}
+
 VCL_STRING vmod_delivery_public_source_outcome(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
     if (!d || ctx->req->esi_level || d->source_stage == SOURCE_NONE) return NULL;
@@ -1321,6 +1354,7 @@ VCL_STRING vmod_delivery_public_source_outcome(VRT_CTX, struct vmod_priv *priv) 
 }
 VCL_STRING vmod_delivery_outcome(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
+    if (vmod_delivery_warm_parent_result(ctx)) return "not-executed";
     /* Capture is provisional. Only complete, bound, final delivery may report
      * its outcome; ordinary late ESI and failed/raw responses stay unknown. */
     if (ctx->req->esi_level || !d || d->failed || d->guest_complete ||
@@ -1332,6 +1366,7 @@ VCL_STRING vmod_delivery_outcome(VRT_CTX, struct vmod_priv *priv) {
 
 VCL_STRING vmod_delivery_cache_outcome(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
+    if (vmod_delivery_warm_parent_result(ctx)) return "NOT-APPLICABLE";
     if (ctx->req->esi_level || !d || d->guest_complete) return "NOT-APPLICABLE";
     if (d->failed || d->phase != D_DELIVERED) return "UNVERIFIED";
     return d->reuse_fast ? "HIT" : "FILL";

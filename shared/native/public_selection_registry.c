@@ -566,9 +566,6 @@ static int guest_resume_personal(VRT_CTX, struct continuation *d) {
     return 1;
 }
 static int public_selection_parse(VRT_CTX, struct continuation *d) {
-    struct delivery_public_selection *s;
-    struct delivery_header *header;
-    struct fields **tail = &d->public_headers;
     if (d->guest_reply) {
         if (!d->guest_requested) { d->diagnostic_reason = "guest-not-requested"; return 0; }
         if (!delivery_guest_selection_parse_diagnostic(d->body,d->length,d->request_id,d->url,
@@ -589,6 +586,12 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
             &d->selection,&d->document,&d->diagnostic_reason)) return 0;
         if (d->guest_requested) { guest_disable(ctx); d->cold_entry = !d->guest_has_variant; }
     }
+    return public_selection_accept(ctx,d);
+}
+static int public_selection_accept(VRT_CTX, struct continuation *d) {
+    struct delivery_public_selection *s;
+    struct delivery_header *header;
+    struct fields **tail = &d->public_headers;
     if (d->document) return 1;
     /* An unavailable source supplied no public-parent provenance. Complete the
      * same real visitor privately; never publish its newly rendered page as

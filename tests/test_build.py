@@ -64,8 +64,10 @@ class PackageVersions(unittest.TestCase):
     def fixture(self, root, header='1.2.3'):
         (root / 'info.json').write_text(json.dumps(dict(version='1.2.3')), encoding='utf-8')
         (root / (PLUGIN + '.php')).write_text('<?php\n/*\nVersion: ' + header + '\n*/\n', encoding='utf-8')
-        for name in ('LICENSE', 'README.md', 'UPSTREAM'):
+        for name in ('LICENSE', 'README.md', 'CHANGELOG.md', 'UPSTREAM'):
             (root / name).write_text('Fixture source', encoding='utf-8')
+        (root / 'tools').mkdir()
+        (root / 'tools/privacy_check.py').write_bytes((ROOT / 'tools/privacy_check.py').read_bytes())
         wordpress = root / 'wordpress'
         wordpress.mkdir()
         (wordpress / 'varnish-cache-for-webuzo.php').write_text('<?php\n/*\nVersion: 0.1.0\n*/\n')

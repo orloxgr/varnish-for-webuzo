@@ -352,6 +352,12 @@ $Restrict vcl_deliver
 Current top-level delivery selected the parent with an authenticated Warm proof.
 This observation is request-owned, never cached parent metadata.
 
+$Function BOOL delivery_warm_parent_result()
+$Restrict vcl_deliver
+
+The authenticated Warm owner completed a public-parent-only delivery. This
+request-owned observation does not claim any personal fragment admission.
+
 $Function STRING guest_key()
 $Restrict vcl_recv vcl_hash vcl_hit vcl_deliver
 

@@ -430,6 +430,7 @@ sub scp_deliver {
     unset resp.http.X-SCP-Warm-Projection-Supported;
     unset resp.http.X-UltraCache-Warm-Projection;
     unset resp.http.X-UltraCache-Warm-Projection-Authorization;
+    unset resp.http.X-UltraCache-Warm-Delivery;
     if (cookie_handoff.guest_warm_parent_result()) {
         set resp.http.X-UltraCache-Warm-Projection = "parent-v1";
     }

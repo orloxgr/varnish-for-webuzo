@@ -5,6 +5,17 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.24 — 2026-11-26
+
+- Refill authenticated UltraCache `parent-v1` Warm requests without personal
+  composition: cold fills use the verified request-owned public-source snapshot,
+  and hot parents require no private prepare or ESI child requests.
+- Return the exact public parent bytes with a request-owned
+  `X-UltraCache-Warm-Delivery: public-parent-only` marker. Private work is reported
+  as not executed; no personal admission or provider cookie replay is inferred.
+- Preserve stored ESI capability, ordinary visitor composition, actual public
+  contexts, source lifetime, cookie policy and invalidation.
+
 ## 0.13.23 — 2026-11-25
 
 - Remove image-codec-specific HTML cache carriers. Unified UltraCache HTML uses

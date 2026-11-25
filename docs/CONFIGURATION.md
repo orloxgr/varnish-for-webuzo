@@ -175,6 +175,22 @@ The key is masked initially, with reveal/copy controls, and is excluded from the
 
 ## Webuzo integration
 
+### Updating the authenticated UltraCache Warm integration
+
+Upload the new ZIP through **Webuzo Admin > Plugins** and activate/update the
+addon normally. The activation hook rebuilds its native module and reconciles
+the shipped VCL for existing sites; **Refresh sites** runs that same normal
+reconciliation if required. Do not deactivate the addon to perform an upgrade:
+deactivation removes its active Varnish setup.
+
+Version 0.13.24 adds a public-parent-only result to the existing signed
+`parent-v1` Warm request. Use the matching UltraCache WordPress verifier to check
+the exact parent body, actual context and a fresh native HIT. This is a Warm-only
+response: it does not execute or claim verification of personal fragments or
+cookie delivery. Ordinary visits still use the stored ESI parent and their
+normal private composition. No additional setting, route, queue or service is
+needed. A manual VCL edit or Varnish restart is not part of this upgrade.
+
 Request timeouts follow the loaded Webuzo/Nginx proxy configuration, including
 longer domain overrides. The addon derives additional time for its intermediate
 proxy layers instead of imposing its former 2/120-second proxy settings and
