@@ -44,7 +44,7 @@ class NativeEventInvalidation(unittest.TestCase):
     commit = NativeReuseAuthority.commit
 
     @contextmanager
-    def actor(self, public_generation=None, selection_candidate=False):
+    def actor(self, public_generation=None, selection_candidate=False, source_response=None):
         public_generation = public_generation or {"number": 1}
         holder = {}; calls = []; prepared = {}; versions = {'A': 1, 'B': 1}
         entered = threading.Event(); release = threading.Event()
@@ -69,6 +69,9 @@ class NativeEventInvalidation(unittest.TestCase):
             prepared[signed['requestId']] = (dict(renderedFragments=copy.deepcopy(rendered)), owner)
         def origin(path, headers):
             phase = headers.get('X-UltraCache-Delivery-Phase'); calls.append((path, phase))
+            if source_response is not None:
+                response = source_response(path, headers)
+                if response is not None: return response
             if path == '/__unrelated-server-error':
                 entered.set(); self.assertTrue(release.wait(10))
                 return 403, 'server directory response', [('Cache-Control', 'private, no-store')]
@@ -133,7 +136,8 @@ class NativeEventInvalidation(unittest.TestCase):
                           if name == 'X-UltraCache-Delivery-Prepare' else (name, value) for name, value in META]
                 return BODY.replace('parent[', 'parent' + str(generation) + '['), fields
             return 'unexpected source', [('Cache-Control', 'private, no-store')]
-        with proxy('ultracache', origin, transform=all_origin_hooks, allow_post=True) as get:
+        with proxy('ultracache', origin, transform=all_origin_hooks, allow_post=True,
+                   daemon_parameters=('vsl_mask=+Debug',) if source_response else ()) as get:
             holder['get'] = get; get(PARENT); NativeReuseAuthority.register(self, get)
             bodies = {}
             try:

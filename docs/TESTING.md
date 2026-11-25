@@ -1,5 +1,32 @@
 # Verification
 
+## Complete guest recipe and source-parent discovery — 25 November 2026
+
+The causal `test_guest_source_discovery.GuestSourceDiscovery` actor first
+establishes actual cached personal admissions and bodies. An exact normal URL
+purge is followed by an authenticated COMPLETE guest publication and the normal
+signed parent Warm, with no personal admission fabricated by the Warm. On the
+unchanged 0.13.19 native module, the first retained owner's visit reproduces
+`discovery-unavailable` and makes prepare/finalize calls.
+
+With source-bound declaration discovery, that first retained visit returns the
+new public parent plus its existing private fragments with zero origin calls.
+A previously unadmitted owner still fills normally. A wrong source generation
+is rejected, and changing the actual native parent representation prevents reuse
+of the old admission. These two methods and the two portable C99 recipe codec
+checks passed on the final source (four methods, 30.822 seconds, no skips).
+The existing projected guest/optional-input and ACK full-HIT regressions also
+passed during the focused native run. Native builds used Varnish 9.1 and normal
+`-Wall -Wextra -Werror`, in a separate fixture module directory.
+
+The declaration remains optional. It uses the existing authenticated
+source-manifest/generation relationship and the actual parent's native
+representation, not the complete guest object's salted hash. It creates no
+owner admission, extends no lifetime and bypasses none of the metadata, input,
+authority or private-body checks. Producer messages are explicit mocks; this
+does not claim WordPress/browser or paired panel-install acceptance. No installed
+service, live settings or live website was changed.
+
 ## ACK bookkeeping and private content authority — 25 November 2026
 
 The causal full-HIT ACK regression reproduced the old failure on the unchanged

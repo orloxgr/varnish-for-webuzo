@@ -8,6 +8,7 @@
 struct guest_input_publication {
     struct guest_input_publication *next;
     char key[65], manifest[65];
+    char source_manifest[65], native_policy[65];
     double deadline;
     struct delivery_reuse_recipe *recipe;
     unsigned char *empty_projection;
@@ -347,6 +348,16 @@ static void guest_inputs_remember(VRT_CTX, struct continuation *d, struct delive
     if (delivery_reuse_input_projection(s->guest_inputs->inputs,NULL,0,
         &p->empty_projection,&p->empty_length) != DELIVERY_REUSE_INPUT_OK) { free(p); return; }
     memcpy(p->key,d->guest_key,65); memcpy(p->manifest,manifest,65); p->deadline = d->public_deadline;
+    /* The projected COMPLETE reply was already bound to the captured source's
+     * manifest AND generation after native validation of its snapshot bytes.
+     * That signed locator owns URL/context/generation/fragments. Remember its
+     * identity here; never substitute the expanded guest manifest or hash. */
+    if (d->source_projected && d->source_stage == SOURCE_COMPLETE && !d->source_declined &&
+        d->source_manifest && !strcmp(s->guest_source_manifest,d->source_manifest) &&
+        !strcmp(s->guest_source_generation,d->source_generation) &&
+        delivery_selection_digest((const unsigned char *)d->source_manifest,strlen(d->source_manifest),p->source_manifest)) {
+        memcpy(p->native_policy,d->selection_policy,65);
+    }
     bucket = guest_input_bucket(p->key,p->manifest);
     pthread_mutex_lock(&lock);
     owner = public_declaration(d->site,d->host,d->selection_scope);

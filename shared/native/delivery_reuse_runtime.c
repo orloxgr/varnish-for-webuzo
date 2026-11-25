@@ -38,14 +38,13 @@ static struct reuse_discovery *delivery_reuse_discovery(struct reuse_scope *scop
     }
     return NULL;
 }
-static int delivery_reuse_publish_discovery(struct continuation *d, struct reuse_scope *scope,
-    const struct delivery_reuse_record *record) {
+static int delivery_reuse_publish_recipe(struct continuation *d, struct reuse_scope *scope,
+    const struct delivery_reuse_recipe *source, double deadline) {
     struct reuse_discovery *discovery = delivery_reuse_discovery(scope,d);
     struct delivery_reuse_recipe *recipe = NULL;
     char revision[65];
-    if (discovery && !strcmp(discovery->recipe->digest,record->recipe->digest)) return 1;
-    if (!reuse_random_id(revision) || !delivery_reuse_recipe_parse(record->recipe_json,record->recipe_length,
-        d->occurrences,&recipe)) return 0;
+    if (discovery && !strcmp(discovery->recipe->digest,source->digest)) return 1;
+    if (!reuse_random_id(revision) || !(recipe = delivery_reuse_recipe_clone(source))) return 0;
     if (!discovery) {
         size_t bucket;
         if ((!scope->discovery_capacity || scope->discovery_count >= scope->discovery_capacity-scope->discovery_capacity/4) &&
@@ -57,8 +56,34 @@ static int delivery_reuse_publish_discovery(struct continuation *d, struct reuse
         discovery->next = scope->discoveries[bucket]; scope->discoveries[bucket] = discovery; ++scope->discovery_count;
     }
     delivery_reuse_recipe_free(discovery->recipe); discovery->recipe = recipe;
-    memcpy(discovery->revision,revision,65); discovery->deadline = d->public_deadline;
+    memcpy(discovery->revision,revision,65); discovery->deadline = deadline;
     return 1;
+}
+static int delivery_reuse_publish_discovery(struct continuation *d, struct reuse_scope *scope,
+    const struct delivery_reuse_record *record) {
+    return delivery_reuse_publish_recipe(d,scope,record->recipe,d->public_deadline);
+}
+/* Called under the registry lock only at the actual cached SOURCE parent.
+ * This supplies a declaration for lookup, never a personal admission. The
+ * representation is the parent's real native digest/Vary captured above;
+ * all owner input, authority, metadata lifetime and private-body checks follow.
+ */
+static void delivery_reuse_source_discovery(VRT_CTX, struct continuation *d,
+    struct public_declaration *owner, struct reuse_scope *scope) {
+    size_t i;
+    for (i = 0; i < BUCKETS; ++i) {
+        struct guest_input_publication *p;
+        guest_input_publications_prune(&owner->guest_inputs[i],ctx->now);
+        for (p = owner->guest_inputs[i]; p; p = p->next) {
+            double deadline;
+            if (!*p->source_manifest || strcmp(p->source_manifest,d->reuse_publication) ||
+                strcmp(p->native_policy,scope->native_policy) ||
+                p->recipe->occurrences != d->occurrences) continue;
+            deadline = p->deadline < d->public_deadline ? p->deadline : d->public_deadline;
+            (void)delivery_reuse_publish_recipe(d,scope,p->recipe,deadline);
+            return;
+        }
+    }
 }
 static int delivery_reuse_schedule(VRT_CTX, struct vmod_priv *priv, struct continuation *d) {
     char *header;
@@ -261,7 +286,12 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     if (scope->revision_pending) { reason = "scope-revision-pending"; goto done_locked; }
     if (strcmp(native_policy,scope->native_policy)) { reason = "scope-native-policy"; goto done_locked; }
     if (strcmp(declaration->wordpress_policy,scope->wordpress_policy)) { reason = "scope-wordpress-policy"; goto done_locked; }
-    if (!(discovery = delivery_reuse_discovery(scope,d))) { reason = "discovery-unavailable"; goto done_locked; }
+    discovery = delivery_reuse_discovery(scope,d);
+    if (!discovery) {
+        delivery_reuse_source_discovery(ctx,d,declaration,scope);
+        discovery = delivery_reuse_discovery(scope,d);
+    }
+    if (!discovery) { reason = "discovery-unavailable"; goto done_locked; }
     if (discovery->recipe->occurrences != d->occurrences) { reason = "discovery-occurrences"; goto done_locked; }
     page = (struct delivery_reuse_context){d->site,d->host,scope->scope,public_registry_epoch,
         scope->native_policy,scope->wordpress_policy,scope->policy,d->reuse_publication,d->reuse_representation,discovery->recipe->digest};

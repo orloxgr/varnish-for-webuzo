@@ -41,6 +41,8 @@ void delivery_reuse_inputs_free(struct delivery_reuse_inputs *inputs);
 int delivery_reuse_recipe_parse(const char *json, size_t length,
     uint64_t expected_occurrences, struct delivery_reuse_recipe **output);
 void delivery_reuse_recipe_free(struct delivery_reuse_recipe *recipe);
+/* Independent ownership of an already parsed immutable declaration. */
+struct delivery_reuse_recipe *delivery_reuse_recipe_clone(const struct delivery_reuse_recipe *recipe);
 int delivery_reuse_descriptor_digest(const char *url, const char *provider, char digest[65]);
 int delivery_reuse_recipe_digest(const struct delivery_reuse_recipe *recipe, char digest[65]);
 int delivery_reuse_input_projection(const struct delivery_reuse_inputs *inputs,

@@ -131,6 +131,46 @@ void delivery_reuse_recipe_free(struct delivery_reuse_recipe *recipe) {
     delivery_reuse_inputs_free(recipe->inputs);
     reuse_descriptors_free(recipe->fragments); free(recipe);
 }
+struct delivery_reuse_recipe *delivery_reuse_recipe_clone(const struct delivery_reuse_recipe *source) {
+    struct delivery_reuse_recipe *recipe;
+    struct delivery_reuse_descriptor **tail;
+    const struct delivery_reuse_descriptor *row;
+    size_t i;
+    if (!source || !source->inputs || !(recipe = calloc(1,sizeof(*recipe)))) return NULL;
+    recipe->inputs = calloc(1,sizeof(*recipe->inputs));
+    if (!recipe->inputs) goto failed;
+    recipe->inputs->php_max_input_vars = source->inputs->php_max_input_vars;
+    if (source->inputs->name_count) {
+        recipe->inputs->names = calloc(source->inputs->name_count,sizeof(*recipe->inputs->names));
+        if (!recipe->inputs->names) goto failed;
+        for (i = 0; i < source->inputs->name_count; ++i) {
+            if (!(recipe->inputs->names[i] = copy((struct text){source->inputs->names[i],strlen(source->inputs->names[i])}))) goto failed;
+            ++recipe->inputs->name_count;
+        }
+    }
+    if (source->inputs->prefix_count) {
+        recipe->inputs->prefixes = calloc(source->inputs->prefix_count,sizeof(*recipe->inputs->prefixes));
+        if (!recipe->inputs->prefixes) goto failed;
+        for (i = 0; i < source->inputs->prefix_count; ++i) {
+            if (!(recipe->inputs->prefixes[i] = copy((struct text){source->inputs->prefixes[i],strlen(source->inputs->prefixes[i])}))) goto failed;
+            ++recipe->inputs->prefix_count;
+        }
+    }
+    tail = &recipe->fragments;
+    for (row = source->fragments; row; row = row->next) {
+        struct delivery_reuse_descriptor *next = calloc(1,sizeof(*next));
+        if (!next) goto failed;
+        *tail = next; tail = &next->next;
+        next->url = copy((struct text){row->url,strlen(row->url)});
+        next->provider = copy((struct text){row->provider,strlen(row->provider)});
+        if (!next->url || !next->provider) goto failed;
+        memcpy(next->descriptor,row->descriptor,65); next->occurrences = row->occurrences;
+    }
+    memcpy(recipe->digest,source->digest,65); recipe->occurrences = source->occurrences;
+    return recipe;
+failed:
+    delivery_reuse_recipe_free(recipe); return NULL;
+}
 static int reuse_descriptors(struct reader *reader, struct delivery_reuse_recipe *recipe) {
     struct delivery_reuse_descriptor **tail = &recipe->fragments;
     if (!take(reader,'[')) return 0;
