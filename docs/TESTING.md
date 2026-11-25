@@ -1,5 +1,23 @@
 # Verification
 
+## ACK bookkeeping and private content authority — 25 November 2026
+
+The causal full-HIT ACK regression reproduced the old failure on the unchanged
+0.13.18 native module: an already complete zero-origin HIT required prepare and
+finalize again after ACK alone, despite unchanged clean state and generation.
+With separate content authority, the same full-HIT regression and the focused
+delayed-BEGIN/actual-write regression both passed (18.398 seconds, two methods,
+no skips). ACK preserves complete cached composition, delayed completed-BEGIN
+remains rejected after CAS rotation, and a real owner write invalidates its
+content and refills once while the other owner's HIT stays available.
+
+These methods live in `test_reuse_full_runtime.NativeFullReuse` and reuse the
+current event-driven HSH actor rather than obsolete held/drain fixture modes.
+The native Varnish 9.1 build used normal `-Wall -Wextra -Werror` and a private
+fixture module directory. Producer messages are explicit transport mocks;
+WordPress lifecycle, paired live installation and browser acceptance are not
+claimed here. No installed service, source, settings or live website was changed.
+
 ## Authenticated parent Warm with public Cookie input — 25 November 2026
 
 `GuestWarmProjection.test_authenticated_parent_warm_accepts_actual_public_variant_inputs`

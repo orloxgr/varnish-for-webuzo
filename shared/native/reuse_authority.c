@@ -36,7 +36,7 @@ struct reuse_transaction {
 };
 struct reuse_tag {
     struct reuse_tag *next;
-    char id[65], revision[65], generation[65], bound_scope_revision[65];
+    char id[65], revision[65], content_revision[65], generation[65], bound_scope_revision[65];
     unsigned clean;
     struct reuse_transaction *transactions;
 };
@@ -133,6 +133,7 @@ static struct reuse_tag *reuse_tag_find(struct reuse_scope *scope, const char *i
     if ((!scope->tag_capacity || scope->tag_count >= scope->tag_capacity-scope->tag_capacity/4) && !reuse_tag_grow(scope)) return NULL;
     tag = calloc(1,sizeof(*tag));
     if (!tag || !reuse_random_id(tag->revision)) { free(tag); return NULL; }
+    memcpy(tag->content_revision,tag->revision,65);
     memcpy(tag->id,id,65); /* newly observed authority is UNBOUND, never CLEAN */
     bucket = reuse_hash(id)%scope->tag_capacity;
     tag->next = scope->tags[bucket]; scope->tags[bucket] = tag; ++scope->tag_count;
@@ -180,6 +181,7 @@ static struct reuse_transaction *reuse_transaction_begin(struct reuse_tag *tag, 
     if (!transaction || !reuse_random_id(revision)) { free(transaction); return NULL; }
     transaction->next = tag->transactions; tag->transactions = transaction;
     memcpy(tag->revision,revision,65); tag->clean = 0; tag->generation[0] = 0;
+    memcpy(tag->content_revision,revision,65);
     return transaction;
 }
 static int reuse_scope_revision_repair(struct reuse_scope *scope) {
@@ -418,6 +420,7 @@ static int reuse_control_reply(struct task *task, int status, const char *reason
     if (tag) {
         size_t active = reuse_active(tag);
         reuse_json_field(json,"tag",tag->id); reuse_json_field(json,"revision",tag->revision);
+        reuse_json_field(json,"contentRevision",tag->content_revision);
         reuse_json_field(json,"state",active ? "dirty" : reuse_tag_clean(scope,tag) ? "clean" : "unbound");
         VSB_printf(json,",\"remainingMutations\":%ju",(uintmax_t)active);
         if (reuse_tag_clean(scope,tag)) reuse_json_field(json,"generation",tag->generation);
@@ -561,8 +564,9 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
          * already observed revision. BEGIN/COMMIT revoked the old bytes; an
          * extra publication revision would reject this fresh first fill.
          * A different still-known generation remains a real invalidation. */
-        if (*tag->generation && strcmp(tag->generation,generation) && !reuse_random_id(tag->revision)) {
-            status = 503; reason = "identity-unavailable"; goto reply;
+        if (*tag->generation && strcmp(tag->generation,generation)) {
+            if (!reuse_random_id(tag->revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
+            memcpy(tag->content_revision,tag->revision,65);
         }
         memcpy(tag->generation,generation,65); memcpy(tag->bound_scope_revision,scope->revision,65); tag->clean = 1;
         status = 200; reason = "generation-published"; goto reply;
@@ -612,6 +616,7 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
         if (!strcmp(operation,"private-mutation-commit")) {
             if (transaction->active) {
                 if (!reuse_random_id(tag->revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
+                memcpy(tag->content_revision,tag->revision,65);
                 transaction->active = 0; tag->clean = 0; tag->generation[0] = 0;
                 memcpy(transaction->completed_revision,tag->revision,65);
             }
@@ -622,7 +627,8 @@ VCL_INT vmod_reuse_control(VRT_CTX, struct vmod_priv *priv, VCL_STRING site, VCL
             if (transaction->active) { status = 409; reason = "mutation-active"; goto reply; }
             /* Invalidate even a completed-begin retry frame observed after a
              * later publication, before forgetting its idempotency record.
-             * Content generation/clean state stay intact: this is CAS fencing. */
+             * This fences control retries, not content: content_revision,
+             * generation and clean state remain intact. */
             if (!reuse_random_id(tag->revision)) { status = 503; reason = "identity-unavailable"; goto reply; }
             while (*position && *position != transaction) position = &(*position)->next;
             *position = transaction->next; free(transaction); transaction = NULL;

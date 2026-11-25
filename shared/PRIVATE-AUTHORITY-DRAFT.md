@@ -160,6 +160,16 @@ same-generation requests never bypass an outstanding writer or stale revision.
 
 ### `private-mutation-ack`
 
+Tag control replies expose `revision` for control CAS and `contentRevision` for
+cache content authority. A newly observed tag initializes both equally. Actual
+BEGIN, first COMMIT and publication of a different known generation advance both.
+ACK advances only `revision`; content revision, generation and clean state are
+unchanged. Producers may validate optional `contentRevision` and use it for body
+namespaces and metadata authority, retaining the old `revision` behavior when
+talking to native implementations without this field. Native cached metadata
+accepts stable content revision or current CAS revision; generation, active
+writers, scope and clean checks remain mandatory. No published proof is rewritten.
+
 Same completed tag/transaction/lease. The producer calls this only AFTER its
 native ACK has been durably recorded in the existing SQL outbox owner. It
 rotates the tag CAS revision before removing completed receipt metadata, without

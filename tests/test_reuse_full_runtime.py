@@ -55,6 +55,64 @@ class NativeFullReuse(unittest.TestCase):
     def test_metadata_and_all_private_bodies_compose_without_any_origin_then_missing_body_refills(self):
         self.run_full_actor()
 
+    def test_ack_only_preserves_an_already_complete_native_cached_plan(self):
+        # Reuse the current event-driven HSH actor. The older run_full_actor
+        # cases below still describe removed execution-drain transport.
+        from test_event_invalidation_runtime import NativeEventInvalidation
+        actor = NativeEventInvalidation()
+        with actor.actor() as (get, calls, _, bodies, _, _, _):
+            begun = actor.begin(get, actor.observe(get), 'ack-only-completed-event')
+            done = actor.commit(get, begun)
+            calls.clear()
+            self.assertEqual(get(PARENT, 'owner=A')[2], bodies['A'])
+            self.assertEqual(calls, [(PARENT, 'prepare'), (PARENT, 'reuse-finalize')])
+            calls.clear()
+            self.assertEqual(get(PARENT, 'owner=A')[2], bodies['A']); self.assertEqual(calls, [])
+            clean = actor.observe(get)
+            acknowledged = actor.call(get, 'private-mutation-ack', clean, extra={
+                'X-UltraCache-Private-Transaction': done['transaction'],
+                'X-UltraCache-Private-Lease': done['lease']})
+            self.assertNotEqual(acknowledged['revision'], clean['revision'])
+            self.assertEqual((acknowledged['state'], acknowledged['generation']),
+                (clean['state'], clean['generation']))
+            self.assertEqual(acknowledged['contentRevision'], clean['contentRevision'])
+            calls.clear()
+            self.assertEqual(get(PARENT, 'owner=A')[2], bodies['A'])
+            self.assertEqual(calls, [], 'ACK-only CAS cleanup must preserve the already complete native HIT')
+
+    def test_ack_fences_delayed_begin_and_real_write_still_invalidates_content(self):
+        from test_event_invalidation_runtime import NativeEventInvalidation
+        actor = NativeEventInvalidation()
+        with actor.actor() as (get, calls, versions, bodies, _, _, _):
+            original = actor.observe(get)
+            begun = actor.begin(get, original, 'real-write-then-ack')
+            self.assertNotEqual(begun['revision'], original['revision'])
+            self.assertNotEqual(begun['contentRevision'], original['contentRevision'])
+            calls.clear(); self.assertEqual(get(PARENT, 'owner=B')[2], bodies['B']); self.assertEqual(calls, [])
+            versions['A'] = 2
+            done = actor.commit(get, begun)
+            self.assertNotEqual(done['revision'], begun['revision'])
+            self.assertNotEqual(done['contentRevision'], begun['contentRevision'])
+            calls.clear(); status, _, updated = get(PARENT, 'owner=A')
+            self.assertEqual(status, 200); self.assertIn('private:A-v2', updated)
+            self.assertEqual(calls, [(PARENT, 'prepare'), (PARENT, 'reuse-finalize')])
+            clean = actor.observe(get)
+            self.assertEqual(clean['contentRevision'], done['contentRevision'])
+            retry = actor.call(get, 'private-mutation-begin', clean, extra={
+                'X-UltraCache-Private-Transaction': done['transaction']})
+            self.assertFalse(retry['active'])
+            acknowledged = actor.call(get, 'private-mutation-ack', clean, extra={
+                'X-UltraCache-Private-Transaction': done['transaction'],
+                'X-UltraCache-Private-Lease': done['lease']})
+            self.assertNotEqual(acknowledged['revision'], retry['revision'])
+            self.assertEqual(acknowledged['contentRevision'], done['contentRevision'])
+            delayed = actor.call(get, 'private-mutation-begin', retry, expected_status=409, extra={
+                'X-UltraCache-Private-Transaction': done['transaction']})
+            self.assertEqual(delayed['reason'], 'revision-changed')
+            self.assertEqual(actor.observe(get)['remainingMutations'], 0)
+            calls.clear(); self.assertEqual(get(PARENT, 'owner=A')[2], updated); self.assertEqual(calls, [])
+            self.assertEqual(get(PARENT, 'owner=B')[2], bodies['B']); self.assertEqual(calls, [])
+
     def test_mixed_personal_cart_and_anonymous_nonce_compose_without_origin_or_fake_owner_map(self):
         self.run_full_actor(anonymous_nonce=True)
 

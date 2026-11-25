@@ -190,7 +190,11 @@ static int delivery_reuse_record_current_reason(const struct continuation *d, co
             if (!tag->clean) return delivery_reuse_record_reject(reason,"tag-not-clean");
             if (strcmp(tag->bound_scope_revision,scope->revision)) return delivery_reuse_record_reject(reason,"tag-scope-revision");
             if (reuse_active(tag)) return delivery_reuse_record_reject(reason,"tag-active-writer");
-            if (strcmp(tag->revision,a->revision)) return delivery_reuse_record_reject(reason,"tag-revision");
+            /* New producer metadata uses stable content authority. The current
+             * CAS revision remains accepted for existing producer metadata;
+             * actual writes/generation changes advance both revisions. */
+            if (strcmp(tag->content_revision,a->revision) && strcmp(tag->revision,a->revision))
+                return delivery_reuse_record_reject(reason,"tag-revision");
             if (strcmp(tag->generation,a->generation)) return delivery_reuse_record_reject(reason,"tag-generation");
         }
     }

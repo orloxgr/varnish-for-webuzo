@@ -1,5 +1,10 @@
 # Varnish for Webuzo
 
+Version **0.13.19** separates private content invalidation from completed-event
+ACK bookkeeping. The existing CAS revision still fences delayed retries; the
+matching producer can use stable `contentRevision` for private cache namespaces.
+Actual writes and changed generations continue to invalidate cached content.
+
 Version **0.13.18** lets the existing authenticated parent Warm fill active
 public Variant Cookie contexts. It keeps the same HMAC/request bindings and
 ordinary Private/Authorization routing.
