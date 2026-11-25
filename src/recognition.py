@@ -1,4 +1,4 @@
-"""Bundled recognition and executable defaults follow the addon release."""
+"""Load bundled cookie descriptions and retire only the owned old scheduler."""
 import json
 from pathlib import Path
 import sys
@@ -17,14 +17,6 @@ MANUAL='varnish-for-webuzo-cookie-recognition@manual.service'
 
 def database():
     return json.loads(BUNDLED.read_text(encoding='utf-8'))
-
-
-def status():
-    from cookie_defaults import bundle
-    data=database();defaults,assessments=bundle()
-    return dict(automatic=False,bundled=True,result='bundled',records=len(data['records']),
-        rules=len(defaults['rules']),revision=data.get('revision',''),version=assessments['version'],
-        message='Cookie recognition and reviewed cache rules are bundled together. Update the plugin to receive a new reviewed version.')
 
 
 def remove():
@@ -47,12 +39,3 @@ def remove():
 
 def install():
     remove()
-
-
-if __name__=='__main__':
-    try:
-        if len(sys.argv)!=1 and (len(sys.argv)!=3 or sys.argv[1]!='--mode' or sys.argv[2] not in ('daily','manual')):
-            raise ValueError('Use bundled database status; recognition updates ship with the plugin')
-        print(json.dumps(status(),ensure_ascii=True))
-    except Exception as error:
-        print(json.dumps({'error':str(error)},ensure_ascii=True));raise SystemExit(1)

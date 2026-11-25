@@ -48,15 +48,6 @@
       }
     };
   }
-  function recognitionStatus(data) {
-    if (!data) return;
-    const box = byId('recognition-status'); box.replaceChildren();
-    const count = value => Number.isSafeInteger(value) ? value.toLocaleString() : '—';
-    box.append(node('p', 'Bundled database · ' + count(data.records) + ' records · ' + count(data.rules) + ' rules'));
-    box.append(node('p', 'Rules version: ' + (data.version || '—')));
-    box.append(node('p', 'Source revision: ' + (data.revision || '—')));
-    box.append(node('p', data.message || 'Cookie data and reviewed defaults are updated with the plugin.'));
-  }
   async function call(action, values = {}) {
     const cookieRequest = ['cookie_policies_status','cookie_policies_save','cookie_integration_status'].includes(action);
     if (busy) {
@@ -73,7 +64,6 @@
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'The operation failed.');
       if (data.sites) { snapshot = data; render(); }
-      if (data.cookie_recognition) recognitionStatus(data.cookie_recognition);
       if (data.message) { byId('notice').textContent = data.message; byId('notice').hidden = false; }
       return data;
     } catch (error) { byId('error').textContent = error.message; byId('error').hidden = false; if (cookieRequest) throw error; }

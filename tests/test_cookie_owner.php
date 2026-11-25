@@ -18,7 +18,7 @@ $_POST['payload'] = '{"action":"cookie_policies_save","id":"aaaaaaaaaaaaaaaaaaaa
 if (wvw_api_request('valid', false)['actor'] !== 'example') throw new RuntimeException('Owner save identity changed.');
 $_POST['payload'] = '{"action":"cookie_integration_status","id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","integration":{"enabled":true,"url":"https://example.test/wp-json/ultracache/v1/cookie-policy-control"}}';
 if (wvw_api_request('valid', false)['admin'] !== false) throw new RuntimeException('Connection check escalated to administrator.');
-foreach (['status','install','configure','cookie_delivery','recognition_update','profile_rules'] as $operation) {
+foreach (['status','install','configure','cookie_delivery','profile_rules'] as $operation) {
     $_POST['payload'] = json_encode(['action'=>$operation]);
     denied(static fn() => wvw_api_request('valid', false));
 }

@@ -140,7 +140,7 @@ class NativeScope(unittest.TestCase):
                        {'id':self.first['id'],'settings':choices(),'owner':'account_b'}):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.request('cookie_policies_save', **values)
-        for operation in ('install','configure','profile_rules','cookie_delivery','recognition_update'):
+        for operation in ('install','configure','profile_rules','cookie_delivery'):
             with self.subTest(operation=operation), self.assertRaises(ValueError): self.request(operation)
         self.assertEqual(engine.SETTINGS.read_bytes(), before)
 

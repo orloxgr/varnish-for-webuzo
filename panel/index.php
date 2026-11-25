@@ -6,11 +6,6 @@
   <div id="wvw-error" role="alert" hidden></div><div id="wvw-notice" role="status" hidden></div>
   <div class="wvw-toolbar"><strong id="wvw-status">Checking service…</strong><button type="button" id="wvw-install" hidden>Install &amp; set up Varnish</button><button type="button" id="wvw-start" hidden>Start Varnish</button><button type="button" id="wvw-refresh">Refresh sites</button></div>
   <details class="wvw-card" id="wvw-cookie-admin-panel"><summary>Cookie policies</summary><div id="wvw-cookie-admin"></div></details>
-  <section class="wvw-card" id="wvw-recognition">
-    <h3>Cookie recognition database</h3>
-    <p>Cookie recognition and reviewed Shared / Variant / Private defaults are included together. Update the plugin to receive a new reviewed database. Your central and site choices are preserved. Provider descriptions use the <a href="https://github.com/jkwakman/Open-Cookie-Database" target="_blank" rel="noopener noreferrer">Open Cookie Database</a>.</p>
-    <div id="wvw-recognition-status" role="status">Checking database…</div>
-  </section>
   <section class="wvw-card" id="wvw-server" hidden>
     <h3>Server cache</h3>
     <div class="wvw-toolbar"><label for="wvw-memory">Cache size (MiB)</label><input type="number" id="wvw-memory" min="1" step="1"><button type="button" id="wvw-resize">Apply cache size</button><button type="button" id="wvw-usage">Show memory usage</button></div>

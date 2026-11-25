@@ -1,43 +1,20 @@
-"""Bundled data and rules stay coupled; former updater routes perform no work."""
-import json
+"""Bundled descriptions remain available; only the owned old scheduler retires."""
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
-import engine
 import recognition
-import state
-
-
-class RecognitionActions(unittest.TestCase):
-    def test_old_worker_entrypoint_returns_truthful_bundled_status(self):
-        entry=Path(__file__).resolve().parents[1]/'src/recognition.py'
-        for args in ([],['--mode','daily'],['--mode','manual']):
-            result=subprocess.run([sys.executable,'-I','-B',str(entry),*args],capture_output=True,text=True)
-            self.assertEqual(result.returncode,0,result.stderr)
-            data=json.loads(result.stdout)
-            self.assertTrue(data['bundled']);self.assertFalse(data['automatic'])
-            self.assertEqual(data['result'],'bundled');self.assertNotIn('updating',data)
-            self.assertGreater(data['records'],2000);self.assertGreater(data['rules'],2000)
-
-    def test_admin_boundary_and_database_routes_never_enter_cache_transactions(self):
-        with patch.object(engine,'inventory',side_effect=AssertionError('inventory')),patch.object(state,'locked',side_effect=AssertionError('cache lock')):
-            for action,extra in (('recognition_status',{}),('recognition_configure',{'automatic':True}),('recognition_update',{})):
-                for request in ({'action':action},{'actor':'customer','admin':True,'action':action},{'actor':'root','admin':True,'action':action,'url':'https://other.invalid'}):
-                    with self.assertRaises(ValueError):engine.action(request)
-                result=engine.action(dict(actor='root',admin=True,action=action,**extra))
-                self.assertEqual(result['cookie_recognition']['result'],'bundled')
-                self.assertIn('Update the plugin',result['message'])
+import native_test_accounts
 
 
 @unittest.skipUnless(sys.platform.startswith('linux') and os.geteuid()==0,'Linux/root isolated ownership')
 class RecognitionSchedule(unittest.TestCase):
     def setUp(self):
+        native_test_accounts.install(self)
         self.temp=tempfile.TemporaryDirectory(dir='/var/lib',prefix='wvw-bundled-')
         self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
         self.service=self.root/'updater@.service';self.timer=self.root/'updater.timer'

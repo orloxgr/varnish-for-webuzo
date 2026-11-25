@@ -486,10 +486,11 @@ panel can synchronize UltraCache even when its Varnish setup is disabled.
 Updating an already configured addon reapplies its current setup automatically;
 fresh installation still requires the administrator to set up the service.
 
-The panel shows the bundled recognition record count, reviewed rule count and
-source revision. Recognition data and executable defaults are updated together
-with the plugin. Existing central and per-site choices are preserved. Old
-downloaded snapshots are not consumed, and no daily download job is created.
+Recognition data and executable defaults are updated together with the plugin.
+Existing central and per-site choices are preserved. Provider descriptions use
+the [Open Cookie Database](https://github.com/jkwakman/Open-Cookie-Database);
+its source attribution and Apache-2.0 license are bundled with the data.
+Old downloaded snapshots are not consumed, and no daily download job is created.
 
 ## Development
 
