@@ -108,7 +108,7 @@ class ProjectedVariantLookup(unittest.TestCase):
             original = 'cmplz_saved_services={}; cmplz_saved_categories=["functional"]'
             first = get('/issuer-input', original)
             self.assertEqual((first[0], cache(first[1])), (200, 'MISS'))
-            self.assertIn(base64.b64encode(b'issuer-default'), first[2])
+            self.assertIn(base64.b64encode(b'issuer-default').decode(), first[2])
             self.assertEqual(len(app.calls), 3)
             repeated = get('/issuer-input', original)
             self.assertEqual((repeated[0], cache(repeated[1]), repeated[2]), (200, 'HIT', first[2]))
