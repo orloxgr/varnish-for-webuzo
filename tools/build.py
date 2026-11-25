@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import runpy
 from pathlib import Path
 import zipfile
 ROOT=Path(__file__).resolve().parents[1]
@@ -26,6 +27,9 @@ def build():
     paths=[ROOT/name for name in ('varnish-for-webuzo.php','info.json','LICENSE','UPSTREAM','README.md')]
     for folder in ('src','templates','profiles','shared','panel','docs'):
         paths.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.zip'))
+    privacy=runpy.run_path(str(ROOT/'tools/privacy_check.py'))
+    privacy['assert_clean'](paths, ROOT)
+    privacy['assert_clean']([ROOT/'wordpress/varnish-cache-for-webuzo.php',ROOT/'wordpress/readme.txt',ROOT/'LICENSE'], ROOT)
     epoch=int(os.environ.get('SOURCE_DATE_EPOCH',max(p.stat().st_mtime for p in paths)))
     stamp=datetime.fromtimestamp(epoch,timezone.utc).timetuple()[:6]
     target=ROOT/'dist'/('varnish-for-webuzo-'+version+'.zip');target.parent.mkdir(exist_ok=True)
