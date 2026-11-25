@@ -20,8 +20,8 @@ Recognition categories alone do not grant a cache rule or a cookie issuer.
 Every bundled cookie has a concrete Shared, Variant or Private rule. Explicit
 central and site choices override these defaults within the existing core
 privacy checks. Recognition data and reviewed executable defaults ship together in plugin updates.
-Existing central and site choices are retained; downloaded-only metadata does not
-replace the bundled database.
+Existing central and site choices are retained. There is no independent database
+download action or updater service in the current addon.
 
 ## Native account boundary
 
@@ -49,18 +49,19 @@ candidate before activation. They preserve site routing/profile, browser cache,
 service preferences and bundled data. Cache invalidation is scoped to enabled
 sites whose effective executable policy changes.
 
-The sheet displays cookie name, description, Shared/Variant/Private action and
-the source of that choice. Internal row identifiers stay in saved snapshots;
+The sheet displays cookie name, description, independent Basic and UltraCache
+Shared/Variant/Private action columns and the source of each choice.
+Each profile has its own filter, overrides and inherited/reset behavior.
+Internal row identifiers stay in saved snapshots;
 they are not a visible column. **Why / precedence** opens a full-width explanation
 with the selected action, applied behavior, provider evidence and any overriding
 login, session or cart protection. Unsaved edits are labelled until applied.
 Reset removes the choice from the current scope and restores its inherited rule.
-CSV exports Cookie, Description and Action columns, which can be pasted back
+CSV exports Cookie, Description, Basic and UltraCache columns, which can be pasted back
 without exposing internal IDs. Pasting an existing literal match updates its
 existing local choice rather than creating conflicting duplicate rules.
-Legacy Automatic snapshots are displayed and executed as concrete decisions;
-reading the editor does not rewrite the stored snapshot. A new recognition-only
-row has a **Use this proposal** button to add its choice to the draft.
+A recognition-only row has a **Use this proposal** button to add its choice to
+the draft. Recognition descriptions do not independently select cache behavior.
 
 The bundled rule body is emitted once per native VCL, including when sites have
 different overrides. Each site's explicit rules consume their matched cookies
@@ -78,8 +79,9 @@ application drift when the local snapshot is unchanged.
 
 The optional connection requires a compatible UltraCache consumer for the full
 bundled snapshot and literal cookie matches. Advertising the older scoped-policy
-capability alone does not establish that compatibility. The native Varnish
-profiles continue to work independently of this optional connection.
+capability alone does not establish that compatibility. The optional policy-sync connection is separate from profile selection: Basic
+needs no application companion, while the UltraCache profile requires its
+compatible WordPress plugin and publication/delivery capabilities.
 
 The application receives the concrete bundled rules plus central/site choices
 in the existing signed snapshot schema. Disconnect still sends an empty snapshot

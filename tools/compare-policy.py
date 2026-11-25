@@ -24,7 +24,7 @@ def main():
                  'shared/vcl/representations.vcl','shared/public_selection.py','shared/vcl/public-selection.vcl','shared/vcl/ultracache-esi.vcl','shared/vcl/ultracache-private.vcl',
                  'shared/vcl_source.py','shared/VCL-ARCHITECTURE.md',
                  'shared/cookie_admin.py','shared/cookie_defaults.py','shared/cookie-defaults.json','shared/cookie_control.py','shared/cookie-assessments.json',
-                 'shared/cookie-policies.json','shared/cookie_catalogue.py','shared/cookie_recognition.py',
+                 'shared/cookie-policies.json','shared/cookie_catalogue.py',
                  'shared/CONTRACT.md','shared/PUBLIC-SELECTION.md','shared/ESI-DELIVERY-DRAFT.md','shared/ESI-VALIDATION.md','shared/PRIVATE-TTL-DRAFT.md','shared/COOKIE-CONTROL.md','shared/cookie-recognition/recognition.json',
                  'shared/cookie-recognition/Open-Cookie-Database-LICENSE.txt',
                  'tests/shared_policy_cases.json','tests/shared_policy_parity.py','tests/test_cookie_wire_contract.py',

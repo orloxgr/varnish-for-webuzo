@@ -2,7 +2,8 @@
 
 Concrete editorial defaults are executable. Category labels do not participate
 in the inference. Every record has an action; confidence describes the evidence,
-not whether its policy runs. New recognition downloads remain metadata.
+not whether its policy runs. Source descriptions alone do not override reviewed
+cache actions; the generated data is shipped in a versioned plugin bundle.
 """
 import argparse
 import collections

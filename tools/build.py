@@ -24,7 +24,7 @@ def package_version():
 
 def build():
     version=package_version()
-    paths=[ROOT/name for name in ('varnish-for-webuzo.php','info.json','LICENSE','UPSTREAM','README.md')]
+    paths=[ROOT/name for name in ('varnish-for-webuzo.php','info.json','LICENSE','UPSTREAM','README.md','CHANGELOG.md')]
     for folder in ('src','templates','profiles','shared','panel','docs'):
         paths.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.zip'))
     privacy=runpy.run_path(str(ROOT/'tools/privacy_check.py'))

@@ -2,7 +2,13 @@
 
 Basic caches WordPress/WooCommerce and supports other sites on a best-effort
 basis. UltraCache uses the same application rules and adds ESI/async-cart
-integration. Both presets use the complete bundled `shared/cache-policy.vcl`. That source
+integration. **The UltraCache profile requires the compatible, active UltraCache
+WordPress plugin.** Its public publications, real cookie delivery and personal
+composition cannot be inferred from an arbitrary application without that
+companion. Basic requires no WordPress plugin. The optional policy-sync switch
+and the separate manual purge connector do not replace this requirement.
+
+Both presets use the complete bundled `shared/cache-policy.vcl`. That source
 contains the common application, lookup-key, privacy, ESI and representation
 rules; the panel adapter supplies host/backend/token isolation.
 
@@ -24,8 +30,9 @@ subdirectory WordPress installs and the query-based REST dispatcher.
 
 The UltraCache request opt-in and response ESI/async-parent handshake apply
 only to sharing parent HTML for cart/session requests. They are not required
-to cache an ordinary anonymous public response. ESI personal fragments are
-fetched separately for each delivery. Login-cookie requests still bypass;
+to cache an ordinary anonymous public response. ESI personal fragments retain the actual visitor context. Valid admitted native
+objects can be reused without WordPress preparation; missing or invalidated
+dependencies refill through the application. Login-cookie requests still bypass;
 there is no automatic extraction of personal HTML from arbitrary themes.
 
 ## Representations
