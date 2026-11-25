@@ -10,7 +10,7 @@ work mentioned in an earlier entry. For current behavior and installation, see
 - Remove image-codec-specific HTML cache carriers. Unified UltraCache HTML uses
   one native object across image Accept differences; genuine origin Vary remains
   authoritative, including cookie/locale contexts and HTTP compression.
-- Pair the unified HTML integration with UltraCache 3.13.13-dev.1383 publications.
+- Pair the unified HTML integration with UltraCache 3.13.13-dev.1384 publications.
 - Keep projection v1 with canonical `html` identity, exact Warm authentication,
   private owner bindings and native representation digests unchanged.
 
