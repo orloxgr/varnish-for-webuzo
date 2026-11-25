@@ -1,5 +1,22 @@
 # Verification
 
+## Projected complete guest candidate — 25 November 2026
+
+The single focused method in `tests/test_guest_projected_variant.py` passed
+against an isolated native Varnish 9.1 daemon (9.103 seconds, no skips). Two
+different active Variant tuples filled through the existing resolver, pure
+parent and complete-guest continuation. Two independent fresh HTTP clients then
+received their correct complete HTML with HIT and no backend links after the
+mock origin stopped. A cold real provider input, despite its Shared action,
+resumed the original provider inputs through ordinary personal delivery.
+The same method retained literal no-Cookie guest fill/HIT without `guestInputs`.
+
+The producer in this check is an explicit typed transport mock, not WordPress,
+WooCommerce, JavaScript browsers or LiteSpeed Enterprise. The normal native
+builder compiled with `-Wall -Wextra -Werror`; installed modules, services,
+settings and live websites were unchanged. Paired application/Warm acceptance
+belongs to the matching producer integration and is not claimed by this check.
+
 ## Source-map static boundary — 24 November 2026
 
 The two methods in `tests/test_source_map_boundary.py` passed against an isolated

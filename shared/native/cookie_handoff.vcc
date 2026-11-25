@@ -320,7 +320,8 @@ Select registered complete guest namespace for the native-owned first-visit pred
 $Function BOOL guest_shared_pending()
 $Restrict vcl_hit vcl_miss vcl_deliver
 
-Current Shared-only request is a guest cache candidate, never an origin guest request.
+Current Shared/Variant request needs the existing complete guest input proof.
+Shared is lookup-only; typed public projection also supports Variant cold fills.
 
 $Function BOOL guest_shared_hit(STRING key, STRING manifest, BOOL complete)
 $Restrict vcl_hit

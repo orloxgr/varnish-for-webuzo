@@ -41,7 +41,7 @@ void delivery_selection_free(struct delivery_public_selection *s) {
         while (h) { struct delivery_header *n = h->next; free(h->line); free(h); h = n; }
         free(s->manifest); free(s->target); delivery_public_parent_free(s->parent);
         delivery_free_fragments(s->fragments); delivery_public_projection_free(s->resolved);
-        delivery_reuse_recipe_free(s->guest_inputs); free(s);
+        delivery_reuse_recipe_free(s->guest_inputs); free(s->guest_source_manifest); free(s);
     }
 }
 
@@ -568,6 +568,7 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
         else if (equal(key,"headers")) bit = 1024;
         else if (equal(key,"cookieDelivery")) bit = 2048;
         else if (equal(key,"guestInputs")) bit = 4096;
+        else if (equal(key,"resolvedPublic")) bit = 8192;
         else goto invalid;
         if ((seen&bit) && bit != 4096) goto invalid;
         if ((seen&bit) && bit == 4096) inputs_duplicate = 1;
@@ -583,12 +584,18 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
                 if (bit == 1) memcpy(s->policy,text.data,64);
                 if (bit == 2) memcpy(s->wordpress_policy,text.data,64);
             } else if (bit == 16) { if (!equal(text,scope)) { selection_reject(reason,"guest-scope"); goto invalid; } }
-            else if (bit == 128) { if (!selection_hex(text)) goto invalid; }
+            else if (bit == 128) {
+                if (!selection_hex(text)) goto invalid;
+                memcpy(s->guest_source_generation,text.data,64);
+            }
             else if (!equal(text,"none") && !equal(text,"deferred")) goto invalid;
         } else if (bit == 32) { if (!guest_token(r,&s->manifest)) goto invalid; }
         else if (bit == 64) { if (!guest_token(r,&source_manifest)) goto invalid; }
         else if (bit == 256) { if (!number(r,&count)) goto invalid; }
         else if (bit == 512) { if (!public_parent(r,&s->parent)) { selection_reject(reason,"guest-parent-grammar"); goto invalid; } }
+        else if (bit == 8192) {
+            if (!selection_public_projection(r,&s->resolved)) goto invalid;
+        }
         else if (bit == 4096) {
             /* Boundary scanning must not mutate escaped recipe strings before
              * the existing canonical recipe parser receives their raw JSON. */
@@ -606,7 +613,7 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
         if (take(r,'}')) break;
         if (!take(r,',')) goto invalid;
     }
-    if ((seen & ~4096U) != 4095) { selection_reject(reason,"guest-required-fields"); goto invalid; }
+    if ((seen & ~(4096U|8192U)) != 4095) { selection_reject(reason,"guest-required-fields"); goto invalid; }
     if (!guest_headers(s,reason)) goto invalid;
     if (!delivery_selection_digest(s->parent->body,s->parent->length,digest) || strcmp(digest,s->parent->generation)) {
         selection_reject(reason,"guest-body-digest"); goto invalid;
@@ -616,7 +623,8 @@ static int guest_public(struct reader *r, const char *policy, const char *wordpr
     if (inputs_length && !inputs_duplicate)
         s->guest_inputs = guest_inputs_read(r->buffer+inputs_start,inputs_length,count);
     s->target = copy((struct text){s->manifest,strlen(s->manifest)}); if (!s->target) goto invalid;
-    s->guest = 1; *output = s; free(source_manifest); return 1;
+    s->guest_source_manifest = source_manifest;
+    s->guest = 1; *output = s; return 1;
 invalid:
     free(source_manifest); delivery_selection_free(s); return selection_reject(reason,"guest-grammar");
 }
@@ -692,7 +700,7 @@ int delivery_cookie_action(const char *rules, const char *name, size_t length) {
     }
     return 0;
 }
-int delivery_selection_all_shared(const char *original, const char *rules) {
+static int selection_cookie_actions(const char *original, const char *rules, int variants) {
     const char *p = original;
     unsigned pairs = 0;
     if (!p || !*p) return 0;
@@ -701,11 +709,18 @@ int delivery_selection_all_shared(const char *original, const char *rules) {
         if (!end) end = p+strlen(p);
         while (p < end && (*p == ' ' || *p == '\t')) ++p;
         equals = memchr(p,'=',(size_t)(end-p));
-        if (!equals || !delivery_cookie_name(p,(size_t)(equals-p)) ||
-            delivery_cookie_action(rules,p,(size_t)(equals-p)) != 0) return 0;
+        if (!equals || !delivery_cookie_name(p,(size_t)(equals-p))) return 0;
+        int action = delivery_cookie_action(rules,p,(size_t)(equals-p));
+        if (action < 0 || action > variants) return 0;
         ++pairs; p = *end ? end+1 : end;
     }
     return pairs != 0;
+}
+int delivery_selection_all_shared(const char *original, const char *rules) {
+    return selection_cookie_actions(original,rules,0);
+}
+int delivery_selection_all_public(const char *original, const char *rules) {
+    return selection_cookie_actions(original,rules,1);
 }
 int delivery_selection_candidate(const struct delivery_public_selection *s,
     const char *original, const char *rules, char **candidate) {

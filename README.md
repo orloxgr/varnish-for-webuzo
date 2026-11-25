@@ -1,5 +1,10 @@
 # Varnish for Webuzo
 
+Version **0.13.17** extends complete guest publications to active public Variant
+tuples through the existing authenticated resolver/source projection. Original
+private provider inputs remain separate; literal no-Cookie guest evidence stays
+optional. This integration candidate requires the matching UltraCache producer.
+
 Version **0.13.16** reports request-owned private cache HIT/FILL separately from
 correct fragment delivery. UltraCache WordPress dev.1365 uses this diagnostic
 to verify Warm readiness without changing ordinary cache admission.

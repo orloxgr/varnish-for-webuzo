@@ -14,7 +14,7 @@
 static const char guest_top_token;
 struct guest_request {
     unsigned captured, eligible, disabled;
-    unsigned shared_candidate, shared_proved, fallback_restart;
+    unsigned shared_candidate, shared_proved, fallback_restart, projected_fill, filling;
     char *original_cookie, *site, *host, *url;
     char *classified_cookie, *classified_variant, *projected_variant;
     unsigned classified, projected_variant_restart;
@@ -80,7 +80,7 @@ VCL_STRING vmod_guest_key(VRT_CTX) {
 }
 VCL_BOOL vmod_guest_shared_pending(VRT_CTX) {
     struct guest_request *g = guest_context(ctx);
-    return !ctx->req->esi_level && g && g->shared_candidate && !g->disabled;
+    return !ctx->req->esi_level && g && g->shared_candidate && !g->disabled && !g->filling;
 }
 VCL_BOOL vmod_guest_fallback(VRT_CTX) {
     struct guest_request *g = guest_context(ctx);
@@ -156,7 +156,7 @@ struct continuation {
     struct delivery_public_projection *projection;
     char source_generation[65];
     double source_deadline;
-    unsigned guest_requested, guest_reply, guest_complete, guest_has_variant;
+    unsigned guest_requested, guest_reply, guest_complete, guest_has_variant, guest_declined;
     char *guest_policy, *guest_epoch, *guest_key, *guest_canonical;
     unsigned cookie_delivery;
     unsigned debug_fallback;
@@ -659,6 +659,9 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         for (i = 0; i < 6; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
         d->restart = ctx->req->restarts; d->phase = D_PREPARE;
         d->source_stage = d->source_next ? d->source_next : SOURCE_PERSONAL;
+        if (d->source_declined && d->guest_requested) {
+            guest_disable(ctx); d->guest_requested = 0;
+        }
         d->source_resolved_response = 0; d->sent = d->complete = 0;
         /* This no-resolver gate rejoins the original lookup namespace. A
          * changed actual tuple requires explicit resolver/reselection, not an
@@ -710,6 +713,8 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         return 1;
     }
     if (d->phase == D_RETURN && ctx->req->restarts == d->restart+(d->selection_entry ? 1 : 2)) {
+        struct guest_request *g = guest_context(ctx);
+        if (g) g->filling = 0;
         d->phase = D_READY;
         return 0;
     }
@@ -888,15 +893,22 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
                 http_ForceHeader(ctx->http_bereq,h_wordpress_policy,d->wordpress_policy);
                 http_ForceHeader(ctx->http_bereq,h_selection_actions,d->selection_actions);
                 http_ForceHeader(ctx->http_bereq,h_selection_scope,d->selection_scope);
-                if (d->guest_requested) {
+                if (d->guest_requested && d->source_stage != SOURCE_CAPTURE && d->source_stage != SOURCE_RESOLVER) {
                     http_ForceHeader(ctx->http_bereq,h_guest_version,"1");
                     http_ForceHeader(ctx->http_bereq,h_guest_policy,d->guest_policy);
                     http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Guest-Publication-Canonical-URL"),d->guest_canonical);
+                } else {
+                    http_Unset(ctx->http_bereq,h_guest_version);
+                    http_Unset(ctx->http_bereq,h_guest_policy);
+                    http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Guest-Publication-Canonical-URL"));
                 }
             }
-            if (d->source_stage == SOURCE_CAPTURE && d->source_cookie && *d->source_cookie)
+            if ((d->source_stage == SOURCE_CAPTURE ||
+                    (d->guest_requested && d->source_projected && d->source_stage == SOURCE_PERSONAL)) &&
+                    d->source_cookie && *d->source_cookie)
                 http_ForceHeader(ctx->http_bereq,H_Cookie,d->source_cookie);
             else if (d->source_stage != SOURCE_CAPTURE &&
+                !(d->guest_requested && d->source_projected && d->source_stage == SOURCE_PERSONAL) &&
                 ((d->resolver_cookie && *d->resolver_cookie) || (!d->resolver_cookie && d->cookie)))
                 http_ForceHeader(ctx->http_bereq,H_Cookie,delivery_personal_cookie(d));
             else http_Unset(ctx->http_bereq,H_Cookie);
@@ -1223,8 +1235,9 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
                 "UltraCache delivery rejected: stage=prepare role=%s reason=%s",role,reason);
             d->phase = D_FAILED; return -1;
         }
-        if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) {
+        if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER || d->guest_declined) {
             if (ctx->req->restarts+1 > ctx->req->max_restarts) { d->phase = D_FAILED; return -1; }
+            d->guest_declined = 0;
             d->phase = D_SOURCE_PERSONAL_QUEUED;
             return 1; /* Only the next real personal prepare can complete delivery. */
         }
@@ -1259,7 +1272,8 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
             !http_GetHdr(ctx->http_req,h_adapter_site,&site) || !d->site || strcmp(site,d->site) ||
             !http_GetHdr(ctx->http_req,H_Host,&host) || strcmp(host,d->host) ||
             strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b) || strcmp("GET",ctx->http_req->hd[HTTP_HDR_METHOD].b) ||
-            ctx->req->restarts != (d->recovery_restart ? d->recovery_restart : d->restart+1)) {
+            ctx->req->restarts != (d->recovery_restart ? d->recovery_restart : d->restart+1) ||
+            !delivery_append_cookies(ctx,d)) {
             d->phase = D_FAILED; return -1;
         }
         d->phase = D_DELIVERED;

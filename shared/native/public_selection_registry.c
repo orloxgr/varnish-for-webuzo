@@ -283,20 +283,21 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRI
     char digest[65];
     int shared = g && !g->eligible && g->original_cookie &&
         delivery_selection_all_shared(g->original_cookie,rules);
-    if (g && g->original_cookie && !g->disabled && !g->key && !shared)
-        VSLb(ctx->vsl,SLT_Debug,"uc-guest-inputs candidate=stateful reason=effective-cookie-action");
-    if (!g || (!g->eligible && !shared) || g->disabled || g->key || ctx->req->esi_level ||
+    int public = g && !g->eligible && !shared && g->original_cookie &&
+        delivery_selection_all_public(g->original_cookie,rules);
+    if (!g || (!g->eligible && !shared && !public) || g->disabled || g->key || ctx->req->esi_level ||
         !site || !public_policy(policy) || !http_GetHdr(ctx->http_req,H_Host,&host)) return;
     pthread_mutex_lock(&lock);
     p = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
-    if (p && *p->guest_policy) {
+    if (p && *p->guest_policy && (!public || (p->public_source && p->public_projection))) {
         g->policy = strdup(p->guest_policy); g->wordpress_policy = strdup(p->wordpress_policy);
         g->scope = strdup(p->scope); g->epoch = strdup(public_registry_epoch);
+        g->projected_fill = !shared && p->public_source && p->public_projection;
     }
     pthread_mutex_unlock(&lock);
     if (!g->policy) return;
     g->site = strdup(site); g->host = strdup(host); g->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b);
-    g->shared_candidate = shared;
+    g->shared_candidate = shared || public;
     if (!g->wordpress_policy || !g->scope || !g->epoch || !g->site || !g->host || !g->url) {
         VRT_fail(ctx,"Guest policy snapshot unavailable"); return;
     }
@@ -304,14 +305,28 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRI
     if (!identity || !delivery_selection_digest((const unsigned char *)identity,strlen(identity),digest) ||
         !(g->key = strdup(digest))) VRT_fail(ctx,"Guest namespace unavailable");
     else {
-        /* All candidate actions are Shared under the existing resolver. Only
-         * this guest namespace uses the empty guest Vary projection. Preserve
-         * ORIGINAL Cookie for the later typed proof and normal fallback; the
-         * restart's ordinary classifier reconstructs its normal Vary fields. */
-        http_Unset(ctx->http_req,HDR("X-SCP-Vary-Cookie"));
-        http_Unset(ctx->http_req,HDR("X-SCP-Vary-ESI-Cookie"));
+        /* Shared has an empty public projection. Variant keeps its classified
+         * Vary carriers AND explicit hash; original input remains separate. */
+        if (!public) {
+            http_Unset(ctx->http_req,HDR("X-SCP-Vary-Cookie"));
+            http_Unset(ctx->http_req,HDR("X-SCP-Vary-ESI-Cookie"));
+        }
         if (shared) VSLb(ctx->vsl,SLT_Debug,"uc-guest-inputs candidate=shared");
     }
+}
+
+/* The same declared provider-input equality applies to a newly compiled
+ * projected guest as to a cached guest. Cookie actions do not prove identity. */
+static int guest_fill_inputs_equal(const struct delivery_reuse_recipe *recipe, const char *cookie) {
+    unsigned char *empty = NULL, *actual = NULL;
+    size_t empty_length = 0, actual_length = 0;
+    int valid = recipe &&
+        delivery_reuse_input_projection(recipe->inputs,NULL,0,&empty,&empty_length) == DELIVERY_REUSE_INPUT_OK &&
+        delivery_reuse_input_projection(recipe->inputs,(const unsigned char *)cookie,cookie ? strlen(cookie) : 0,
+            &actual,&actual_length) == DELIVERY_REUSE_INPUT_OK &&
+        actual_length == empty_length && !memcmp(actual,empty,empty_length);
+    delivery_reuse_frame_free(empty,empty_length); delivery_reuse_frame_free(actual,actual_length);
+    return valid;
 }
 
 /* Attach evidence to the authenticated complete publication owner. A cache
@@ -416,7 +431,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         !http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
     if (reselect && (!d->site || strcmp(d->site,site) || !d->host || strcmp(d->host,host) ||
         !d->url || strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b))) return -1;
-    if (!reselect && g && g->shared_candidate && !g->disabled) return 0; /* lookup only, never guest origin */
+    if (!reselect && g && g->shared_candidate && !g->projected_fill && !g->disabled) return 0;
     pthread_mutex_lock(&lock); declaration = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
     found = declaration != NULL;
     if (found) {
@@ -433,7 +448,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         !public_projection_lookup_variant(ctx,rules,g)) {
         free(actions); free(wordpress_policy); free(scope); return -1;
     }
-    guest = !reselect && g && g->eligible && !g->disabled && g->key &&
+    guest = !reselect && g && (g->eligible || g->projected_fill) && !g->disabled && g->key &&
         !strcmp(g->wordpress_policy,wordpress_policy) && !strcmp(g->scope,scope);
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
      * prepares on an actual cold MISS, leaving plain warm HITs alone. */
@@ -472,6 +487,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
      * authenticated current selection may legitimately update Vary cookies. */
     d->projected_lookup = projection_available;
     if (guest) {
+        g->filling = 1;
         d->guest_requested = 1; d->guest_has_variant = has_variant;
         d->guest_policy = strdup(g->policy); d->guest_epoch = strdup(g->epoch); d->guest_key = strdup(g->key);
         delivery_copy_header(ctx->http_req,HDR("X-SCP-Key-URL"),&d->guest_canonical);
@@ -495,7 +511,8 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     /* Same existing document eligibility; unresolved public resolvers retain
      * their existing actual route resolution. Generic Variant cookies are
      * projected by policy, never by a provider allowlist. */
-    if (!reselect && cold && !guest && (!has_variant || projection_available) && source_available &&
+    if (!reselect && cold && (!guest || (g && g->projected_fill)) &&
+        (!has_variant || projection_available) && source_available &&
         delivery_header_equals(ctx->http_req,HDR("X-SCP-Selection-Eligible"),"1")) {
         if (!delivery_copy_header(ctx->http_req,HDR("X-SCP-Key-URL"),&d->source_url) ||
             !delivery_selection_scope_matches(d->selection_scope,d->source_url) ||
@@ -525,6 +542,14 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     for (i = 1; i < 5; ++i) http_Unset(ctx->http_req,conditional_headers[i]);
     return WS_Overflowed(ctx->ws) ? -1 : 1;
 }
+static int guest_resume_personal(VRT_CTX, struct continuation *d) {
+    /* Existing original-input continuation, not another owner/renderer. Never
+     * publish a projected guest whose private inputs differ from this visitor. */
+    delivery_selection_free(d->selection); d->selection = NULL;
+    guest_disable(ctx); d->guest_requested = d->guest_reply = 0;
+    d->guest_declined = 1; d->source_next = SOURCE_PERSONAL;
+    return 1;
+}
 static int public_selection_parse(VRT_CTX, struct continuation *d) {
     struct delivery_public_selection *s;
     struct delivery_header *header;
@@ -533,7 +558,13 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
         if (!d->guest_requested) { d->diagnostic_reason = "guest-not-requested"; return 0; }
         if (!delivery_guest_selection_parse_diagnostic(d->body,d->length,d->request_id,d->url,
             d->selection_policy,d->wordpress_policy,d->guest_policy,d->guest_epoch,d->selection_scope,&d->selection,&d->diagnostic_reason)) return 0;
+        if (d->source_projected) {
+            const struct guest_request *g = guest_context(ctx);
+            if (g && g->original_cookie && !guest_fill_inputs_equal(d->selection->guest_inputs,g->original_cookie))
+                return guest_resume_personal(ctx,d);
+        }
     } else {
+        if (d->guest_requested && d->source_projected) return guest_resume_personal(ctx,d);
         if (d->source_projected) {
             struct delivery_public_projection *resolved = NULL;
             if (!delivery_projected_selection_parse_diagnostic(d->body,d->length,d->request_id,d->url,
@@ -552,8 +583,11 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
     if (d->source_projected && (d->source_unstable ||
         !delivery_public_projection_equal(s->resolved,d->projection))) { d->diagnostic_reason = "selection-public-projection"; return 0; }
     if (d->source_stage == SOURCE_PERSONAL && !d->source_declined &&
-        (!d->source_manifest || strcmp(s->manifest,d->source_manifest) ||
-         strcmp(s->parent->generation,d->source_generation))) { d->diagnostic_reason = "selection-source-binding"; return 0; }
+        (!d->source_manifest ||
+         strcmp(s->guest ? s->guest_source_manifest : s->manifest,d->source_manifest) ||
+         strcmp(s->guest ? s->guest_source_generation : s->parent->generation,d->source_generation))) {
+        d->diagnostic_reason = "selection-source-binding"; return 0;
+    }
     d->guest_complete = s->guest;
     if (!delivery_selection_candidate(s,d->resolver_cookie ? d->resolver_cookie : d->cookie,d->selection_rules,&d->candidate)) {
         d->diagnostic_reason = "selection-cookie-candidate"; return 0;
@@ -584,6 +618,13 @@ static int public_selection_parse(VRT_CTX, struct continuation *d) {
     }
     d->cookie_delivery = s->cookie_delivery;
     guest_inputs_remember(ctx,d,s);
+    if (d->guest_complete && d->source_projected) {
+        struct guest_request *g = guest_context(ctx);
+        if (g && g->shared_candidate) {
+            if (!delivery_selection_digest((const unsigned char *)d->manifest,strlen(d->manifest),g->shared_manifest)) return 0;
+            g->shared_proved = 1; /* same input proof, bound to this fill's manifest */
+        }
+    }
     d->snapshot_ready = d->recovery_ready = 1;
     return 1;
 }

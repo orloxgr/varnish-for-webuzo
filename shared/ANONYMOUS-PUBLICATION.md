@@ -391,8 +391,9 @@ lifetime. Its ORIGINAL Cookie is projected through the publication's actual type
 provider inputs and must equal the original empty-guest projection. An unrelated
 Shared analytics cookie can reuse the complete body immediately. A Shared Woo,
 authentication or other provider input that changes presence/value retains the
-stateful route; present-empty is not absence. Explicit Private and Variant
-decisions do not enter this extended candidate namespace. A complete native-proved
+stateful route; present-empty is not absence. Explicit Private decisions never
+enter this candidate namespace. Variant decisions require the existing typed
+public-source declaration described below. A complete native-proved
 guest object is already composed and does not need an ESI-parent marker.
 Only the guest candidate's derived Cookie Vary projection is empty, consistently
 with those Shared decisions; the original Cookie remains intact. An ineligible
@@ -405,11 +406,41 @@ scope, epoch, object provenance or expiry prevents its use. No full recipe is pu
 in an HTTP metadata header. No additional service, per-HIT PHP operation, cookie
 issuance, TTL/resource setting or manual configuration is introduced.
 
-A candidate MISS, missing evidence or unequal input projection takes one exact
+A Shared-only candidate MISS, missing evidence or unequal input projection takes one exact
 request-owned native restart into ordinary stateful selection. It never forwards
 a Cookie-bearing request to the legacy no-Cookie guest producer and never removes
 the original Cookie. Only that original site/host/URL/method can resume across the
 existing adapter gateway. An unproven candidate cannot expose guest headers/body.
+
+### Complete guest HTML for a typed public Variant tuple
+
+A declaration supporting both public-source and typed projection can also select
+the guest namespace for active Shared/Variant Cookie inputs. The existing
+explicit Variant hash and classified Vary carriers remain in place. The original
+incoming lookup tuple stays distinct from the issuer's resolved tuple.
+
+On an actual Variant MISS, the same continuation runs `resolver-v1` with original
+visitor input, `parent-v1` with measured Variant-only Cookie and typed projection,
+then the authenticated guest operation with that SAME Variant-only Cookie and
+projection. Guest headers appear only in the final operation; it has no source
+role. There is no new endpoint, version, worker or guessed cookie allowlist.
+
+The existing guest envelope includes `guestPublic.resolvedPublic`, using the
+existing typed projection grammar. Native verifies it against the resolver's
+actual tuple. Existing `sourceManifest` and `sourceGeneration` bind the expanded
+guest HTML to its captured public parent, rather than comparing the expanded
+body's generation to the unexpanded source generation.
+
+For a Cookie-bearing fill, the same complete `guestInputs` recipe must project
+the ORIGINAL provider inputs identically to empty guest input. Missing or unequal
+evidence resumes the existing personal continuation with original non-public
+inputs and actual resolver-selected public values; no projected guest is
+published. A producer declining the guest operation also rejoins that owner.
+Literal no-Cookie fill does not acquire a mandatory recipe requirement.
+During resolver/source preparation, the lookup-only Shared fallback does not
+interrupt this owned fill. Its first snapshot response uses the just-validated
+input proof bound to the exact guest manifest; subsequent HITs use the normal
+cached publication evidence. Real resolver response cookies stay request-owned.
 
 Native mock transport tests cover this contract and remain distinct from actual
 WordPress/provider/browser acceptance with the matching producer.
