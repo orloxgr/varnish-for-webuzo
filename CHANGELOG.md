@@ -5,7 +5,7 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
-## Unreleased
+## 0.13.22 — 2026-11-25
 
 - Remove the redundant cookie database status panel and its exclusive actions.
 - Add source privacy checks in CI and before packaging.
