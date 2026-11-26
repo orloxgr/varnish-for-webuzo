@@ -19,16 +19,18 @@ DELIVERY = 'X-UltraCache-Warm-Delivery'
 FORMATS = ('text/html', 'text/html,image/webp', 'text/html,image/avif,image/webp')
 
 
-def proof(path, capabilities, *, accept='', host='example.test', scheme='https', scope='/', key=b'b'*64, **replace):
+def proof(path, capabilities, *, accept='', host='example.test', scheme='https', scope='/', key=b'b'*64, public_only=True, **replace):
     fields = dict(native=capabilities['X-UltraCache-VCL-Public-Selection-Native-Policy'],
         wordpress=capabilities['X-UltraCache-VCL-Public-Selection-WordPress-Policy'],
         guest=capabilities['X-UltraCache-VCL-Guest-Publication-Policy'],
         epoch=capabilities['X-UltraCache-VCL-Public-Selection-Epoch'])
     fields.update(replace)
-    message='\n'.join(('ultracache-warm-projection-v1','parent-v1','GET',host,path,scheme,accept,scope,
+    prefix = ('ultracache-warm-projection-v2','parent-v1','public-parent-only') if public_only else (
+        'ultracache-warm-projection-v1','parent-v1')
+    message='\n'.join((*prefix,'GET',host,path,scheme,accept,scope,
         fields['native'],fields['wordpress'],fields['guest'],fields['epoch']))
     return {PROJECTION:'parent-v1', AUTHORIZATION:'v1:'+hmac.new(key,message.encode(),hashlib.sha256).hexdigest(),
-        **({'Accept':accept} if accept else {})}
+        **({'Accept':accept} if accept else {}), **({DELIVERY:'public-parent-only'} if public_only else {})}
 
 
 class RecordedGuests(Guests):
@@ -131,9 +133,10 @@ class GuestWarmProjection(unittest.TestCase):
                 self.assertEqual((status, cache(fields), body), (200, expected, BODY))
                 self.assertEqual(dict(fields).get(DELIVERY), 'public-parent-only')
                 self.assertEqual(cookies(fields), [])
-                self.assertEqual(len(app.calls), 2)
+                self.assertEqual(len(app.calls), 3)
+                self.assertNotIn('X-UltraCache-Warm-Guest', dict(fields))
             self.assertEqual([h.get('X-UltraCache-Delivery-Public-Source-Role') for _, h in app.calls],
-                ['resolver-v1', 'parent-v1'])
+                ['resolver-v1', 'parent-v1', None])
             before = len(app.calls)
             bad = proof(path, caps, key=b'wrong')
             bad[DELIVERY] = 'public-parent-only'
@@ -321,7 +324,7 @@ class GuestWarmProjection(unittest.TestCase):
                 self.assertEqual(get('/bad',extra=headers)[0],403)
             header=proof('/bad',caps)
             self.assertEqual(get('/bad','',header)[0],403)
-            for duplicated in (PROJECTION,AUTHORIZATION):
+            for duplicated in (PROJECTION,AUTHORIZATION,DELIVERY):
                 client=http.client.HTTPConnection(*get.endpoint,timeout=15)
                 try:
                     client.putrequest('GET','/bad',skip_host=True)

@@ -20,13 +20,14 @@ struct guest_request {
     unsigned classified, projected_variant_restart;
     char shared_manifest[65];
     unsigned warm_requested, warm_single, warm_checked, warm_valid, warm_delivered;
-    char *warm_projection, *warm_authorization;
+    unsigned warm_guest_filling, warm_guest_populated, warm_public;
+    char *warm_projection, *warm_authorization, *warm_delivery;
     char *key, *policy, *wordpress_policy, *epoch, *scope;
 };
 static void guest_fini(VRT_CTX, void *value) {
     struct guest_request *g = value;
     (void)ctx;
-    free(g->warm_projection); free(g->warm_authorization);
+    free(g->warm_projection); free(g->warm_authorization); free(g->warm_delivery);
     free(g->original_cookie); free(g->site); free(g->host); free(g->url);
     free(g->classified_cookie); free(g->classified_variant); free(g->projected_variant);
     free(g->key); free(g->policy); free(g->wordpress_policy); free(g->epoch); free(g->scope); free(g);
@@ -60,12 +61,16 @@ VCL_VOID vmod_guest_ingress(VRT_CTX) {
     {
         const hdr_t projection = HDR("X-UltraCache-Warm-Projection");
         const hdr_t authorization = HDR("X-UltraCache-Warm-Projection-Authorization");
+        const hdr_t delivery = HDR("X-UltraCache-Warm-Delivery");
         const char *value;
         unsigned fields = http_CountHdr(ctx->http_req,projection), proofs = http_CountHdr(ctx->http_req,authorization);
-        g->warm_requested = fields || proofs;
-        g->warm_single = fields == 1 && proofs == 1;
+        unsigned deliveries = http_CountHdr(ctx->http_req,delivery);
+        g->warm_requested = fields || proofs || deliveries;
+        g->warm_single = fields == 1 && proofs == 1 && deliveries <= 1;
+        g->warm_public = deliveries != 0;
         if (http_GetHdr(ctx->http_req,projection,&value)) g->warm_projection = strdup(value);
         if (http_GetHdr(ctx->http_req,authorization,&value)) g->warm_authorization = strdup(value);
+        if (http_GetHdr(ctx->http_req,delivery,&value)) g->warm_delivery = strdup(value);
     }
 }
 static void guest_disable(VRT_CTX) {
@@ -76,7 +81,8 @@ VCL_STRING vmod_guest_key(VRT_CTX) {
     struct guest_request *g;
     if (ctx->req->esi_level) return NULL;
     g = guest_context(ctx);
-    return g && !g->disabled && g->key ? WS_Copy(ctx->ws,g->key,-1) : NULL;
+    return g && (!g->disabled || (g->warm_valid && g->warm_guest_filling)) && g->key
+        ? WS_Copy(ctx->ws,g->key,-1) : NULL;
 }
 VCL_BOOL vmod_guest_shared_pending(VRT_CTX) {
     struct guest_request *g = guest_context(ctx);
@@ -103,7 +109,12 @@ VCL_BOOL vmod_guest_warm_parent_result(VRT_CTX) {
     struct guest_request *g;
     if (ctx->req->esi_level) return 0;
     g = guest_context(ctx);
-    return g && g->warm_valid && g->disabled && !g->key;
+    return g && g->warm_valid && g->disabled;
+}
+
+VCL_BOOL vmod_guest_warm_public_result(VRT_CTX) {
+    const struct guest_request *g = guest_context(ctx);
+    return vmod_guest_warm_parent_result(ctx) && g->warm_public;
 }
 
 VCL_STRING vmod_guest_issuer_authorization(VRT_CTX, VCL_STRING credential, VCL_STRING canonical) {
@@ -146,7 +157,7 @@ struct continuation {
     unsigned snapshot_ready, snapshot_mode;
     unsigned selection_entry;
     unsigned reselect_attempted, conflict_verified;
-    unsigned cold_entry, projected_lookup, warm_parent_only;
+    unsigned cold_entry, projected_lookup, warm_parent_only, warm_pair;
     enum public_source_stage source_stage;
     enum public_source_stage source_next;
     unsigned source_declined;
@@ -181,6 +192,7 @@ struct continuation {
     struct delivery_public_parent *public_parent; /* same-request public bytes */
     struct delivery_private_document *document;
     struct delivery_public_selection *selection;
+    struct delivery_public_selection *warm_source; /* same Warm owner, until both native fills */
     char reuse_origin_request[65], reuse_origin_challenge[65], reuse_recipe[65];
     char reuse_publication[65], reuse_representation[65];
     char *reuse_scope;
@@ -202,6 +214,7 @@ static const char *delivery_personal_cookie(const struct continuation *d) {
 static int delivery_snapshot_headers(VRT_CTX, struct continuation *);
 static int public_selection_parse(VRT_CTX, struct continuation *);
 static int public_selection_accept(VRT_CTX, struct continuation *);
+static int warm_parent_select(VRT_CTX, struct continuation *);
 static int public_selection_vcl_event(enum vcl_event_e);
 static void reuse_registry_free(void);
 static int delivery_reuse_capture_parent(VRT_CTX, struct continuation *);
@@ -280,6 +293,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     free(d->selection_rules); free(d->selection_policy); free(d->wordpress_policy);
     free(d->selection_actions); free(d->selection_scope); free(d->candidate); free(d->variant); free(d->lookup_variant);
     delivery_selection_free(d->selection);
+    delivery_selection_free(d->warm_source);
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
     free(d->body); delivery_free_fragments(d->fragments);
@@ -389,13 +403,17 @@ static int delivery_parse(VRT_CTX, struct continuation *d) {
              * source in the same request-owned snapshot path as normal
              * selection; never manufacture fragments or replay source cookies. */
             if (ok && d->source_stage == SOURCE_CAPTURE && source->source_only &&
-                vmod_guest_warm_parent_result(ctx)) {
-                d->selection = source; source = NULL;
-                ok = public_selection_accept(ctx,d);
-                if (ok) {
-                    d->warm_parent_only = 1;
-                    d->source_stage = SOURCE_COMPLETE;
-                    if (d->source_deadline < d->public_deadline) d->public_deadline = d->source_deadline;
+                vmod_guest_warm_public_result(ctx)) {
+                if (d->warm_pair) {
+                    d->warm_source = source; source = NULL;
+                } else {
+                    d->selection = source; source = NULL;
+                    ok = public_selection_accept(ctx,d);
+                    if (ok) {
+                        d->warm_parent_only = 1;
+                        d->source_stage = SOURCE_COMPLETE;
+                        if (d->source_deadline < d->public_deadline) d->public_deadline = d->source_deadline;
+                    }
                 }
             }
         }
@@ -1165,7 +1183,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         struct handoff *entry;
         const struct guest_request *g = guest_context(ctx);
         int cookie_delivery, reuse_result;
-        if (!begin && vmod_guest_warm_parent_result(ctx) && target && delivery_relative(target) &&
+        if (!begin && vmod_guest_warm_public_result(ctx) && target && delivery_relative(target) &&
             http_GetStatus(ctx->http_resp) == 200 && !VRT_r_obj_uncacheable(ctx) && VRT_r_obj_ttl(ctx) > 0 &&
             (delivery_header_equals(ctx->http_resp,HDR("X-UltraCache-ESI-Shared-Parent"),"1") || occurrences == 0) &&
             occurrences >= 0) {
@@ -1278,6 +1296,14 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
             application_deadline = d->prepare_response_time+(double)d->public_parent->fresh_remaining;
             if (application_deadline < d->public_deadline) d->public_deadline = application_deadline;
         }
+        if (d->warm_pair && d->guest_complete && d->warm_source) {
+            /* Store the genuine compiled guest under its existing namespace.
+             * The verified raw source remains owned here for the parent fill. */
+            guest_context(ctx)->warm_guest_filling = 1;
+            d->phase = D_RECOVERY_QUEUED;
+            d->recovery_restart = ctx->req->restarts+1;
+            return 1;
+        }
         d->phase = D_RETURN;
         delivery_log_fallback(ctx,d);
         return 1;
@@ -1295,8 +1321,16 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
             !http_GetHdr(ctx->http_req,H_Host,&host) || strcmp(host,d->host) ||
             strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b) || strcmp("GET",ctx->http_req->hd[HTTP_HDR_METHOD].b) ||
             ctx->req->restarts != (d->recovery_restart ? d->recovery_restart : d->restart+1) ||
-            !delivery_append_cookies(ctx,d)) {
+            (!d->warm_pair && !delivery_append_cookies(ctx,d))) {
             d->phase = D_FAILED; return -1;
+        }
+        if (d->warm_pair) {
+            if (!vmod_guest_warm_public_result(ctx) || VRT_r_obj_uncacheable(ctx) || VRT_r_obj_ttl(ctx) <= 0 ||
+                !warm_parent_select(ctx,d)) { d->phase = D_FAILED; return -1; }
+            guest_context(ctx)->warm_guest_populated = 1;
+            d->phase = D_RECOVERY_QUEUED;
+            d->recovery_restart = ctx->req->restarts+1;
+            return 1; /* Same snapshot backend, now the ordinary ESI parent. */
         }
         d->phase = D_DELIVERED;
         return 0; /* Complete guest bytes: no provider cookies or private batch. */
@@ -1321,7 +1355,7 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
         if (d->failed || (d->phase == D_RECOVERY && !d->recovery_received) ||
             !delivery_restore(ctx,d)) { d->phase = D_FAILED; return -1; }
         if (d->warm_parent_only) {
-            if (!vmod_guest_warm_parent_result(ctx)) { d->phase = D_FAILED; return -1; }
+            if (!vmod_guest_warm_public_result(ctx)) { d->phase = D_FAILED; return -1; }
             d->phase = D_DELIVERED;
             guest_context(ctx)->warm_delivered = 1;
             return 0; /* Actual stored parent, no private admission/cookie replay. */
@@ -1341,7 +1375,12 @@ VCL_INT vmod_delivery_deliver(VRT_CTX, struct vmod_priv *priv, VCL_STRING target
 
 VCL_BOOL vmod_delivery_warm_parent_result(VRT_CTX) {
     const struct guest_request *g = guest_context(ctx);
-    return vmod_guest_warm_parent_result(ctx) && g->warm_delivered;
+    return vmod_guest_warm_public_result(ctx) && g->warm_delivered;
+}
+
+VCL_BOOL vmod_delivery_warm_guest_result(VRT_CTX) {
+    const struct guest_request *g = guest_context(ctx);
+    return vmod_delivery_warm_parent_result(ctx) && g->warm_guest_populated;
 }
 
 VCL_STRING vmod_delivery_public_source_outcome(VRT_CTX, struct vmod_priv *priv) {

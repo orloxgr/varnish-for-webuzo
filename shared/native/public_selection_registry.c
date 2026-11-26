@@ -257,6 +257,7 @@ VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL
      * effective Private actions still cannot authorize this projection. */
     if ((!g->eligible && (!g->original_cookie || !delivery_selection_all_public(g->original_cookie,rules))) ||
         !g->warm_single || !g->warm_projection || strcmp(g->warm_projection,"parent-v1") ||
+        (g->warm_public && (!g->warm_delivery || strcmp(g->warm_delivery,"public-parent-only"))) ||
         !g->warm_authorization || strlen(g->warm_authorization) != 67 || strncmp(g->warm_authorization,"v1:",3) ||
         !site || !*site || !public_policy(policy) || !credential || !*credential || ctx->req->restarts ||
         strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") || !delivery_relative(url) ||
@@ -268,8 +269,11 @@ VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL
     http_GetHdr(ctx->http_req,HDR("Accept"),&accept);
     pthread_mutex_lock(&lock);
     p = public_declaration_for_url(site,host,url);
-    if (p && *p->guest_policy && public_policy(public_registry_epoch))
+    if (p && *p->guest_policy && public_policy(public_registry_epoch) && !g->warm_public)
         message = WS_Printf(ctx->ws,"ultracache-warm-projection-v1\nparent-v1\nGET\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s",
+            host,url,scheme,accept ? accept : "",p->scope,policy,p->wordpress_policy,p->guest_policy,public_registry_epoch);
+    if (p && *p->guest_policy && public_policy(public_registry_epoch) && g->warm_public)
+        message = WS_Printf(ctx->ws,"ultracache-warm-projection-v2\nparent-v1\npublic-parent-only\nGET\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s",
             host,url,scheme,accept ? accept : "",p->scope,policy,p->wordpress_policy,p->guest_policy,public_registry_epoch);
     pthread_mutex_unlock(&lock);
     if (!message || !delivery_hmac_sha256((const unsigned char *)credential,strlen(credential),
@@ -435,7 +439,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     struct public_declaration *declaration;
     const char *host = NULL, *method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
     char *names = NULL, *wordpress_policy = NULL, *scope = NULL, *actions;
-    int has_variant, found, guest, source_available = 0, projection_available = 0, before_lookup;
+    int has_variant, found, guest, paired, source_available = 0, projection_available = 0, before_lookup;
     struct guest_request *g = guest_context(ctx);
     unsigned i;
     if ((reselect ? (!d || d->phase != D_RESELECT_READY || !d->reselect_attempted || d->failed ||
@@ -465,6 +469,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     }
     guest = !reselect && g && (g->eligible || g->projected_fill) && !g->disabled && g->key &&
         !strcmp(g->wordpress_policy,wordpress_policy) && !strcmp(g->scope,scope);
+    paired = !reselect && cold && source_available && projection_available && g && g->warm_valid && g->warm_public;
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
      * prepares on an actual cold MISS, leaving plain warm HITs alone. */
     before_lookup = has_variant && !projection_available;
@@ -495,13 +500,23 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         cold = !has_variant;
     }
     d->phase = D_FAILED; d->selection_entry = 1; d->cold_entry = cold;
+    if (paired) {
+        /* Reuse the exact ordinary guest identity constructor. Only this
+         * authenticated Warm may expose its key for the guest snapshot phase. */
+        g->disabled = 0;
+        vmod_guest_select(ctx,site,policy,rules);
+        g->disabled = 1;
+        if (!g->key || ctx->req->max_restarts > UINT_MAX-2) return -1;
+        ctx->req->max_restarts += 2; /* the two owned native snapshot fills */
+        d->warm_pair = 1;
+    }
     /* A projected declaration uses the ordinary public tuple lookup. A
      * verified reselection must return to that same namespace, rather than
      * storing its replacement under a manifest-only key ordinary visits never
      * request. Keep this separate from cold input-invariance validation: an
      * authenticated current selection may legitimately update Vary cookies. */
     d->projected_lookup = projection_available;
-    if (guest) {
+    if (guest || paired) {
         g->filling = 1;
         d->guest_requested = 1; d->guest_has_variant = has_variant;
         d->guest_policy = strdup(g->policy); d->guest_epoch = strdup(g->epoch); d->guest_key = strdup(g->key);
@@ -511,7 +526,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     d->selection_scope = scope;
     d->selection_policy = strdup(policy); d->selection_rules = strdup(rules ? rules : "");
     if (!reselect) { d->url = strdup(ctx->http_req->hd[HTTP_HDR_URL].b); d->site = strdup(site); }
-    if ((guest && (!d->guest_policy || !d->guest_epoch || !d->guest_key || !d->guest_canonical)) ||
+    if (((guest || paired) && (!d->guest_policy || !d->guest_epoch || !d->guest_key || !d->guest_canonical)) ||
         !d->selection_policy || !d->selection_rules || !d->url || !delivery_relative(d->url) || !d->site ||
         (!reselect && (!delivery_copy_header(ctx->http_req,H_Host,&d->host) || !d->host ||
         !delivery_copy_header(ctx->http_req,H_Cookie,&d->cookie) ||
@@ -558,6 +573,9 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     return WS_Overflowed(ctx->ws) ? -1 : 1;
 }
 static int guest_resume_personal(VRT_CTX, struct continuation *d) {
+    /* Declining an anonymous COMPLETE proof cannot authorize personal Warm
+     * delivery. Its already-verified raw source can still fill the parent. */
+    if (d->warm_pair && d->warm_source) return warm_parent_select(ctx,d);
     /* Existing original-input continuation, not another owner/renderer. Never
      * publish a projected guest whose private inputs differ from this visitor. */
     delivery_selection_free(d->selection); d->selection = NULL;
@@ -644,6 +662,26 @@ static int public_selection_accept(VRT_CTX, struct continuation *d) {
         }
     }
     d->snapshot_ready = d->recovery_ready = 1;
+    return 1;
+}
+static int warm_parent_select(VRT_CTX, struct continuation *d) {
+    struct guest_request *g = guest_context(ctx);
+    if (!vmod_guest_warm_public_result(ctx) || !d->warm_source ||
+        !d->warm_source->source_only || d->source_declined || d->source_unstable) return 0;
+    delivery_selection_free(d->selection); d->selection = d->warm_source; d->warm_source = NULL;
+    delivery_public_parent_free(d->public_parent); d->public_parent = NULL;
+    delivery_free_fragments(d->fragments); d->fragments = NULL;
+    clear_fields(d->public_headers); d->public_headers = NULL;
+    free(d->target); d->target = NULL; free(d->manifest); d->manifest = NULL;
+    free(d->candidate); d->candidate = NULL; free(d->variant); d->variant = NULL;
+    d->guest_requested = d->guest_reply = d->guest_complete = d->guest_declined = 0;
+    g->warm_guest_filling = 0;
+    d->warm_parent_only = 1;
+    d->source_stage = SOURCE_COMPLETE;
+    if (!public_selection_accept(ctx,d)) return 0;
+    if (d->source_deadline < d->public_deadline) d->public_deadline = d->source_deadline;
+    d->recovery_sent = d->recovery_received = d->snapshot_mode = 0;
+    d->parent = NULL;
     return 1;
 }
 VCL_BOOL vmod_selection_cold(VRT_CTX, struct vmod_priv *priv) {

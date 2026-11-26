@@ -1,5 +1,32 @@
 # Verification
 
+## Paired Warm and authenticated opt-in — 26 November 2026
+
+Twenty distinct native methods passed without final skips: four paired
+fill/protocol methods, twelve existing Warm methods, an ordinary projected guest
+method, a normal public-source method and two full private-reuse methods.
+The paired methods first established the actual cold path with one resolver,
+one source and one genuine anonymous compilation. They checked the exact raw
+parent, two ordinary guest HITs, hot parent with no origin work, independent
+source/guest lifetimes, normal private owners and exact invalidation. A COMPLETE
+envelope bound to the wrong source failed without claiming guest population.
+
+Capability negotiation and the new canonical HMAC opt-in passed. Adding,
+removing, changing or duplicating the opt-in without the matching proof fails;
+an original signed v1 client still receives normal personal parent delivery and
+`verified` outcome. The legacy mock fixture was corrected to return the same
+public source generation during its personal rendering; the projected source
+fixture now accounts for the genuine guest attempt it declines.
+
+The installed-engine source/ABI signature for this isolated Varnish 9.1 run was
+`d25168998d11efb582c6b2d9d606f5332c7beff4fac8e2ff4d9515538094afad`.
+All four paired/protocol methods also passed from actual candidate ZIP-extracted
+product sources (15.185 seconds), with the same native source/ABI identity.
+No live service or configuration was changed. These controlled-producer tests
+do not establish actual WordPress Warm timing or browser acceptance; the matching
+WordPress ordering and verifier still require coordinated qualification. See
+[the protocol](WARM-PROTOCOL.md) and [issue #17](https://github.com/orloxgr/varnish-for-webuzo/issues/17).
+
 ## Authenticated public-parent-only Warm — 26 November 2026
 
 Seventeen distinct focused native methods passed without skips on an isolated

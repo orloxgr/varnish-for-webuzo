@@ -5,6 +5,19 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.25 — 2026-11-26
+
+- Use one verified resolver/source capture in authenticated Warm to populate the
+  ordinary ESI parent and a genuinely compiled COMPLETE guest as separate native
+  objects through the existing request-owned snapshot backend.
+- Preserve each object's own source, context, generation and remaining lifetime.
+  Personal visitor delivery and anonymous guest claims keep their normal owners.
+- Negotiate the public-only Warm opt-in through an advertised capability and a
+  v2 canonical HMAC message. Clients using the original signed `parent-v1` request
+  retain normal personal delivery and its original verification contract.
+- Report genuine guest population separately; the application still verifies
+  an ordinary guest GET/HIT and the exact public parent body.
+
 ## 0.13.24 — 2026-11-26
 
 - Refill authenticated UltraCache `parent-v1` Warm requests without personal

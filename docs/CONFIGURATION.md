@@ -183,11 +183,17 @@ the shipped VCL for existing sites; **Refresh sites** runs that same normal
 reconciliation if required. Do not deactivate the addon to perform an upgrade:
 deactivation removes its active Varnish setup.
 
-Version 0.13.24 adds a public-parent-only result to the existing signed
-`parent-v1` Warm request. Use the matching UltraCache WordPress verifier to check
-the exact parent body, actual context and a fresh native HIT. This is a Warm-only
-response: it does not execute or claim verification of personal fragments or
-cookie delivery. Ordinary visits still use the stored ESI parent and their
+Version 0.13.25 advertises the authenticated public-only Warm capability.
+Matching UltraCache clients opt in with the v2 signed message described in
+[the protocol](WARM-PROTOCOL.md). The original signed `parent-v1` request without
+this opt-in retains its normal personal delivery and verification contract.
+
+An opted-in cold Warm uses one verified public source to populate the ordinary
+ESI parent and a genuinely compiled COMPLETE guest. These remain separate native
+objects with their own lifetimes and context bindings. The parent response
+contains the exact raw source bytes and does not claim personal fragment or
+cookie execution. The application checks that body and a fresh native HIT, then
+independently verifies an ordinary guest GET/HIT. Ordinary visits keep their
 normal private composition. No additional setting, route, queue or service is
 needed. A manual VCL edit or Varnish restart is not part of this upgrade.
 

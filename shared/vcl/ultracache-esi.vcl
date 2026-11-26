@@ -345,7 +345,7 @@ sub scp_ultracache_deliver {
         set req.http.X-SCP-Fragment-HTTP-Failure = resp.status;
         return (synth(resp.status, "UltraCache fragment unavailable"));
     }
-    if (cookie_handoff.guest_warm_parent_result()) {
+    if (cookie_handoff.guest_warm_public_result()) {
         # Drive an existing cold snapshot continuation, but never begin a
         # personal continuation on a hot authenticated parent refill.
         set req.http.X-SCP-Delivery-State = cookie_handoff.delivery_deliver(
@@ -381,6 +381,9 @@ sub scp_ultracache_deliver {
         # for the ordinary visitor. Set before any delivery filters are read.
         set resp.do_esi = false;
         set resp.http.X-UltraCache-Warm-Delivery = "public-parent-only";
+        if (cookie_handoff.delivery_warm_guest_result()) {
+            set resp.http.X-UltraCache-Warm-Guest = "populated";
+        }
     }
     if (resp.http.X-UltraCache-Cookie-Delivery == "1") { call scp_private_delivery; }
     unset resp.http.X-UltraCache-Delivery-Prepare;

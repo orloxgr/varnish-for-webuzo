@@ -81,6 +81,7 @@ sub scp_selection_capabilities {
         req.http.X-UltraCache-Operation == "capabilities") {
         if (req.http.X-SCP-Warm-Projection-Supported == "1") {
             set resp.http.X-UltraCache-VCL-Warm-Projection-Version = "1";
+            set resp.http.X-UltraCache-VCL-Warm-Delivery-Version = "1";
         }
         set resp.http.X-UltraCache-VCL-Capabilities = resp.http.X-UltraCache-VCL-Capabilities + ",public-selection";
         set resp.http.X-UltraCache-VCL-Public-Selection-Version = "1";
@@ -160,6 +161,7 @@ sub scp_selection_recv {
 sub scp_selection_origin {
     if (bereq.http.X-SCP-Warm-Projection-Supported == "1") {
         set bereq.http.X-UltraCache-VCL-Warm-Projection-Version = "1";
+        set bereq.http.X-UltraCache-VCL-Warm-Delivery-Version = "1";
     }
     unset bereq.http.X-SCP-Warm-Projection-Supported;
     # Hints cannot authorize an operation. Registration needs a successful

@@ -352,11 +352,23 @@ $Restrict vcl_deliver
 Current top-level delivery selected the parent with an authenticated Warm proof.
 This observation is request-owned, never cached parent metadata.
 
+$Function BOOL guest_warm_public_result()
+$Restrict vcl_deliver
+
+The parent Warm proof also authenticated its public-parent-only opt-in under
+the v2 canonical HMAC message. Legacy parent-v1 retains normal personal delivery.
+
 $Function BOOL delivery_warm_parent_result()
 $Restrict vcl_deliver
 
 The authenticated Warm owner completed a public-parent-only delivery. This
 request-owned observation does not claim any personal fragment admission.
+
+$Function BOOL delivery_warm_guest_result()
+$Restrict vcl_deliver
+
+The same authenticated owner stored a genuine COMPLETE guest object before
+delivering its raw parent. An ordinary guest GET must independently verify HIT.
 
 $Function STRING guest_key()
 $Restrict vcl_recv vcl_hash vcl_hit vcl_deliver

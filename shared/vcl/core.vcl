@@ -35,7 +35,9 @@ sub scp_init {
     unset req.http.X-SCP-Warm-Projection-Supported;
     unset req.http.X-UltraCache-Warm-Projection;
     unset req.http.X-UltraCache-Warm-Projection-Authorization;
+    unset req.http.X-UltraCache-Warm-Delivery;
     unset req.http.X-UltraCache-VCL-Warm-Projection-Version;
+    unset req.http.X-UltraCache-VCL-Warm-Delivery-Version;
     unset req.http.X-SCP-Guest-Issuer;
     unset req.http.X-SCP-Guest-Issuer-Canonical;
     unset req.http.X-SCP-Guest-Issuer-Query;
@@ -431,6 +433,7 @@ sub scp_deliver {
     unset resp.http.X-UltraCache-Warm-Projection;
     unset resp.http.X-UltraCache-Warm-Projection-Authorization;
     unset resp.http.X-UltraCache-Warm-Delivery;
+    unset resp.http.X-UltraCache-Warm-Guest;
     if (cookie_handoff.guest_warm_parent_result()) {
         set resp.http.X-UltraCache-Warm-Projection = "parent-v1";
     }
