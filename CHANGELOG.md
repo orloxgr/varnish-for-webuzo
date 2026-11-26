@@ -5,6 +5,14 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.7 — 2026-11-26
+
+- Retain large outbound delivery URL and manifest header lines on their existing
+  backend task, freeing them after unsetting their HTTP references on completion,
+  retry or abort. Preserve response-receive workspace without changing limits.
+- Reproduce the former intermittent large-batch overflow with a coalesced origin
+  response; verify the same request succeeds with unchanged protocol values.
+
 ## 0.13.27-dev.6 — 2026-11-26
 
 - Support negotiated self-contained compressed fragment batches, using the

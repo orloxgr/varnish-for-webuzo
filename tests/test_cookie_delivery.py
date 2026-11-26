@@ -20,7 +20,7 @@ def policy_for_choices(profile,choices):
 
 
 @contextlib.contextmanager
-def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None,management=False,daemon_parameters=(),allow_post=False,request_body=False):
+def proxy(profile, respond, transform=None, configuration=None,policies=None,site_settings=None,other_profile=None,management=False,daemon_parameters=(),allow_post=False,request_body=False,coalesce_response=False):
     """An isolated origin and daemon; never load/restart the installed service."""
     class Origin(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -45,9 +45,16 @@ def proxy(profile, respond, transform=None, configuration=None,policies=None,sit
             self.send_header('Connection', 'close')
             for name, value in headers:
                 self.send_header(name, value)
-            self.end_headers()
+            combined = coalesce_response and not streaming
+            if combined:
+                self._headers_buffer.append(b'\r\n')
+            else:
+                self.end_headers()
             try:
-                if streaming:
+                if combined:
+                    self.wfile.write(b''.join(self._headers_buffer)+body)
+                    self._headers_buffer = []
+                elif streaming:
                     for chunk in body:
                         self.wfile.write(chunk);self.wfile.flush()
                 else:self.wfile.write(body)

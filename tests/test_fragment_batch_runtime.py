@@ -91,7 +91,7 @@ class NativeFragmentBatch(unittest.TestCase):
             self.assertEqual(headers.get('X-UltraCache-Delivery-Phase'), 'fragment-prepare')
             return self.response(headers, wire, [dict(item, html='output-'+str(i))
                 for i, item in enumerate(value['fragments'])])
-        with proxy('ultracache', origin) as get:
+        with proxy('ultracache', origin, coalesce_response=True) as get:
             self.register(get)
             result = get(uri)
             self.assertEqual(result[0], 200, result)

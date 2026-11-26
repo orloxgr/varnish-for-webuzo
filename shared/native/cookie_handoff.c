@@ -28,6 +28,7 @@ struct task {
     char *control_body; size_t control_length;
     char *cookie_variant, *cookie_variant_names; size_t cookie_variant_length;
     struct mutation_execution *mutation;
+    struct fields *backend_headers; /* backend PRIV_TASK owns outbound strings */
 };
 static void mutation_task_fini(VRT_CTX, struct task *);
 #define BUCKETS 1024
@@ -38,6 +39,39 @@ static unsigned live;
 
 static void clear_fields(struct fields *p) {
     while (p) { struct fields *next = p->next; free(p->line); free(p); p = next; }
+}
+
+/* Large protocol inputs already belong to the continuation. Their outbound
+ * header lines must survive the fetch, but need not consume the same bounded
+ * workspace used to receive the producer response. Like mutation->header,
+ * retain these copies on the backend task, including superseded retry inputs,
+ * until its normal/abort/retry finalizer releases them. */
+static int backend_task_header(struct task *task, struct http *http,
+    hdr_t name, const char *value) {
+    struct fields *field;
+    size_t prefix, length;
+    if (!task || !value) return 0;
+    if (http_HdrIs(http,name,value)) return 1;
+    prefix = strlen(name->str); length = strlen(value);
+    if (length > SIZE_MAX-2 || prefix > SIZE_MAX-length-2 ||
+        !(field = calloc(1,sizeof(*field)))) return 0;
+    field->line = malloc(prefix+length+2);
+    if (!field->line) { free(field); return 0; }
+    memcpy(field->line,name->str,prefix); field->line[prefix] = ' ';
+    memcpy(field->line+prefix+1,value,length+1);
+    http_Unset(http,name);
+    if (http->nhd >= http->shd) { clear_fields(field); return 0; }
+    field->next = task->backend_headers; task->backend_headers = field;
+    http_SetHeader(http,field->line);
+    return 1;
+}
+
+static void backend_task_headers_fini(VRT_CTX, struct task *task) {
+    if (task->backend_headers && ctx && ctx->http_bereq) {
+        http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Original-URL"));
+        http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Manifest"));
+    }
+    clear_fields(task->backend_headers); task->backend_headers = NULL;
 }
 
 static void close_owner(struct task *task) {
@@ -57,6 +91,7 @@ static void close_owner(struct task *task) {
 static void task_fini(VRT_CTX, void *value) {
     struct task *task = value;
     mutation_task_fini(ctx,task);
+    backend_task_headers_fini(ctx,task);
     close_owner(task); free(task->control_body); free(task->cookie_variant); free(task->cookie_variant_names); free(task);
 }
 
@@ -79,6 +114,7 @@ VCL_VOID vmod_reset(VRT_CTX, struct vmod_priv *priv) {
     if (priv->priv) {
         struct task *task = priv->priv;
         mutation_task_fini(ctx,task);
+        backend_task_headers_fini(ctx,task);
         close_owner(task); free(task->control_body); free(task->cookie_variant); free(task->cookie_variant_names); free(task); priv->priv = NULL;
     }
 }
