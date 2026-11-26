@@ -5,6 +5,15 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.26 — 2026-11-26
+
+- Share public HTML across WordPress admin preference cookies (`wp-settings-`,
+  `wp-settings-time-`, `wp_lang`) and the Complianz saved bookkeeping snapshots
+  (`cmplz_saved_categories`, `cmplz_saved_services`) in both profiles.
+- Bundle source-reviewed reasons in the existing catalogue and generator.
+  Preserve original cookies, saved site/central choices, authentication and
+  actual consent selectors; `cmplz_id` remains Variant.
+
 ## 0.13.25 — 2026-11-26
 
 - Use one verified resolver/source capture in authenticated Warm to populate the

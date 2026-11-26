@@ -1,0 +1,67 @@
+{
+  "baselineCommit": "4c4798314ad056c29c8ad131394921caa751b8e3",
+  "baselineRuleCount": 2291,
+  "unaffectedExecutionSha256": "99dd5f4d621420a3179e802313d7f2c3a992882aa648c346ce7d3a4d2cb32232",
+  "changes": [
+    {
+      "kind": "exact",
+      "value": "cmplz_saved_categories",
+      "before": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "after": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
+    },
+    {
+      "kind": "exact",
+      "value": "cmplz_saved_services",
+      "before": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "after": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
+    },
+    {
+      "kind": "exact",
+      "value": "wp_lang",
+      "before": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "after": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
+    },
+    {
+      "kind": "prefix",
+      "value": "wp-settings-",
+      "before": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "after": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
+    },
+    {
+      "kind": "prefix",
+      "value": "wp-settings-time-",
+      "before": {
+        "basic": "variant",
+        "ultracache": "variant"
+      },
+      "after": {
+        "basic": "shared",
+        "ultracache": "shared"
+      }
+    }
+  ]
+}

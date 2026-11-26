@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.23.1",
+  "version": "2026.11.26.1",
   "description": "Reviewed execution policies; recognition database categories do not authorize caching or cookie issuance. Consumer flags preserve existing defaults.",
   "unknownCookies": "preserve-existing-policy",
   "policies": [
@@ -2531,6 +2531,237 @@
         "ultracache": "shared"
       },
       "description": "Browser capability marker for UltraCache ESI mini-cart support. It contains no customer or session identity. Actual provider/session inputs remain separate. Shared by default in both profiles; administrator Shared, Variant and Private choices remain authoritative."
+    },
+    {
+      "id": "wordpress-admin-settings",
+      "match": {
+        "kind": "prefix",
+        "value": "wp-settings-"
+      },
+      "provider": "WordPress",
+      "integration": "wordpress-core",
+      "description": "WordPress 7.1.4 per-user wp-admin interface preferences. Core restores these only for the current authenticated user; they do not select anonymous public HTML. Login, admin routes and application privacy remain independent.",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "functional",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/option.php#L1698-L1742",
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/option.php#L1830-L1860"
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "reason": "WordPress 7.1.4 per-user wp-admin interface preferences. Core restores these only for the current authenticated user; they do not select anonymous public HTML. Login, admin routes and application privacy remain independent."
+    },
+    {
+      "id": "wordpress-admin-settings-time",
+      "match": {
+        "kind": "prefix",
+        "value": "wp-settings-time-"
+      },
+      "provider": "WordPress",
+      "integration": "wordpress-core",
+      "description": "WordPress 7.1.4 timestamp used to synchronize the current user’s wp-admin interface preferences. It does not select anonymous public HTML. It is forwarded unchanged; it does not authorize a user or change private delivery.",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "functional",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/option.php#L1698-L1742"
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "reason": "WordPress 7.1.4 timestamp used to synchronize the current user’s wp-admin interface preferences. It does not select anonymous public HTML. It is forwarded unchanged; it does not authorize a user or change private delivery."
+    },
+    {
+      "id": "wordpress-login-language",
+      "match": {
+        "kind": "exact",
+        "value": "wp_lang"
+      },
+      "provider": "WordPress",
+      "integration": "wordpress-core",
+      "description": "WordPress 7.1.4 uses this cookie to select the wp-login.php language, not the normal public frontend locale. The login route keeps its existing private handling. Custom frontend locale integrations can override this default.",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "functional",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/l10n.php#L140-L173",
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-login.php#L531-L532"
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "reason": "WordPress 7.1.4 uses this cookie to select the wp-login.php language, not the normal public frontend locale. The login route keeps its existing private handling. Custom frontend locale integrations can override this default."
+    },
+    {
+      "id": "complianz-saved-categories",
+      "match": {
+        "kind": "exact",
+        "value": "cmplz_saved_categories"
+      },
+      "provider": "Complianz",
+      "integration": "complianz",
+      "description": "Complianz 7.5.8 JavaScript compares this saved category snapshot with current consent before posting a consent-record update. It is bookkeeping, not the category cookie read by PHP consent checks or a selector of initial public HTML. Actual consent and provider delivery remain effective.",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "functional",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/cookiebanner/js/complianz.js#L2234-L2272",
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/functions.php#L2272-L2292",
+        "https://complianz.io/help/wordpress/configuration/developers-guide-for-third-party-integrations/"
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "reason": "Complianz 7.5.8 JavaScript compares this saved category snapshot with current consent before posting a consent-record update. It is bookkeeping, not the category cookie read by PHP consent checks or a selector of initial public HTML. Actual consent and provider delivery remain effective."
+    },
+    {
+      "id": "complianz-saved-services",
+      "match": {
+        "kind": "exact",
+        "value": "cmplz_saved_services"
+      },
+      "provider": "Complianz",
+      "integration": "complianz",
+      "description": "Complianz 7.5.8 JavaScript compares this saved service snapshot with current consent before posting a consent-record update. Actual service checks read cmplz_consented_services instead. Sharing this bookkeeping value does not grant consent, issue a cookie or disable application privacy.",
+      "htmlEffect": "none",
+      "cacheKey": "ignore",
+      "delivery": {
+        "mode": "provider",
+        "issuer": "application",
+        "supported": false,
+        "preserveExisting": true,
+        "renewal": "provider"
+      },
+      "consent": {
+        "required": false,
+        "purpose": "functional",
+        "authority": "provider-cmp"
+      },
+      "attributes": {
+        "domain": "provider",
+        "path": "provider",
+        "maxAgeSeconds": null,
+        "secure": "provider",
+        "httpOnly": "provider",
+        "sameSite": "provider"
+      },
+      "consumers": {
+        "varnishPrivate": false,
+        "varnishCart": false,
+        "varnishTrackingIgnore": true
+      },
+      "sources": [
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/cookiebanner/js/complianz.js#L2234-L2272",
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/functions.php#L2303-L2321",
+        "https://complianz.io/help/wordpress/configuration/developers-guide-for-third-party-integrations/"
+      ],
+      "actions": {
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "reason": "Complianz 7.5.8 JavaScript compares this saved service snapshot with current consent before posting a consent-record update. Actual service checks read cmplz_consented_services instead. Sharing this bookkeeping value does not grant consent, issue a cookie or disable application privacy."
     }
   ]
 }

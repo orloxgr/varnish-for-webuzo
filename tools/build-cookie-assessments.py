@@ -36,7 +36,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, help='Pinned upstream open-cookie-database.csv')
     parser.add_argument('--revision', help='Upstream commit containing this source CSV')
-    parser.add_argument('--version', default='2026.11.20.5', help='Editorial assessment version')
+    parser.add_argument('--version', default='2026.11.26.1', help='Editorial assessment version')
     parser.add_argument('--output', type=Path, help='Versioned concrete editorial default JSON')
     parser.add_argument('--defaults-only', action='store_true', help='Regenerate defaults from existing pinned assessments and reviewed catalogue, without CSV changes')
     args = parser.parse_args()

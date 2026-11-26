@@ -15170,15 +15170,15 @@
       }
     },
     {
-      "id": "bundled:c0d08a4f-af3b-4521-ab95-f7e332f2e32e",
+      "id": "bundled:policy:wordpress-admin-settings",
       "match": {
         "kind": "prefix",
         "value": "wp-settings-"
       },
-      "description": "Used to persist a user’s wp-admin configuration.",
+      "description": "WordPress 7.1.4 per-user wp-admin interface preferences. Core restores these only for the current authenticated user; they do not select anonymous public HTML. Login, admin routes and application privacy remain independent.",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
+        "basic": "shared",
+        "ultracache": "shared"
       }
     },
     {
@@ -15362,15 +15362,15 @@
       }
     },
     {
-      "id": "bundled:a9113903-144d-4807-bb15-8b4311d16e2d",
+      "id": "bundled:policy:wordpress-admin-settings-time",
       "match": {
         "kind": "prefix",
         "value": "wp-settings-time-"
       },
-      "description": "Time at which wp-settings-{user} was set",
+      "description": "WordPress 7.1.4 timestamp used to synchronize the current user’s wp-admin interface preferences. It does not select anonymous public HTML. It is forwarded unchanged; it does not authorize a user or change private delivery.",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
+        "basic": "shared",
+        "ultracache": "shared"
       }
     },
     {
@@ -15974,15 +15974,15 @@
       }
     },
     {
-      "id": "bundled:35578f2b-a753-4f09-abd7-22e554431539",
+      "id": "bundled:policy:complianz-saved-services",
       "match": {
         "kind": "exact",
         "value": "cmplz_saved_services"
       },
-      "description": "Store cookie consent preferences",
+      "description": "Complianz 7.5.8 JavaScript compares this saved service snapshot with current consent before posting a consent-record update. Actual service checks read cmplz_consented_services instead. Sharing this bookkeeping value does not grant consent, issue a cookie or disable application privacy.",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
+        "basic": "shared",
+        "ultracache": "shared"
       }
     },
     {
@@ -16010,15 +16010,15 @@
       }
     },
     {
-      "id": "bundled:aac779af-885f-4b78-8827-19887e0fe59c",
+      "id": "bundled:policy:complianz-saved-categories",
       "match": {
         "kind": "exact",
         "value": "cmplz_saved_categories"
       },
-      "description": "Store cookie consent preferences",
+      "description": "Complianz 7.5.8 JavaScript compares this saved category snapshot with current consent before posting a consent-record update. It is bookkeeping, not the category cookie read by PHP consent checks or a selector of initial public HTML. Actual consent and provider delivery remain effective.",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
+        "basic": "shared",
+        "ultracache": "shared"
       }
     },
     {
@@ -26882,15 +26882,15 @@
       }
     },
     {
-      "id": "bundled:c7d8e9f0-0001-4567-890a-000000000001",
+      "id": "bundled:policy:wordpress-login-language",
       "match": {
         "kind": "exact",
         "value": "wp_lang"
       },
-      "description": "Stores the user's language preference in WordPress admin panel.",
+      "description": "WordPress 7.1.4 uses this cookie to select the wp-login.php language, not the normal public frontend locale. The login route keeps its existing private handling. Custom frontend locale integrations can override this default.",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
+        "basic": "shared",
+        "ultracache": "shared"
       }
     },
     {
@@ -27494,6 +27494,6 @@
       }
     }
   ],
-  "version": "2026.11.23.1",
+  "version": "2026.11.26.1",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f"
 }

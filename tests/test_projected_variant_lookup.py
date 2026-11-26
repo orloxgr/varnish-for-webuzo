@@ -1,7 +1,8 @@
 """Same existing projection codec at initial lookup and projected publication.
 
 The application is an explicit native transport mock, not WordPress/Enterprise
-acceptance. Bundled choices deliberately exercise the grouped classifier.
+acceptance. Explicit fixture choices exercise three Variant dimensions even
+when a provider's reviewed default is Shared. They are not product exceptions.
 """
 import base64
 import hashlib
@@ -12,10 +13,11 @@ import unittest
 
 from test_cookie_delivery import proxy, cookies
 from test_cms_cookie_choices import cache
-from test_cold_public_selection import Application
+from test_cold_public_selection import Application, choices
 from test_public_selection_runtime import control
 
 NAMES = ('cmplz_id', 'cmplz_saved_categories', 'cmplz_saved_services')
+VARIANT_CHOICES = choices(*[(name, 'variant') for name in NAMES])
 
 
 class ProjectedVariants:
@@ -77,10 +79,10 @@ class ProjectedVariantLookup(unittest.TestCase):
             'X-UltraCache-Public-Selection-Public-Source-Version': '1',
             'X-UltraCache-Public-Selection-Public-Source-Projection-Version': '1'})[0], 200)
 
-    def test_bundled_wire_permutations_reuse_the_same_projected_publication_without_origin(self):
+    def test_configured_wire_permutations_reuse_the_same_projected_publication_without_origin(self):
         app = ProjectedVariants()
         pairs = ['cmplz_saved_services={}', 'cmplz_saved_categories=["functional"]', 'cmplz_id=first']
-        with proxy('ultracache', app) as get:
+        with proxy('ultracache', app, policies=VARIANT_CHOICES) as get:
             self.declare(get)
             expected = None
             for index, order in enumerate([pairs, pairs] + list(itertools.permutations(pairs))):
@@ -103,7 +105,7 @@ class ProjectedVariantLookup(unittest.TestCase):
                     raw = (raw or '') + '; cmplz_id=issuer-default'
                 return super().resolve(raw)
         app = IssuedVariant()
-        with proxy('ultracache', app) as get:
+        with proxy('ultracache', app, policies=VARIANT_CHOICES) as get:
             self.declare(get)
             original = 'cmplz_saved_services={}; cmplz_saved_categories=["functional"]'
             first = get('/issuer-input', original)
@@ -119,7 +121,7 @@ class ProjectedVariantLookup(unittest.TestCase):
         states = ['cmplz_saved_services={}', 'cmplz_saved_services={}; cmplz_id=',
                   'cmplz_saved_services={}; cmplz_id=A', 'cmplz_saved_services={}; cmplz_id=B']
         bodies = []
-        with proxy('ultracache', app) as get:
+        with proxy('ultracache', app, policies=VARIANT_CHOICES) as get:
             self.declare(get)
             for index, raw in enumerate(states):
                 status, fields, body = get('/variant-states', raw)
@@ -136,7 +138,7 @@ class ProjectedVariantLookup(unittest.TestCase):
 
     def test_duplicate_first_value_semantics_and_raw_cookie_are_preserved(self):
         app = ProjectedVariants()
-        with proxy('ultracache', app) as get:
+        with proxy('ultracache', app, policies=VARIANT_CHOICES) as get:
             self.declare(get)
             raw = 'cmplz_saved_services={}; cmplz_id=A; cmplz_id=B'
             first = get('/variant-duplicates', raw)
@@ -153,7 +155,7 @@ class ProjectedVariantLookup(unittest.TestCase):
     def test_active_6144_byte_variant_repeats_without_workspace_growth_or_origin(self):
         app = ProjectedVariants()
         pairs = ['cmplz_saved_services={}', 'cmplz_id=' + 'a' * 6144, 'cmplz_saved_categories=["functional"]']
-        with proxy('ultracache', app) as get:
+        with proxy('ultracache', app, policies=VARIANT_CHOICES) as get:
             self.declare(get)
             first = get('/large-variant', '; '.join(pairs))
             self.assertEqual((first[0], cache(first[1])), (200, 'MISS'))
@@ -162,19 +164,23 @@ class ProjectedVariantLookup(unittest.TestCase):
                 self.assertEqual((result[0], cache(result[1]), result[2]), (200, 'HIT', first[2]))
                 self.assertEqual(len(app.calls), 3)
 
-    def test_basic_unregistered_and_nonprojected_paths_keep_their_original_lookup_keys(self):
+    def test_basic_unregistered_and_nonprojected_paths_respect_configured_variant_values(self):
         first = 'cmplz_saved_services={}; cmplz_id=A'
-        second = 'cmplz_id=A; cmplz_saved_services={}'
+        reordered = 'cmplz_id=A; cmplz_saved_services={}'
+        second = 'cmplz_id=A; cmplz_saved_services=changed'
         for profile, register in (('basic', False), ('ultracache', False), ('ultracache', True)):
             app = Application() if register else None
             calls = []
             def ordinary(path, headers):
                 calls.append(headers.get('Cookie'))
                 return '<html>ordinary</html>', [('Content-Type', 'text/html'), ('Cache-Control', 'public, max-age=120')]
-            with self.subTest(profile=profile, register=register), proxy(profile, app or ordinary) as get:
+            with self.subTest(profile=profile, register=register), proxy(profile, app or ordinary, policies=VARIANT_CHOICES) as get:
                 if register:
                     self.assertEqual(control(get, enabled=True, names='')[0], 200)
                 self.assertEqual(cache(get('/unchanged-key', first)[1]), 'MISS')
+                # Explicit Variant choices use the existing canonical pairs;
+                # reordered equal values must not manufacture another object.
+                self.assertEqual(cache(get('/unchanged-key', reordered)[1]), 'HIT')
                 self.assertEqual(cache(get('/unchanged-key', second)[1]), 'MISS')
                 self.assertEqual(cache(get('/unchanged-key', first)[1]), 'HIT')
                 self.assertEqual(len(app.calls if register else calls), 2)

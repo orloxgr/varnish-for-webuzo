@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "version": "2026.11.23.1",
+  "version": "2026.11.26.1",
   "sourceRevision": "7786335566460016f07a50705a92fc781c976f6f",
   "sourceLicense": "Apache-2.0",
   "sourceLicenseFile": "cookie-recognition/Open-Cookie-Database-LICENSE.txt",
@@ -25553,20 +25553,21 @@
       "domain": "",
       "description": "Used to persist a user’s wp-admin configuration.",
       "wildcard": true,
-      "htmlEffect": "application-dependent-variant",
-      "confidence": "inferred-low",
-      "reason": "wp-settings- (WordPress): The description does not establish identical initial HTML. Our concrete default separates objects per value (including absence), without forcing PASS or ignoring a potentially meaningful value.",
+      "htmlEffect": "none",
+      "confidence": "reviewed",
+      "reason": "WordPress 7.1.4 per-user wp-admin interface preferences. Core restores these only for the current authenticated user; they do not select anonymous public HTML. Login, admin routes and application privacy remain independent.",
       "sources": [
         "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv",
-        "https://developer.wordpress.org/advanced-administration/wordpress/cookies/"
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/option.php#L1698-L1742",
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/option.php#L1830-L1860"
       ],
-      "method": "literal-name-and-description editorial assessment; not a site-specific execution trace",
+      "method": "existing-reviewed-execution-policy",
       "matchValue": "wp-settings-",
-      "dataController": "WordPress",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
-      }
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "dataController": "WordPress"
     },
     "e80b3fe2-31ed-4b57-9d05-98c369b61d8f": {
       "name": "wporg_logged_in",
@@ -25886,20 +25887,20 @@
       "domain": "",
       "description": "Time at which wp-settings-{user} was set",
       "wildcard": true,
-      "htmlEffect": "application-dependent-variant",
-      "confidence": "inferred-low",
-      "reason": "wp-settings-time- (WordPress): The description does not establish identical initial HTML. Our concrete default separates objects per value (including absence), without forcing PASS or ignoring a potentially meaningful value.",
+      "htmlEffect": "none",
+      "confidence": "reviewed",
+      "reason": "WordPress 7.1.4 timestamp used to synchronize the current user’s wp-admin interface preferences. It does not select anonymous public HTML. It is forwarded unchanged; it does not authorize a user or change private delivery.",
       "sources": [
         "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv",
-        "https://developer.wordpress.org/advanced-administration/wordpress/cookies/"
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/option.php#L1698-L1742"
       ],
-      "method": "literal-name-and-description editorial assessment; not a site-specific execution trace",
+      "method": "existing-reviewed-execution-policy",
       "matchValue": "wp-settings-time-",
-      "dataController": "WordPress",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
-      }
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "dataController": "WordPress"
     },
     "15afcfb4-f181-46bc-9b2d-27dbbbbaa657": {
       "name": "tix_view_token",
@@ -26911,19 +26912,22 @@
       "domain": "",
       "description": "Store cookie consent preferences",
       "wildcard": false,
-      "htmlEffect": "consent-variant",
-      "confidence": "inferred",
-      "reason": "cmplz_saved_services (Complianz): Consent can select scripts/HTML. Keep separate public representations per consent value; this rule never grants consent or issues a cookie.",
+      "htmlEffect": "none",
+      "confidence": "reviewed",
+      "reason": "Complianz 7.5.8 JavaScript compares this saved service snapshot with current consent before posting a consent-record update. Actual service checks read cmplz_consented_services instead. Sharing this bookkeeping value does not grant consent, issue a cookie or disable application privacy.",
       "sources": [
-        "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv"
+        "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv",
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/cookiebanner/js/complianz.js#L2234-L2272",
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/functions.php#L2303-L2321",
+        "https://complianz.io/help/wordpress/configuration/developers-guide-for-third-party-integrations/"
       ],
-      "method": "literal-name-and-description editorial assessment; not a site-specific execution trace",
+      "method": "existing-reviewed-execution-policy",
       "matchValue": "cmplz_saved_services",
-      "dataController": "Complianz",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
-      }
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "dataController": "Complianz"
     },
     "1a18105f-ad1e-4eb7-8f1b-1db3f1753c83": {
       "name": "cmplz_consented_services",
@@ -26971,19 +26975,22 @@
       "domain": "",
       "description": "Store cookie consent preferences",
       "wildcard": false,
-      "htmlEffect": "consent-variant",
-      "confidence": "inferred",
-      "reason": "cmplz_saved_categories (Complianz): Consent can select scripts/HTML. Keep separate public representations per consent value; this rule never grants consent or issues a cookie.",
+      "htmlEffect": "none",
+      "confidence": "reviewed",
+      "reason": "Complianz 7.5.8 JavaScript compares this saved category snapshot with current consent before posting a consent-record update. It is bookkeeping, not the category cookie read by PHP consent checks or a selector of initial public HTML. Actual consent and provider delivery remain effective.",
       "sources": [
-        "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv"
+        "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv",
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/cookiebanner/js/complianz.js#L2234-L2272",
+        "https://github.com/complianz/complianz-gdpr/blob/8a54a2c907f2688ad47d06ff2a51b3a361028154/functions.php#L2272-L2292",
+        "https://complianz.io/help/wordpress/configuration/developers-guide-for-third-party-integrations/"
       ],
-      "method": "literal-name-and-description editorial assessment; not a site-specific execution trace",
+      "method": "existing-reviewed-execution-policy",
       "matchValue": "cmplz_saved_categories",
-      "dataController": "Complianz",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
-      }
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "dataController": "Complianz"
     },
     "702379b1-f886-4816-be57-3753b5031459": {
       "name": "cmplz_banner-status",
@@ -45311,20 +45318,21 @@
       "domain": "",
       "description": "Stores the user's language preference in WordPress admin panel.",
       "wildcard": false,
-      "htmlEffect": "public-representation",
-      "confidence": "inferred",
-      "reason": "wp_lang (WordPress): Language, region, currency or routing preference can select public HTML. Include its value in the cache key, without forcing bypass.",
+      "htmlEffect": "none",
+      "confidence": "reviewed",
+      "reason": "WordPress 7.1.4 uses this cookie to select the wp-login.php language, not the normal public frontend locale. The login route keeps its existing private handling. Custom frontend locale integrations can override this default.",
       "sources": [
         "https://github.com/jkwakman/Open-Cookie-Database/blob/7786335566460016f07a50705a92fc781c976f6f/open-cookie-database.csv",
-        "https://developer.wordpress.org/advanced-administration/wordpress/cookies/"
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-includes/l10n.php#L140-L173",
+        "https://github.com/WordPress/wordpress-develop/blob/0afb74de8c3fe4c1869e44b62b0418d67b11aa4c/src/wp-login.php#L531-L532"
       ],
-      "method": "literal-name-and-description editorial assessment; not a site-specific execution trace",
+      "method": "existing-reviewed-execution-policy",
       "matchValue": "wp_lang",
-      "dataController": "WordPress",
       "actions": {
-        "basic": "variant",
-        "ultracache": "variant"
-      }
+        "basic": "shared",
+        "ultracache": "shared"
+      },
+      "dataController": "WordPress"
     },
     "c7d8e9f0-0002-4567-890a-000000000002": {
       "name": "_rails_session",

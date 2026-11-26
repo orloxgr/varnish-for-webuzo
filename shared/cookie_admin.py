@@ -188,8 +188,8 @@ def _proposal(match, catalogue,profile='basic'):
     consumers = entry['consumers']
     action = entry['actions'][profile]
     return dict(proposal=action, htmlEffect=entry['htmlEffect'], confidence='reviewed',
-                reason='Reviewed policy ' + entry['id'] + '; private cart/ESI behavior retains its application contract.'
-                       if consumers['varnishCart'] else 'Reviewed policy ' + entry['id'],
+                reason=entry.get('reason') or ('Reviewed policy ' + entry['id'] + '; private cart/ESI behavior retains its application contract.'
+                       if consumers['varnishCart'] else 'Reviewed policy ' + entry['id']),
                 sources=entry.get('sources', []))
 
 
