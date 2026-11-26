@@ -5,6 +5,16 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.3 — 2026-11-26
+
+- Route canonical fragment GETs through fragment handling instead of document
+  public selection, including browser Ajax requests with `Accept: text/html`
+  inside an active registered parent scope.
+- Preserve origin signature/scope validation, ordinary ingress and cookie
+  decisions, fragment-cache OFF, HTTP freshness and exact URL invalidation.
+- Verify registered public Ajax MISS/HIT and exact fragment purge without
+  retiring sibling fragments or the parent. Native module/ABI is unchanged.
+
 ## 0.13.27-dev.2 — 2026-11-26
 
 - Preserve the verified original cookie classification across the cookie-free

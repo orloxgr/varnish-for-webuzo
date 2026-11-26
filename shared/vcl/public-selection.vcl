@@ -132,6 +132,14 @@ sub scp_selection_recv {
         if (req.http.X-SCP-Selection-State == "1") { return (pass); }
         return (synth(503, "Publication reselection unavailable"));
     }
+    # A canonical fragment operation is not a document publication, including
+    # a top-level browser Ajax GET with Accept: text/html. Ordinary ingress,
+    # route and cookie checks have already run; the application still verifies
+    # the signed descriptor and public/private scope. This grants no cache or
+    # private transport permission and never changes the original URL.
+    if (req.http.X-SCP-Query ~ "(^|&)ultracache_esi=[^&]+(&|$)") {
+        return;
+    }
     # These dedicated UltraCache diagnostics publish their own public canary,
     # before the application's normal template/publication lifecycle. Keep the
     # actual native cache and invalidation path: only omit application selection.

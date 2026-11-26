@@ -33,6 +33,56 @@ def inherited_windows(source):
 
 @unittest.skipUnless(shutil.which('varnishd'),'Native Varnish required; fixture unqualified when skipped')
 class PublicFragmentTTL(unittest.TestCase):
+    def test_registered_top_level_public_ajax_uses_fragment_cache_and_exact_purge(self):
+        import base64
+        import json
+        from test_cold_public_selection import Application
+        from test_public_selection_runtime import control
+        app = Application()
+        document = '/ordinary-document/'
+        invalid = '/index.php?ultracache_esi=invalid-signature'
+        private = '/index.php?ultracache_esi=private-descriptor&esi_scope=private'
+        calls = []
+        def origin(path, headers):
+            if path == document: return app(path, headers)
+            phase = headers.get('X-UltraCache-Delivery-Phase')
+            calls.append((path, phase))
+            if path not in (FAST, SLOW):
+                return 403, 'origin-rejected-fragment', [('Cache-Control', 'private, no-store')]
+            body = 'public-fragment-'+('fast' if path == FAST else 'slow')
+            if phase:
+                # Existing application fallback if native incorrectly treats
+                # the endpoint as a full document selection operation.
+                value = dict(schemaVersion=1, requestId=headers['X-UltraCache-Delivery-Request'],
+                    originalUrl=headers['X-UltraCache-Delivery-Original-URL'], privateDocument=dict(
+                        status=200, contentType='text/html', bodyBase64=base64.b64encode(body.encode()).decode()))
+                return json.dumps(value), [('Content-Type', 'application/vnd.ultracache.delivery+json'),
+                    ('X-UltraCache-Delivery-Public-Selection-Version', '1'), ('Cache-Control', 'private, no-store')]
+            self.assertIsNone(headers.get('Cookie'))
+            return body, fields(30)
+        with proxy('ultracache', origin) as get:
+            self.assertEqual(control(get, enabled=True, names='')[0], 200)
+            self.assertEqual(get(document)[0], 200)
+            document_calls = len(app.calls)
+            ajax_headers = {'Accept': 'text/html', 'Sec-Fetch-Dest': 'empty', 'Cache-Control': 'no-cache'}
+            for url in (FAST, SLOW):
+                first = get(url, extra=ajax_headers); second = get(url, extra=ajax_headers)
+                self.assertEqual((first[0], second[0]), (200, 200))
+                self.assertEqual(first[2], second[2])
+                self.assertEqual((dict(first[1])['X-Cache'], dict(second[1])['X-Cache']), ('MISS', 'HIT'))
+            self.assertEqual(calls, [(FAST, None), (SLOW, None)], 'No document prepare/public-select for fragment URLs')
+            self.assertEqual(control(get, 'exact-purge', path=FAST)[0], 200)
+            self.assertEqual(dict(get(FAST, extra=ajax_headers)[1])['X-Cache'], 'MISS')
+            self.assertEqual(dict(get(SLOW, extra=ajax_headers)[1])['X-Cache'], 'HIT')
+            self.assertEqual(dict(get(document)[1])['X-Cache'], 'HIT')
+            self.assertEqual(len(app.calls), document_calls, 'Fragment purge must not retire the document')
+            for url in (invalid, private):
+                for _ in range(2): self.assertEqual(get(url, extra=ajax_headers)[0], 403)
+            self.assertTrue(all(phase is None for _, phase in calls))
+            before = len(calls)
+            self.assertEqual(get(FAST, extra={'X-WV-Gateway': 'invalid'})[0], 403)
+            self.assertEqual(len(calls), before, 'Site ingress authorization still precedes fragment routing')
+
     def check_lifetime(self,aggressive,ttl):
         counts={PARENT:0,FAST:0,SLOW:0}
         def origin(path,headers):

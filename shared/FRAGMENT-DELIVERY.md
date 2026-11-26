@@ -62,6 +62,15 @@ schema or object namespace is introduced by this lifecycle separation.
 
 ## Public request
 
+Canonical `ultracache_esi` endpoint GETs are fragment operations, including
+top-level Ajax with `Accept: text/html` inside a registered parent scope. They
+do not enter full-document public selection. This is routing only: ordinary
+site ingress, route and cookie policy still run, and the application validates
+the signed descriptor and public/private scope. Existing origin success/error
+metadata and HTTP freshness determine storage. The existing fragment-cache OFF
+gate runs before lookup, so even a hot public fragment is bypassed when OFF.
+Exact URL invalidation keeps its existing canonical URL and site/host scope.
+
 ```http
 GET /shop/index.php?ultracache_fragment_delivery=<payload>.<mac>
 ```
