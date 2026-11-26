@@ -207,6 +207,46 @@ class NativeFragmentBatch(unittest.TestCase):
             self.assertNotEqual(a[2], b[2], 'OFF must bypass an already hot public fragment')
             self.assertEqual(exchange(get, 'UC-PRIVATE-GET', PRIVATE, 'a'*64, 'b'*64)[0], 404)
 
+    def test_cache_scope_reports_committed_anonymous_private_and_storage_off(self):
+        value, wire, uri = self.batch()
+        state = dict(context=None)
+        keys = {item['url']: hashlib.sha256(item['url'].encode()).hexdigest()
+                for item in value['fragments']}
+        def origin(path, headers):
+            self.assertEqual(path, uri)
+            context = state['context']
+            rows, grants = [], []
+            for i, item in enumerate(value['fragments']):
+                cache = dict(key=keys[item['url']], ttl=60, tags='fixture' if i else '')
+                if not i: cache['identityState'] = 'anonymous'
+                rows.append(dict(item, html='output-'+str(i), cache=cache))
+                grants.append(dict(url=item['url'], authority=[dict(tag=context['tag'],
+                    revision=context['contentRevision'], generation=context['generation'])] if i else []))
+            grant = {name: context[name] for name in ('scope', 'epoch', 'incarnation',
+                'scopeRevision', 'nativePolicy', 'wordpressPolicy', 'reusePolicy')}
+            grant['fragments'] = grants
+            return self.response(headers, wire, rows, authority=grant)
+        with proxy('ultracache', origin) as get:
+            self.register(get); state['context'] = self.ready(get)
+            for item in value['fragments']:
+                self.assertEqual(exchange(get, 'UC-PRIVATE-GET', item['url'], keys[item['url']], 'b'*64)[0], 404)
+            for _ in range(2):
+                result = get(uri)
+                self.assertEqual(result[0], 200, result)
+                rows = json.loads(result[2])['results']
+                self.assertEqual([row['cacheScope'] for row in rows], ['anonymous', 'private'])
+                for i, item in enumerate(value['fragments']):
+                    retained = exchange(get, 'UC-PRIVATE-GET', item['url'], keys[item['url']], 'b'*64)
+                    self.assertEqual((retained[0], retained[2]), (200, 'output-'+str(i)))
+                self.assertNotIn('authority', result[2])
+                for key in keys.values(): self.assertNotIn(key, result[2])
+            self.register(get, caching=False)
+            result = get(uri)
+            self.assertEqual(result[0], 200, result)
+            self.assertEqual([row['cacheScope'] for row in json.loads(result[2])['results']], ['none', 'none'])
+            for item in value['fragments']:
+                self.assertEqual(exchange(get, 'UC-PRIVATE-GET', item['url'], keys[item['url']], 'b'*64)[0], 404)
+
     def test_writer_after_render_retires_claim_before_fill_and_final_projection(self):
         value, wire, uri = self.batch(1)
         item = value['fragments'][0]

@@ -112,7 +112,7 @@ class FragmentBatchWire(unittest.TestCase):
         self.lib.delivery_fragment_batch_free(batch)
         result = self.render(wire, envelope(wire))
         self.assertEqual(result, dict(schemaVersion=1, results=[
-            dict(url=PRIVATE, status=200, html='<div>actual</div>'),
+            dict(url=PRIVATE, status=200, html='<div>actual</div>', cacheScope='none'),
             dict(url=ADAPTIVE, status=503, error=dict(code='renderer-unavailable'))]))
 
     def test_actual_wordpress_unsigned_framing_vector(self):

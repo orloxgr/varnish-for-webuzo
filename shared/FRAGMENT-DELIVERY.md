@@ -209,7 +209,7 @@ and Unicode, and contains only:
 
 ```json
 {"schemaVersion":1,"results":[
-  {"url":"<canonical URI>","status":200,"html":"actual output"},
+  {"url":"<canonical URI>","status":200,"html":"actual output","cacheScope":"anonymous"},
   {"url":"<another URI>","status":409,"error":{"code":"state-conflict"}}
 ]}
 ```
@@ -220,6 +220,18 @@ No saved cookie, private claim, tag, infrastructure token or internal envelope
 is projected. A whole transport/protocol failure is503; signed input failures
 are400/404 and policy/context conflicts409. Valid batch responses use HTTP200
 with explicit per-item error statuses. The loader must preserve these failures.
+
+Successful results include the read-only `cacheScope` fact: `anonymous` for an
+explicit stateless anonymous object, `private` for an owner/dependency-bound
+object, or `none` for request-local output. Native emits a retained scope only
+after the normal object dispatch completed with HTTP200, its native object
+marker and positive remaining TTL (`do_stream=false` waits for the complete
+stored body), followed by the existing final authority
+check. Storage OFF strips cache claims and therefore emits `none`; retired or
+failed results never receive this field. This adds no producer/input member,
+identity inference, cache permission, key or owner disclosure. Standalone
+producers must prove an actual write/read in their existing SQL store before
+reporting retention. Consumers may ignore this additive result metadata.
 
 V1 successes are HTTP200, including genuinely empty output. There is no implicit
 204 or redirect success. Error statuses are400–599; fixed codes are

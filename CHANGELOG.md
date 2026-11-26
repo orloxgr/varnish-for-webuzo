@@ -5,6 +5,15 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.4 — 2026-11-26
+
+- Add read-only `cacheScope` to successful fragment results: `anonymous`,
+  `private` or `none`, after existing native storage and final authority checks.
+- Keep producer input, identity, cache policy, cookie handling and failures
+  unchanged. Storage OFF reports request-local output rather than retention.
+- Verify actual anonymous/private native reads, storage OFF and writer retirement
+  without exposing cache keys or authority in browser results.
+
 ## 0.13.27-dev.3 â€” 2026-11-26
 
 - Route canonical fragment GETs through fragment handling instead of document

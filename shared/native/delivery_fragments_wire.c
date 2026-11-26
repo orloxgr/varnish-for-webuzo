@@ -448,8 +448,15 @@ int delivery_fragment_results_json(const struct delivery_fragment_batch *batch,
         if (!fragment_json_literal(&json,"{\"url\":") ||
             !fragment_json_quote(&json,request->url,strlen(request->url))) goto invalid;
         if (f) {
+            /* Runtime projects only after every claimed object completed normal
+             * storage and the final authority check. This is an output fact,
+             * never an input claim or a cache/identity grant. */
+            const char *scope = !f->cache_key ? "none" :
+                f->cache_anonymous ? "anonymous" : "private";
             if (!fragment_json_literal(&json,",\"status\":200,\"html\":") ||
-                !fragment_json_quote(&json,f->html,f->length)) goto invalid;
+                !fragment_json_quote(&json,f->html,f->length) ||
+                !fragment_json_literal(&json,",\"cacheScope\":") ||
+                !fragment_json_quote(&json,scope,strlen(scope))) goto invalid;
         } else {
             char status[32];
             int n = snprintf(status,sizeof(status),",\"status\":%u,\"error\":{\"code\":",failure->status);
