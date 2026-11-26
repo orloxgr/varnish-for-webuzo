@@ -37,6 +37,20 @@ class NativeFragmentBatch(unittest.TestCase):
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Delivery-Version'), '1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Caching-Enabled'), '1' if caching else '0')
 
+    def test_unregistered_capabilities_do_not_advertise_partial_contract_then_register(self):
+        fields = ('X-UltraCache-VCL-Fragment-Delivery-Version',
+                  'X-UltraCache-VCL-Fragment-Delivery-Route',
+                  'X-UltraCache-VCL-Fragment-Caching-Enabled')
+        with proxy('ultracache', lambda path, headers: ('unused', [])) as get:
+            initial = control(get)
+            self.assertEqual(initial[0], 200, initial)
+            for field in fields:
+                self.assertNotIn(field, initial[1], 'Unregistered scope must not emit a partial contract')
+            self.register(get)
+            accepted = control(get)
+            self.assertEqual(accepted[0], 200, accepted)
+            self.assertEqual(tuple(accepted[1].get(field) for field in fields), ('1', '/index.php', '1'))
+
     def batch(self, count=2):
         value = payload(); value['context']['policy'] = 'b'*64
         if count != 2:

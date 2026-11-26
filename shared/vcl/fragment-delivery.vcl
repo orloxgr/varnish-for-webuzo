@@ -28,16 +28,21 @@ sub scp_fragment_negotiate {
 }
 
 sub scp_fragment_capabilities {
+    unset resp.http.X-UltraCache-VCL-Fragment-Delivery-Version;
+    unset resp.http.X-UltraCache-VCL-Fragment-Delivery-Route;
+    unset resp.http.X-UltraCache-VCL-Fragment-Caching-Enabled;
     if (resp.status == 200 && req.http.X-SCP-Profile == "ultracache" && req.http.X-UltraCache-Operation == "capabilities") {
         set resp.http.X-UltraCache-VCL-Fragment-Delivery-Route = cookie_handoff.fragment_route(
             req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
-        if (resp.http.X-UltraCache-VCL-Fragment-Delivery-Route) {
+        if (resp.http.X-UltraCache-VCL-Fragment-Delivery-Route ~ "^/") {
             set resp.http.X-UltraCache-VCL-Fragment-Delivery-Version = "1";
             set resp.http.X-UltraCache-VCL-Fragment-Caching-Enabled = "0";
             if (cookie_handoff.fragment_caching(req.http.X-SCP-Site,req.http.host,
                 resp.http.X-UltraCache-VCL-Fragment-Delivery-Route)) {
                 set resp.http.X-UltraCache-VCL-Fragment-Caching-Enabled = "1";
             }
+        } else {
+            unset resp.http.X-UltraCache-VCL-Fragment-Delivery-Route;
         }
     }
 }
