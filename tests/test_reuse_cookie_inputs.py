@@ -63,7 +63,7 @@ class ReuseCookieInputs(unittest.TestCase):
         library=Path(cls.folder.name)/('reuse.dll' if os.name=='nt' else 'reuse.so')
         command=[CC,'-std=c99','-Wall','-Wextra','-Werror','-O2','-shared']
         if os.name!='nt':command+=['-fPIC']
-        result=subprocess.run(command+[str(ROOT/'shared/native/delivery_envelope.c'),'-o',str(library)],capture_output=True,text=True)
+        result=subprocess.run(command+[str(ROOT/'shared/native/delivery_envelope.c'),'-o',str(library),'-lz'],capture_output=True,text=True)
         if result.returncode:raise AssertionError(result.stdout+result.stderr)
         cls.lib=ctypes.CDLL(str(library))
         cls.lib.delivery_reuse_inputs_parse.argtypes=[ctypes.c_char_p,ctypes.c_size_t,ctypes.POINTER(ctypes.POINTER(Inputs))]

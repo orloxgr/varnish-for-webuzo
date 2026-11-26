@@ -12,7 +12,7 @@ regexes = ['''KEY_SHA256\s*=\s*['"][a-f0-9]{64}['"]''']
 [[allowlists]]
 description = "Derived vectors for the explicitly synthetic fixture secret"
 condition = "AND"
-paths = ['''^tests/fixtures/private_(reuse_finalize(_producer)?|mutation_wire)_v1\.json$''']
+paths = ['''^tests/fixtures/(private_(reuse_finalize(_producer)?|mutation_wire)_v1|fragment-batch-compression-v1)\.json$''']
 regexTarget = "match"
 regexes = ['''(?:reuseKeyHex|derivedKeyHex)":\s*"[a-f0-9]{64}"''']
 

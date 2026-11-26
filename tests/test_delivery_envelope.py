@@ -49,7 +49,7 @@ class DeliveryEnvelope(unittest.TestCase):
         library=Path(cls.folder.name)/('parser.dll' if os.name=='nt' else 'parser.so')
         args=[CC,'-std=c99','-Wall','-Wextra','-Werror','-O2','-shared']
         if os.name!='nt':args+=['-fPIC']
-        result=subprocess.run(args+[str(ROOT/'shared/native/delivery_envelope.c'),'-o',str(library)],
+        result=subprocess.run(args+[str(ROOT/'shared/native/delivery_envelope.c'),'-o',str(library),'-lz'],
             capture_output=True,text=True)
         if result.returncode:raise AssertionError(result.stdout+result.stderr)
         cls.lib=ctypes.CDLL(str(library))

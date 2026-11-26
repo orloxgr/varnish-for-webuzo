@@ -1,0 +1,13 @@
+{
+  "format": "deflate-v1",
+  "scope": "/shop/",
+  "secretUtf8": "fixture-only",
+  "reuseKeyHex": "7c4f0ce45f67a732e58ecabe1b536868bb858bee3c83b5cc9043af2eba3273d7",
+  "rawJsonUtf8": "{\"schemaVersion\":1,\"sourceUrl\":\"/catalog/\",\"context\":{\"policy\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bucket\":\"html\",\"cookies\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"locale\":\"en_US\",\"language\":\"\"},\"fragments\":[{\"url\":\"/?ultracache_esi=descriptor-a&esi_scope=private\",\"occurrences\":2}]}",
+  "rawBytes": 343,
+  "deflateHex": "a58f416ac3400c45eff2175d4d09ed7220f41025dd94621445b5878c4746d28416e3bb17a747c85bbecd7f7f85f324337d8879d186fc92e0da8de564151907a6a0aae30109ac2de42790572c5a0bff22831e0409e7ce5709644c31d7fb8c5e8b3832ce0f8284aa4c5590216d38bdef82dad869dc15b6846fa37196168efcb9a2ff7f7eeb358c98789241bc1c2fe26c6509b5677a122f83b32e725cacdc280409cadccda4f19efdba7d6d7f",
+  "macMessageHex": "00000024756c74726163616368652d667261676d656e742d62617463682d6465666c6174652d7631000000062f73686f702f0000000000000157a58f416ac3400c45eff2175d4d09ed7220f41025dd94621445b5878c4746d28416e3bb17a747c85bbecd7f7f85f324337d8879d186fc92e0da8de564151907a6a0aae30109ac2de42790572c5a0bff22831e0409e7ce5709644c31d7fb8c5e8b3832ce0f8284aa4c5590216d38bdef82dad869dc15b6846fa37196168efcb9a2ff7f7eeb358c98789241bc1c2fe26c6509b5677a122f83b32e725cacdc280409cadccda4f19efdba7d6d7f",
+  "nativeMacHex": "282b98e2a046f27d1434c485c5eb16adc4b741d9bcd885de23c779801f1a13ce",
+  "frameHex": "010000000000000157282b98e2a046f27d1434c485c5eb16adc4b741d9bcd885de23c779801f1a13cea58f416ac3400c45eff2175d4d09ed7220f41025dd94621445b5878c4746d28416e3bb17a747c85bbecd7f7f85f324337d8879d186fc92e0da8de564151907a6a0aae30109ac2de42790572c5a0bff22831e0409e7ce5709644c31d7fb8c5e8b3832ce0f8284aa4c5590216d38bdef82dad869dc15b6846fa37196168efcb9a2ff7f7eeb358c98789241bc1c2fe26c6509b5677a122f83b32e725cacdc280409cadccda4f19efdba7d6d7f",
+  "firstPart": "z1_AQAAAAAAAAFXKCuY4qBG8n0UNMSFxesWrcS3Qdm82IXeI8d5gB8aE86lj0Fqw0AMRe_yF11NCe1yIPQQJd2UYhRFtYeMR0bShBbjuxenR8hbvs1_f4XzJDN9iHnRhvyS4NqN5WQVGQemoKrjAQmsLeQnkFcsWgv_IoMeBAnnzlcJZEwx1_uMXos4Ms4PgoSqTFWQIW04ve-C2thp3BW2hG-jcZYWjvy5ov9_fus1jJh4kkG8HC_ibGUJtWd6Ei-Dsy5yXKzcKAQJytzNpPGe_bp9bX8"
+}

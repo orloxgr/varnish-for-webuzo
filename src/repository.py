@@ -241,6 +241,9 @@ def ensure_cookie_handoff():
     development=subprocess.run(['dpkg-query','-W','-f=${Version} ${db:Status-Status}','varnish-dev'],capture_output=True,text=True,env=native.ENV)
     dependencies=[]
     if development.stdout.strip()!=version+' installed':dependencies.append('varnish-dev='+version)
+    for package in ('zlib1g-dev','zlib1g'):
+        installed=subprocess.run(['dpkg-query','-W','-f=${db:Status-Status}',package],capture_output=True,text=True,env=native.ENV)
+        if installed.returncode or installed.stdout.strip()!='installed':dependencies.append(package)
     if not shutil.which('cc'):dependencies.append('build-essential')
     if not shutil.which('pkg-config'):dependencies.append('pkg-config')
     if dependencies:

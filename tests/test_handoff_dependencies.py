@@ -14,7 +14,7 @@ import native_build
 class HandoffDependencies(unittest.TestCase):
     def test_matching_headers_and_toolchain_require_no_package_work(self):
         with patch.object(repository.native,'run',return_value='9.1 installed') as command,\
-             patch.object(repository.subprocess,'run',return_value=subprocess.CompletedProcess([],0,'9.1 installed','')),\
+             patch.object(repository.subprocess,'run',side_effect=lambda args,**kwargs: subprocess.CompletedProcess([],0,'9.1 installed' if args[-1]=='varnish-dev' else 'installed','')),\
              patch.object(repository.shutil,'which',return_value='/usr/bin/tool'),\
              patch.object(native_build,'build',return_value=Path('/native/module.so')) as build:
             self.assertEqual(repository.ensure_cookie_handoff(),Path('/native/module.so'))
@@ -43,7 +43,7 @@ class HandoffDependencies(unittest.TestCase):
         with patch.object(native_build,'build') as build:repository.ensure_cookie_handoff()
         build.assert_called_once()
         self.assertIn(('env','DEBIAN_FRONTEND=noninteractive','NEEDRESTART_MODE=l','apt-get','install','-y','--no-remove',
-            'varnish=9.1','varnish-dev=9.1','build-essential','pkg-config'),calls)
+            'varnish=9.1','varnish-dev=9.1','zlib1g-dev','zlib1g','build-essential','pkg-config'),calls)
         self.assertFalse(any('systemctl' in call for call in calls))
 
     def test_engine_replacement_or_removal_is_refused_before_install_or_build(self):

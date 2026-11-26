@@ -5,7 +5,19 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
-## 0.13.27-dev.5 — 2026-11-26
+## 0.13.27-dev.6 â€” 2026-11-26
+
+- Support negotiated self-contained compressed fragment batches, using the
+  existing registered scope key to authenticate memory admission before inflate.
+- Preserve the application's separate signature, exact descriptor URIs, request
+  digest, cache keys, authority checks and legacy uncompressed ticket handling.
+- Require exact raw length, complete DEFLATE input and checked allocation bounds;
+  keep server request/header/workspace settings unchanged.
+- Own zlib development/runtime dependencies and include its version and flags
+  in the native build receipt. Qualify the shared synthetic wire vector and
+  large-plan single-prepare handling with invalid native MAC rejection.
+
+## 0.13.27-dev.5 â€” 2026-11-26
 
 - Recognize anonymous fragment identity separately from product/content
   dependencies. Tagged anonymous output requires the existing nonempty
@@ -15,7 +27,7 @@ work mentioned in an earlier entry. For current behavior and installation, see
 - Verify native reuse, rejection of a hot body after a real dependency mutation,
   fresh-generation refill, personal isolation and storage OFF behavior.
 
-## 0.13.27-dev.4 — 2026-11-26
+## 0.13.27-dev.4 â€” 2026-11-26
 
 - Add read-only `cacheScope` to successful fragment results: `anonymous`,
   `private` or `none`, after existing native storage and final authority checks.

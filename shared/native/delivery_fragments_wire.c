@@ -3,6 +3,8 @@
  * A parsed public request never creates native cache authority. */
 #include "delivery_fragments_wire.h"
 #include <stdio.h>
+#include <limits.h>
+#include <zlib.h>
 
 static const char *fragment_context_names[] = {
     "policy", "bucket", "cookies", "locale", "language"
@@ -127,13 +129,78 @@ static int fragment_batch_requests(struct reader *r, struct delivery_fragment_ba
     }
 }
 
-int delivery_fragment_batch_parse(const char *token, size_t length,
-    struct delivery_fragment_batch **out) {
+/* The per-site memory-admission MAC is distinct from the application's
+ * outer ticket signature. No unauthenticated declared size reaches malloc or
+ * inflate. Existing scope/descriptor/identity checks still authorize delivery. */
+static unsigned char *fragment_batch_inflate(const unsigned char *frame, size_t length,
+    const unsigned char key[32], const char *scope, size_t *output_length) {
+    static const char domain[] = "ultracache-fragment-batch-deflate-v1";
+    struct reuse_frame message = {NULL,0,0};
+    unsigned char *output = NULL;
+    uint64_t declared = 0;
+    size_t i, raw_length, input_assigned = 0, output_assigned = 0, capacity;
+    size_t input_length;
+    const unsigned char *input;
+    char expected[65];
+    unsigned mismatch = 0;
+    z_stream stream;
+    int initialized = 0, status = Z_OK, valid = 0;
+    if (!frame || length <= 41 || frame[0] != 1 || !key || !scope || !*scope || !output_length) return NULL;
+    input = frame+41; input_length = length-41;
+    if (!reuse_lp_string(&message,domain) || !reuse_lp_string(&message,scope) ||
+        !reuse_append(&message,frame+1,8) || !reuse_append(&message,input,input_length) ||
+        !delivery_hmac_sha256(key,32,message.bytes,message.length,expected)) goto done;
+    for (i = 0; i < 32; ++i)
+        mismatch |= frame[9+i] ^ (unsigned)(hex_digit((unsigned char)expected[2*i])*16+
+            hex_digit((unsigned char)expected[2*i+1]));
+    if (mismatch) goto done;
+    for (i = 0; i < 8; ++i) declared = (declared<<8)|frame[1+i];
+    if (!declared || declared > SIZE_MAX-1) goto done;
+    raw_length = (size_t)declared; capacity = raw_length+1;
+    output = malloc(capacity);
+    if (!output) goto done;
+    memset(&stream,0,sizeof(stream));
+    if (inflateInit2(&stream,-MAX_WBITS) != Z_OK) goto done;
+    initialized = 1;
+    for (;;) {
+        size_t before_in, before_out;
+        if (!stream.avail_in && input_assigned < input_length) {
+            size_t n = input_length-input_assigned;
+            if (n > UINT_MAX) n = UINT_MAX;
+            stream.next_in = (Bytef *)(input+input_assigned); stream.avail_in = (uInt)n; input_assigned += n;
+        }
+        if (!stream.avail_out && output_assigned < capacity) {
+            size_t n = capacity-output_assigned;
+            if (n > UINT_MAX) n = UINT_MAX;
+            stream.next_out = output+output_assigned; stream.avail_out = (uInt)n; output_assigned += n;
+        }
+        before_in = input_assigned-stream.avail_in; before_out = output_assigned-stream.avail_out;
+        status = inflate(&stream,Z_NO_FLUSH);
+        if (status == Z_STREAM_END) {
+            valid = input_assigned-stream.avail_in == input_length &&
+                output_assigned-stream.avail_out == raw_length;
+            break;
+        }
+        if (status != Z_OK || (before_in == input_assigned-stream.avail_in &&
+            before_out == output_assigned-stream.avail_out) ||
+            output_assigned-stream.avail_out == capacity) break;
+    }
+    if (valid) { output[raw_length] = 0; *output_length = raw_length; }
+done:
+    if (initialized) inflateEnd(&stream);
+    delivery_reuse_frame_free(message.bytes,message.length);
+    if (!valid) { free(output); output = NULL; }
+    return output;
+}
+
+int delivery_fragment_batch_parse_scoped(const char *token, size_t length,
+    const unsigned char key[32], const char *scope, struct delivery_fragment_batch **out) {
     static const char purpose[] = "ultracache-fragment-delivery-v1\n";
     const char *dot;
     char *padded = NULL, *frame = NULL;
     unsigned char *decoded = NULL;
-    size_t i, payload, padded_length, decoded_length = 0;
+    size_t i, start, payload, padded_length, decoded_length = 0;
+    int compressed;
     struct delivery_fragment_batch *b = NULL;
     struct reader r;
     unsigned seen = 0;
@@ -143,13 +210,16 @@ int delivery_fragment_batch_parse(const char *token, size_t length,
     if (!token || !length || length == SIZE_MAX || strlen(token) != length ||
         !(dot = strchr(token,'.')) || dot == token || strlen(dot+1) != 64 ||
         !selection_hex((struct text){dot+1,64})) return 0;
-    payload = (size_t)(dot-token);
+    compressed = !strncmp(token,"z1_",3);
+    if (compressed && (!key || !scope)) return 0;
+    start = compressed ? 3 : 0;
+    payload = (size_t)(dot-token)-start;
     if (payload%4 == 1 || payload > SIZE_MAX-4 || length > SIZE_MAX-sizeof(purpose)) return 0;
     padded_length = (payload+3)/4*4;
     padded = malloc(padded_length+1);
     if (!padded) goto done;
     for (i = 0; i < payload; ++i) {
-        unsigned char c = (unsigned char)token[i];
+        unsigned char c = (unsigned char)token[start+i];
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) padded[i] = (char)c;
         else if (c == '-') padded[i] = '+';
         else if (c == '_') padded[i] = '/';
@@ -159,6 +229,11 @@ int delivery_fragment_batch_parse(const char *token, size_t length,
     padded[i] = 0;
     if (!base64_body((struct text){padded,padded_length},&decoded,&decoded_length) ||
         !decoded_length) goto done;
+    if (compressed) {
+        unsigned char *expanded = fragment_batch_inflate(decoded,decoded_length,key,scope,&decoded_length);
+        free(decoded); decoded = expanded;
+        if (!decoded) goto done;
+    }
     b = calloc(1,sizeof(*b));
     if (!b) goto done;
     r = (struct reader){(char *)decoded,decoded_length,0};
@@ -195,6 +270,11 @@ int delivery_fragment_batch_parse(const char *token, size_t length,
 done:
     free(frame); free(padded); free(decoded); delivery_fragment_batch_free(b);
     return ok;
+}
+
+int delivery_fragment_batch_parse(const char *token, size_t length,
+    struct delivery_fragment_batch **out) {
+    return delivery_fragment_batch_parse_scoped(token,length,NULL,NULL,out);
 }
 
 static int fragment_failure_code(struct text code) {

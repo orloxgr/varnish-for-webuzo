@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 
@@ -77,6 +78,12 @@ def build():
     # VRT ABI alone is insufficient as a build receipt for internal headers.
     for header in ('cache/cache_int.h','cache/cache.h','cache/cache_filter.h','vrt.h','vrt_obj.h'):
         inputs['installed:'+header] = (include/header).read_bytes()
+    compression = {'format':'deflate-v1','zlibVersion':command('pkg-config','--modversion','zlib'),
+                   'compileFlags':shlex.split(command('pkg-config','--cflags','zlib')),
+                   'linkFlags':shlex.split(command('pkg-config','--libs','zlib'))}
+    if not compression['zlibVersion'] or not compression['linkFlags']:
+        raise RuntimeError('Install zlib development headers and library before building fragment transport')
+    inputs['fragment-compression-dependency'] = json.dumps(compression,sort_keys=True).encode()
     inputs['builder'] = Path(__file__).read_bytes()
     private_reuse = native_reuse_source(include)
     if private_reuse:
@@ -122,10 +129,10 @@ def build():
                 (folder/'uc_engine_transport.h').write_bytes(private_reuse[4])
             command('python3',tool,'cookie_handoff.vcc',cwd=folder)
             command('cc','-Wall','-Wextra','-Werror','-fPIC','-shared','-pthread',
-                    '-I'+str(include),'-I.','cookie_handoff.c','delivery_envelope.c','vcc_if.c',
-                    '-o','libvmod_cookie_handoff.so','-lm',cwd=folder)
+                    '-I'+str(include),'-I.',*compression['compileFlags'],'cookie_handoff.c','delivery_envelope.c','vcc_if.c',
+                    '-o','libvmod_cookie_handoff.so','-lm',*compression['linkFlags'],cwd=folder)
             output=folder/'libvmod_cookie_handoff.so'
-            metadata={'signature':signature,'library':hashlib.sha256(output.read_bytes()).hexdigest()}
+            metadata={'signature':signature,'library':hashlib.sha256(output.read_bytes()).hexdigest(),'fragmentBatchCompression':compression}
             if private_reuse:
                 metadata['privateReuseEngine']=private_reuse[1]
             output.chmod(0o644)

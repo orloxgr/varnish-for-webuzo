@@ -206,6 +206,57 @@ fragment route. Producers must observe this scoped feature before sending
 anonymous content-tagged claims; older native versions omit it. Registration,
 fragment-v1 transport and previously supported stateless claims are unchanged.
 
+## Compressed self-contained batch tickets
+
+The legacy two-part ticket is retained. When every accepted registered native
+endpoint advertises `X-UltraCache-VCL-Fragment-Batch-Compression: deflate-v1`,
+the producer may use `z1_` followed by unpadded base64url of this binary frame
+as the ticket's first part. The second part remains its existing application
+HMAC, using the existing `fragment-delivery-v1` purpose over the entire first
+part, including the encoding prefix.
+
+| Frame bytes | Meaning |
+| --- | --- |
+| 1 | Flags: 0 standalone, 1 native; other values reject |
+| 8 | Exact uncompressed UTF-8 JSON length, unsigned network order |
+| 32 | Native memory-admission HMAC; all zero only for standalone |
+| Remaining | One raw DEFLATE stream, without zlib/gzip wrapper |
+
+The native key is the existing raw HMAC-SHA256 of the configured site control
+credential with ASCII message `ultracache-delivery-reuse-key-v1`. The frame MAC
+uses this derived key and the exact bytes:
+
+```
+LP("ultracache-fragment-batch-deflate-v1") || LP(registeredScope)
+|| rawLengthBE64 || rawDeflateBytes
+```
+
+`LP` is the existing unsigned 32-bit network-order byte length followed by those
+bytes; scope text uses UTF-8. Native requires flag1 and verifies the MAC with
+the key from the matched registered scope before allocating the declared output
+or inflating anything. It rejects standalone frames rather than creating a SQL
+fallback. The application independently verifies its outer HMAC before inflating
+and runs its existing descriptor and context checks. Neither signature is an
+identity, mutation or cache grant.
+
+Both decoders require exactly the declared output length, a complete stream and
+consumption of every compressed byte. Checked native integer/allocation bounds
+apply without a new fixed product byte limit. Native inflates into request-owned
+heap memory, then uses the same strict JSON grammar and exact descriptor URIs.
+The request digest still hashes `ultracache-fragment-delivery-v1` plus newline
+and the complete original opaque ticket. Producer schema2, result schema1,
+fragment keys, scope authority and the route are unchanged.
+
+Standalone flag0 emission requires the optional PHP compression functions;
+unavailable functions retain legacy tickets. Native emission additionally
+requires the observed scoped capability on all accepted endpoints. The normal
+native installer owns zlib development/runtime dependencies; build flags and
+zlib version are part of its source/library receipt. No server header/workspace
+limit is raised. The public synthetic cross-language vector is in
+`tests/fixtures/fragment-batch-compression-v1.json`; its explicit compressed
+bytes are normative, rather than a requirement that different compressors
+produce identical streams.
+
 ## Storage and browser projection
 
 Each admitted object uses `ultracache-private-v1` + native site + canonical host

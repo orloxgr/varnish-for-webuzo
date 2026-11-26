@@ -124,6 +124,8 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
     struct delivery_fragment_batch *batch = NULL;
     struct handoff *entry;
     unsigned i;
+    unsigned char compression_key[32] = {0};
+    int parsed;
     if (d && d->fragment_batch) {
         if (!site || strcmp(site,d->site) || !fragment_dispatch_owner(ctx,d) || !d->fragment_cursor) return -1;
         http_Unset(ctx->http_req,H_Cookie); http_Unset(ctx->http_req,H_Authorization);
@@ -143,12 +145,15 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
         if (scope->enabled && scope->fragment_route && !strcmp(scope->site,site) && !strcmp(scope->host,host) &&
             strlen(scope->fragment_route) == (size_t)(question-url) &&
             !memcmp(scope->fragment_route,url,(size_t)(question-url))) {
-            application_scope = strdup(scope->scope); break;
+            application_scope = strdup(scope->scope); memcpy(compression_key,scope->reuse_key,32); break;
         }
     pthread_mutex_unlock(&lock);
     if (!scope) return 0;
     token = delivery_fragment_batch_token(url);
-    if (!application_scope || !token || !delivery_fragment_batch_parse(token,strlen(token),&batch)) {
+    parsed = application_scope && token && delivery_fragment_batch_parse_scoped(token,strlen(token),
+        compression_key,application_scope,&batch);
+    { volatile unsigned char *wipe = compression_key; for (i = 0; i < sizeof(compression_key); ++i) wipe[i] = 0; }
+    if (!parsed) {
         free(application_scope); free(token); return -1;
     }
     d = calloc(1,sizeof(*d));

@@ -66,7 +66,7 @@ class MutationWire(unittest.TestCase):
         library = Path(cls.folder.name)/('mutation.dll' if os.name=='nt' else 'mutation.so')
         command = [CC,'-std=c99','-Wall','-Wextra','-Werror','-O2','-shared']
         if os.name != 'nt': command += ['-fPIC']
-        result = subprocess.run(command+[str(ROOT/'shared/native/delivery_envelope.c'),'-o',str(library)],
+        result = subprocess.run(command+[str(ROOT/'shared/native/delivery_envelope.c'),'-o',str(library),'-lz'],
                                 capture_output=True,text=True)
         if result.returncode: raise AssertionError(result.stdout+result.stderr)
         cls.lib = ctypes.CDLL(str(library))

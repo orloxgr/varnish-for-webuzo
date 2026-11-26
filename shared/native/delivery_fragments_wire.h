@@ -45,6 +45,10 @@ struct delivery_fragment_results {
 char *delivery_fragment_batch_token(const char *uri);
 int delivery_fragment_batch_parse(const char *token, size_t length,
     struct delivery_fragment_batch **out);
+/* Compressed tickets additionally require the matched registered scope's
+ * existing purpose-separated key before any output allocation/inflation. */
+int delivery_fragment_batch_parse_scoped(const char *token, size_t length,
+    const unsigned char key[32], const char *scope, struct delivery_fragment_batch **out);
 void delivery_fragment_batch_free(struct delivery_fragment_batch *batch);
 void delivery_fragment_results_free(struct delivery_fragment_results *results);
 int delivery_fragment_envelope_parse_v1(const char *body, size_t length,

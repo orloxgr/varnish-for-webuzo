@@ -37,10 +37,11 @@ class NativeFragmentBatch(unittest.TestCase):
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Delivery-Version'), '1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Caching-Enabled'), '1' if caching else '0')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Anonymous-Authority'), '1')
+        self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Batch-Compression'), 'deflate-v1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Public-Selection-Enabled'), '1' if parent else '0')
 
     def test_unregistered_capabilities_do_not_advertise_partial_contract_then_register(self):
-        fields = ('X-UltraCache-VCL-Fragment-Anonymous-Authority', 'X-UltraCache-VCL-Fragment-Delivery-Version',
+        fields = ('X-UltraCache-VCL-Fragment-Batch-Compression', 'X-UltraCache-VCL-Fragment-Anonymous-Authority', 'X-UltraCache-VCL-Fragment-Delivery-Version',
                   'X-UltraCache-VCL-Fragment-Delivery-Route',
                   'X-UltraCache-VCL-Fragment-Caching-Enabled')
         with proxy('ultracache', lambda path, headers: ('unused', [])) as get:
@@ -51,7 +52,7 @@ class NativeFragmentBatch(unittest.TestCase):
             self.register(get)
             accepted = control(get)
             self.assertEqual(accepted[0], 200, accepted)
-            self.assertEqual(tuple(accepted[1].get(field) for field in fields), ('1', '1', '/index.php', '1'))
+            self.assertEqual(tuple(accepted[1].get(field) for field in fields), ('deflate-v1', '1', '1', '/index.php', '1'))
 
     def batch(self, count=2):
         value = payload(); value['context']['policy'] = 'b'*64
@@ -71,6 +72,37 @@ class NativeFragmentBatch(unittest.TestCase):
         return json.dumps(value), [('Content-Type', 'application/vnd.ultracache.fragment-delivery+json; version=1'),
             ('X-UltraCache-Fragment-Delivery-Version', '1'), ('Cache-Control', 'private, no-store'),
             ('Set-Cookie', 'issuer=current; Path=/; HttpOnly')]
+
+    def test_compressed_large_plan_uses_one_existing_prepare_and_rejects_bad_native_mac(self):
+        import base64
+        from test_fragment_batch_compression import compressed_token
+        value, _, _ = self.batch(3)
+        for i, item in enumerate(value['fragments']):
+            opaque = ''.join(hashlib.sha256(('public-fixture-'+str(i)+'-'+str(n)).encode()).hexdigest() for n in range(94))
+            item['url'] = '/?ultracache_esi='+opaque+'&esi_scope=private'
+        wire = compressed_token(value, secret=b'b'*64, scope='/').decode()
+        uri = '/index.php?ultracache_fragment_delivery='+wire
+        self.assertGreater(len(json.dumps(value)), 18000)
+        self.assertLess(len(uri), len('/index.php?ultracache_fragment_delivery='+token(value).decode()))
+        seen = []
+        def origin(path, headers):
+            seen.append(path)
+            self.assertEqual(path, uri)
+            self.assertEqual(headers.get('X-UltraCache-Delivery-Phase'), 'fragment-prepare')
+            return self.response(headers, wire, [dict(item, html='output-'+str(i))
+                for i, item in enumerate(value['fragments'])])
+        with proxy('ultracache', origin) as get:
+            self.register(get)
+            result = get(uri)
+            self.assertEqual(result[0], 200, result)
+            self.assertEqual([(row['status'], row['html'], row['cacheScope']) for row in json.loads(result[2])['results']],
+                [(200, 'output-'+str(i), 'none') for i in range(3)])
+            self.assertEqual(len(seen), 1)
+            first = wire.split('.')[0][3:]
+            frame = bytearray(base64.urlsafe_b64decode(first+'='*(-len(first)%4))); frame[9] ^= 1
+            forged = 'z1_'+base64.urlsafe_b64encode(frame).rstrip(b'=').decode()+'.'+'c'*64
+            self.assertEqual(get('/index.php?ultracache_fragment_delivery='+forged)[0], 400)
+            self.assertEqual(len(seen), 1, 'Invalid native MAC cannot reach the application')
 
     def test_request_local_batch_has_one_prepare_and_sanitized_results(self):
         value, wire, uri = self.batch()
@@ -440,7 +472,7 @@ class NativeFragmentBatch(unittest.TestCase):
             teardown = control(get, enabled=False, names='')
             self.assertEqual(teardown[0], 200, teardown)
             for header in ('X-UltraCache-VCL-Public-Selection-Enabled', 'X-UltraCache-VCL-Public-Selection-Scope',
-                'X-UltraCache-VCL-Fragment-Anonymous-Authority', 'X-UltraCache-VCL-Fragment-Delivery-Version', 'X-UltraCache-VCL-Fragment-Delivery-Route',
+                'X-UltraCache-VCL-Fragment-Batch-Compression', 'X-UltraCache-VCL-Fragment-Anonymous-Authority', 'X-UltraCache-VCL-Fragment-Delivery-Version', 'X-UltraCache-VCL-Fragment-Delivery-Route',
                 'X-UltraCache-VCL-Fragment-Caching-Enabled'):
                 self.assertNotIn(header, teardown[1])
             retired = self.call(get, 'private-authority-context', expected_status=409)
