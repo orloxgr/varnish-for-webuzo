@@ -133,8 +133,10 @@ Success and failure arrays form the exact disjoint requested set, with exact
 occurrences. Empty requested batches, unknown/duplicate members, extra/missing
 URIs and numerical overflow reject the operation. The old schema1 parser is
 unchanged. No fabricated cookie-delivery flag or parent snapshot enters this
-mode. The old cache member remains exactly `{key,ttl,tags}`. TTL0 omits it; a
-native HIT carries only its original remaining lifetime.
+mode. Personal cache claims remain exactly `{key,ttl,tags}`. An explicitly
+stateless anonymous claim uses `{key,ttl,tags:"",identityState:"anonymous"}`
+in this fragment schema2 only. TTL0 omits the cache member; a native HIT carries
+only its original remaining lifetime.
 
 Authority has exactly:
 
@@ -155,8 +157,16 @@ Authority has exactly:
 }
 ```
 
-Every positive claim has exactly one nonempty, duplicate-free dependency closure
-from the same provider claim, including its owner/session and mutable state.
+Every personal positive claim has exactly one nonempty, duplicate-free dependency
+closure from the same provider claim, including its owner/session and mutable state.
+Only an explicit `cache.identityState:"anonymous"` with empty cache tags uses
+`authority:[]` for that exact URL. This is a trusted producer declaration of
+stateless output, never inferred from missing owner, tags or dependencies. The
+producer must use its existing trusted-anonymous dependency read and verified
+scope-authority publication. Anonymous claims still require the complete current
+scope/epoch/incarnation/scopeRevision/policy tuple above; empty per-URL authority
+does not mean absent authority. An anonymous claim with actual dependencies, an
+unmarked claim with empty dependencies, or any other identity state is rejected.
 No TTL0/error claim may have an authority entry. The producer emits the existing
 stable content revision in `revision`; native also preserves the old revision
 compatibility semantics. No new parent publication, recipe or identity-binding
@@ -167,7 +177,12 @@ and at final release: actual site/host/scope and compiled native policy, current
 epoch/incarnation/policies/scope revision, clean bound tags, no active writer,
 current revision and generation. The producer still uses the existing native
 observe → actual durable state read → generation-publish CAS lifecycle. Neither
-an opaque key nor a list of tags creates clean authority.
+an opaque key nor a list of tags creates clean authority. Explicit stateless
+claims run the same scope namespace checks under that lock before native fill
+and final release; scope or connection revocation also retires hot anonymous
+claims. They use the same individual native object key/store and lifetimes,
+without an invented owner/tag or another cache. Parent schema1 does not accept
+the new identity-state member.
 
 ## Storage and browser projection
 

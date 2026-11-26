@@ -266,7 +266,7 @@ static int fragment_batch_grants(struct reader *r, struct delivery_fragment_auth
                 struct delivery_reuse_admitted_fragment temp = {0};
                 int ok = reuse_metadata_authority(r,&temp);
                 g->authority = temp.authority;
-                if (!ok || !g->authority) return 0;
+                if (!ok) return 0;
             }
             if (take(r,'}')) break;
             if (!take(r,',')) return 0;
@@ -331,6 +331,7 @@ static int fragment_results_complete(const struct delivery_fragment_batch *batch
         if (!request) return 0;
         for (g = out->authority ? out->authority->fragments : NULL; g; g = g->next) if (!strcmp(g->url,f->url)) break;
         if ((f->cache_key && !g) || (!f->cache_key && g)) return 0;
+        if (g && (f->cache_anonymous ? g->authority != NULL : g->authority == NULL)) return 0;
     }
     for (failure = out->failed; failure; failure = failure->next) {
         for (request = batch->requested; request; request = request->next) if (!strcmp(request->url,failure->url)) break;
@@ -379,7 +380,7 @@ int delivery_fragment_envelope_parse_v1(const char *body, size_t length,
             if (!string(&r,&text) || !equal(text,expected)) goto done;
         } else if (bit == 16) {
             uint64_t total;
-            if (!selection_fragments(&r,&result->rendered,&total)) goto done;
+            if (!selection_fragments_mode(&r,&result->rendered,&total,1)) goto done;
         } else if (bit == 32) { if (!fragment_batch_failures(&r,result)) goto done; }
         else if (!fragment_batch_authority(&r,result)) goto done;
         if (take(&r,'}')) break;

@@ -94,7 +94,8 @@ static int fragment_authority_current(const struct continuation *d, const struct
         strcmp(d->fragment_batch->context[0],scope->wordpress_policy) ||
         delivery_fragment_deadline(d,fragment) <= VTIM_real()) return 0;
     for (g = a->fragments; g; g = g->next) if (!strcmp(g->url,fragment->url)) break;
-    return g && g->authority && !reuse_authority_current_reason(scope,g->authority);
+    return g && (fragment->cache_anonymous ? !g->authority :
+        g->authority && !reuse_authority_current_reason(scope,g->authority));
 }
 
 /* Both source selection and its final before-storage check call this under lock. */

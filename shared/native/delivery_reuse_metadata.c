@@ -160,7 +160,7 @@ static int reuse_metadata_fragments(struct reader *r, const char *body, struct d
                 else if (!(f->url = copy(value))) return 0;
             } else if (bit == 4) {
                 struct text cache_key, tags;
-                if (!private_cache(r,&cache_key,&tags,&f->cache_ttl) || !f->cache_ttl ||
+                if (!private_cache(r,&cache_key,&tags,&f->cache_ttl,NULL) || !f->cache_ttl ||
                     !(f->cache_key = copy(cache_key)) || !(f->cache_tags = copy(tags))) return 0;
             } else if (bit == 8) { if (!number(r,&f->body_valid_until) || !f->body_valid_until) return 0; }
             else if (bit == 16) { if (!reuse_metadata_identity(r,body,f)) return 0; }

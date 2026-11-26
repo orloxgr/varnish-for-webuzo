@@ -232,6 +232,52 @@ class NativeFragmentBatch(unittest.TestCase):
             self.assertEqual(result, dict(url=item['url'], status=409, error=dict(code='state-conflict')))
             self.assertEqual(exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)[0], 404)
 
+    def test_explicit_stateless_fragment_reuses_native_object_and_namespace_revoke_rejects_hot_claim(self):
+        value, wire, uri = self.batch(1)
+        item = value['fragments'][0]
+        key = hashlib.sha256(b'trusted-stateless-empty').hexdigest()
+        state = dict(context=None, renders=0, lookups=[], revoke=False)
+        def origin(path, headers):
+            self.assertEqual(path, uri)
+            self.assertEqual(headers.get('X-UltraCache-Delivery-Phase'), 'fragment-prepare')
+            status, fields, body = exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)
+            state['lookups'].append(status)
+            if status == 200:
+                ttl = int(dict(fields)['X-UltraCache-Private-Remaining'])
+            else:
+                self.assertEqual(status, 404); state['renders'] += 1
+                body = 'trusted-empty-'+str(state['renders']); ttl = 60
+            row = dict(item, html=body, cache=dict(key=key, ttl=ttl, tags='', identityState='anonymous'))
+            context = state['context']
+            grant = {name: context[name] for name in ('scope', 'epoch', 'incarnation', 'scopeRevision',
+                'nativePolicy', 'wordpressPolicy', 'reusePolicy')}
+            grant['fragments'] = [dict(url=item['url'], authority=[])]
+            if state['revoke']:
+                result = control(get, enabled=True, names='', extra={
+                    'X-UltraCache-Public-Selection-Reuse-Version': '1',
+                    'X-UltraCache-Public-Selection-Reuse-Policy': 'f'*64,
+                    'X-UltraCache-Fragment-Delivery-Version': '1',
+                    'X-UltraCache-Fragment-Delivery-Route': '/index.php',
+                    'X-UltraCache-Fragment-Caching-Enabled': '1'})
+                self.assertEqual(result[0], 200, result)
+            return self.response(headers, wire, [row], authority=grant)
+        with proxy('ultracache', origin) as get:
+            self.register(get)
+            state['context'] = self.observe(get)  # no synthetic owner/tag publication
+            first = get(uri); second = get(uri)
+            self.assertEqual((first[0], second[0]), (200, 200), (first, second))
+            self.assertEqual(json.loads(first[2]), json.loads(second[2]))
+            self.assertEqual((state['renders'], state['lookups']), (1, [404, 200]))
+            self.assertNotIn('identityState', second[2])
+            state['revoke'] = True
+            retired = get(uri)
+            self.assertEqual(retired[0], 200, retired)
+            self.assertEqual(json.loads(retired[2])['results'], [dict(url=item['url'], status=409,
+                error=dict(code='state-conflict'))])
+            self.assertEqual((state['renders'], state['lookups']), (1, [404, 200, 200]),
+                'A hot native body cannot authorize release under a revoked namespace')
+            self.assertNotEqual(self.observe(get)['scopeRevision'], state['context']['scopeRevision'])
+
     def test_hot_parent_and_fragment_controls_are_independent_until_full_teardown(self):
         value, wire, uri = self.batch(1)
         item = value['fragments'][0]

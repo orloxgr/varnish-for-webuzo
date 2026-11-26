@@ -316,17 +316,21 @@ static int selection_header_binding(struct delivery_public_selection *s) {
     }
     return seen == (s->cookie_delivery ? 15u : 7u);
 }
-static int selection_fragments(struct reader *r, struct delivery_fragment **out, uint64_t *total) {
+static int selection_fragments_mode(struct reader *r, struct delivery_fragment **out, uint64_t *total,
+    unsigned allow_anonymous) {
     if (!take(r,'[')) return 0;
     *total = 0;
     if (take(r,']')) return 1;
     for (;;) {
         uint64_t n;
-        if (!fragment(r,UINT64_MAX-*total,out,&n)) return 0;
+        if (!fragment(r,UINT64_MAX-*total,out,&n,allow_anonymous)) return 0;
         *total += n;
         if (take(r,']')) return 1;
         if (!take(r,',')) return 0;
     }
+}
+static int selection_fragments(struct reader *r, struct delivery_fragment **out, uint64_t *total) {
+    return selection_fragments_mode(r,out,total,0);
 }
 static int selection_source_role(struct reader *r) {
     unsigned seen = 0;

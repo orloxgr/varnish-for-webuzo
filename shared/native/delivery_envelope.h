@@ -14,6 +14,7 @@ struct delivery_fragment {
     uint64_t cache_ttl;
     uint64_t occurrences; /* exact authenticated renderer coverage */
     double cache_deadline; /* optional actual absolute body deadline, never slid */
+    unsigned cache_anonymous; /* explicit fragment schema2 stateless producer claim */
 };
 struct delivery_public_parent {
     char generation[65];

@@ -183,6 +183,33 @@ class FragmentBatchWire(unittest.TestCase):
             item = copy.deepcopy(valid); item['authority'].update(change)
             self.assertIsNone(self.render(wire, item))
 
+    def test_stateless_claim_requires_explicit_anonymous_and_exact_scope_authority(self):
+        wire = token(payload())
+        valid = envelope(wire)
+        valid['renderedFragments'][0]['cache'] = dict(key='e'*64, ttl=30, tags='', identityState='anonymous')
+        valid['authority'] = authority()
+        valid['authority']['fragments'][0]['authority'] = []
+        result = self.render(wire, valid)
+        self.assertIsNotNone(result)
+        self.assertNotIn('identityState', json.dumps(result))
+        self.assertNotIn('authority', json.dumps(result))
+        for change in (dict(identityState='personal'), dict(identityState=None), dict(identityState=True),
+                       dict(tags='owner'), dict(tags=[]), dict(owner=None), dict(ttl=0)):
+            item = copy.deepcopy(valid); item['renderedFragments'][0]['cache'].update(change)
+            with self.subTest(change=change): self.assertIsNone(self.render(wire, item))
+        for field in ('identityState', 'tags'):
+            item = copy.deepcopy(valid); del item['renderedFragments'][0]['cache'][field]
+            self.assertIsNone(self.render(wire, item))
+        item = copy.deepcopy(valid); item['authority'] = authority()
+        self.assertIsNone(self.render(wire, item), 'Anonymous claims cannot silently drop actual dependencies')
+        item = copy.deepcopy(valid); del item['authority']
+        self.assertIsNone(self.render(wire, item), 'Anonymous is not an authority-free claim')
+        legacy = dict(schemaVersion=1, requestId='123', originalUrl='/article?q=original',
+            renderedFragments=copy.deepcopy(valid['renderedFragments']))
+        self.assertIsNone(DeliveryEnvelope.parse(self, legacy, occurrences=2), 'Parent schema1 stays unchanged')
+        del legacy['renderedFragments'][0]['cache']['identityState']
+        self.assertIsNotNone(DeliveryEnvelope.parse(self, legacy, occurrences=2))
+
     def test_html_length_aware_projection_keeps_unicode_nul_and_json_escapes(self):
         wire = token(payload())
         value = envelope(wire)
