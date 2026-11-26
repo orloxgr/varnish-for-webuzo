@@ -240,8 +240,7 @@ static int private_cache(struct reader *r, struct text *identity, struct text *t
         if (take(r,'}')) break;
         if (!take(r,',')) return 0;
     }
-    if ((seen & ~8U) != 7 || identity->length != 64 ||
-        ((seen & 8) && tags->length)) return 0;
+    if ((seen & ~8U) != 7 || identity->length != 64) return 0;
     for (i = 0; i < identity->length; ++i)
         if ((identity->data[i] < '0' || identity->data[i] > '9') &&
             (identity->data[i] < 'a' || identity->data[i] > 'f')) return 0;

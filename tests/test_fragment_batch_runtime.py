@@ -36,10 +36,11 @@ class NativeFragmentBatch(unittest.TestCase):
         self.assertEqual(result[0], 200, result)
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Delivery-Version'), '1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Caching-Enabled'), '1' if caching else '0')
+        self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Anonymous-Authority'), '1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Public-Selection-Enabled'), '1' if parent else '0')
 
     def test_unregistered_capabilities_do_not_advertise_partial_contract_then_register(self):
-        fields = ('X-UltraCache-VCL-Fragment-Delivery-Version',
+        fields = ('X-UltraCache-VCL-Fragment-Anonymous-Authority', 'X-UltraCache-VCL-Fragment-Delivery-Version',
                   'X-UltraCache-VCL-Fragment-Delivery-Route',
                   'X-UltraCache-VCL-Fragment-Caching-Enabled')
         with proxy('ultracache', lambda path, headers: ('unused', [])) as get:
@@ -50,7 +51,7 @@ class NativeFragmentBatch(unittest.TestCase):
             self.register(get)
             accepted = control(get)
             self.assertEqual(accepted[0], 200, accepted)
-            self.assertEqual(tuple(accepted[1].get(field) for field in fields), ('1', '/index.php', '1'))
+            self.assertEqual(tuple(accepted[1].get(field) for field in fields), ('1', '1', '/index.php', '1'))
 
     def batch(self, count=2):
         value = payload(); value['context']['policy'] = 'b'*64
@@ -247,6 +248,58 @@ class NativeFragmentBatch(unittest.TestCase):
             for item in value['fragments']:
                 self.assertEqual(exchange(get, 'UC-PRIVATE-GET', item['url'], keys[item['url']], 'b'*64)[0], 404)
 
+    def test_anonymous_content_dependency_reuses_then_retires_hot_body_and_refills(self):
+        value, wire, uri = self.batch(1)
+        item = value['fragments'][0]
+        tag = hashlib.sha256(b'fixture-product-content').hexdigest()
+        state = dict(context=None, renders=0, lookups=[])
+        def call(operation, context=None, **kwargs):
+            return self.call(get, operation, context, tag=tag, **kwargs)
+        def origin(path, headers):
+            self.assertEqual(path, uri)
+            context = state['context']
+            key = hashlib.sha256(('product|'+context['generation']).encode()).hexdigest()
+            status, fields, body = exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)
+            state['lookups'].append(status)
+            if status == 200:
+                ttl = int(dict(fields)['X-UltraCache-Private-Remaining'])
+            else:
+                self.assertEqual(status, 404); state['renders'] += 1
+                body = 'product-output-'+str(state['renders']); ttl = 60
+            grant = {name: context[name] for name in ('scope', 'epoch', 'incarnation',
+                'scopeRevision', 'nativePolicy', 'wordpressPolicy', 'reusePolicy')}
+            grant['fragments'] = [dict(url=item['url'], authority=[dict(tag=tag,
+                revision=context['contentRevision'], generation=context['generation'])])]
+            row = dict(item, html=body, cache=dict(key=key, ttl=ttl, tags='content-product', identityState='anonymous'))
+            return self.response(headers, wire, [row], authority=grant)
+        with proxy('ultracache', origin) as get:
+            self.register(get)
+            state['context'] = call('private-generation-publish', call('private-authority-context'),
+                extra={'X-UltraCache-Private-Generation': '1'*64})
+            first = get(uri); second = get(uri)
+            self.assertEqual((first[0], second[0]), (200, 200), (first, second))
+            self.assertEqual(json.loads(first[2]), json.loads(second[2]))
+            self.assertEqual(json.loads(second[2])['results'][0]['cacheScope'], 'anonymous')
+            self.assertEqual((state['renders'], state['lookups']), (1, [404, 200]))
+            writer = call('private-mutation-begin', state['context'],
+                extra={'X-UltraCache-Private-Transaction': hashlib.sha256(b'product-change').hexdigest()})
+            retired = get(uri)
+            self.assertEqual(retired[0], 200, retired)
+            self.assertEqual(json.loads(retired[2])['results'], [dict(url=item['url'], status=409,
+                error=dict(code='state-conflict'))])
+            self.assertEqual((state['renders'], state['lookups']), (1, [404, 200, 200]),
+                'An existing hot body must not bypass the changed product authority')
+            call('private-mutation-commit', writer, extra={'X-UltraCache-Private-Transaction': writer['transaction'],
+                'X-UltraCache-Private-Lease': writer['lease']})
+            state['context'] = call('private-generation-publish', call('private-authority-context'),
+                extra={'X-UltraCache-Private-Generation': '2'*64})
+            fresh = get(uri); reused = get(uri)
+            self.assertEqual((fresh[0], reused[0]), (200, 200), (fresh, reused))
+            self.assertEqual(json.loads(fresh[2]), json.loads(reused[2]))
+            self.assertEqual(json.loads(reused[2])['results'][0]['cacheScope'], 'anonymous')
+            self.assertIn('product-output-2', reused[2]); self.assertNotIn('product-output-1', reused[2])
+            self.assertEqual((state['renders'], state['lookups']), (2, [404, 200, 200, 404, 200]))
+
     def test_writer_after_render_retires_claim_before_fill_and_final_projection(self):
         value, wire, uri = self.batch(1)
         item = value['fragments'][0]
@@ -387,7 +440,7 @@ class NativeFragmentBatch(unittest.TestCase):
             teardown = control(get, enabled=False, names='')
             self.assertEqual(teardown[0], 200, teardown)
             for header in ('X-UltraCache-VCL-Public-Selection-Enabled', 'X-UltraCache-VCL-Public-Selection-Scope',
-                'X-UltraCache-VCL-Fragment-Delivery-Version', 'X-UltraCache-VCL-Fragment-Delivery-Route',
+                'X-UltraCache-VCL-Fragment-Anonymous-Authority', 'X-UltraCache-VCL-Fragment-Delivery-Version', 'X-UltraCache-VCL-Fragment-Delivery-Route',
                 'X-UltraCache-VCL-Fragment-Caching-Enabled'):
                 self.assertNotIn(header, teardown[1])
             retired = self.call(get, 'private-authority-context', expected_status=409)

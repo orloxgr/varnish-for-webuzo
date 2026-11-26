@@ -5,6 +5,16 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.5 — 2026-11-26
+
+- Recognize anonymous fragment identity separately from product/content
+  dependencies. Tagged anonymous output requires the existing nonempty
+  authority closure and current content revision/generation before release.
+- Advertise scoped `Fragment-Anonymous-Authority` support only for registered
+  fragment delivery. Older native transports retain their previous contract.
+- Verify native reuse, rejection of a hot body after a real dependency mutation,
+  fresh-generation refill, personal isolation and storage OFF behavior.
+
 ## 0.13.27-dev.4 — 2026-11-26
 
 - Add read-only `cacheScope` to successful fragment results: `anonymous`,

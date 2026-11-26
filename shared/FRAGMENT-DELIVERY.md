@@ -143,7 +143,7 @@ occurrences. Empty requested batches, unknown/duplicate members, extra/missing
 URIs and numerical overflow reject the operation. The old schema1 parser is
 unchanged. No fabricated cookie-delivery flag or parent snapshot enters this
 mode. Personal cache claims remain exactly `{key,ttl,tags}`. An explicitly
-stateless anonymous claim uses `{key,ttl,tags:"",identityState:"anonymous"}`
+anonymous claim uses `{key,ttl,tags,identityState:"anonymous"}`
 in this fragment schema2 only. TTL0 omits the cache member; a native HIT carries
 only its original remaining lifetime.
 
@@ -169,13 +169,17 @@ Authority has exactly:
 Every personal positive claim has exactly one nonempty, duplicate-free dependency
 closure from the same provider claim, including its owner/session and mutable state.
 Only an explicit `cache.identityState:"anonymous"` with empty cache tags uses
-`authority:[]` for that exact URL. This is a trusted producer declaration of
-stateless output, never inferred from missing owner, tags or dependencies. The
+`authority:[]` for that exact URL. Anonymous output with content dependencies
+instead requires nonempty cache tags and its nonempty current content authority
+closure. Anonymous identity does not mean absent product/content dependencies.
+This is a trusted producer declaration, never inferred from missing owner,
+tags or dependencies. The
 producer must use its existing trusted-anonymous dependency read and verified
 scope-authority publication. Anonymous claims still require the complete current
 scope/epoch/incarnation/scopeRevision/policy tuple above; empty per-URL authority
-does not mean absent authority. An anonymous claim with actual dependencies, an
-unmarked claim with empty dependencies, or any other identity state is rejected.
+does not mean absent authority. Anonymous content tags with an empty closure,
+stateless tags with a nonempty closure, an unmarked claim with empty
+dependencies, or any other identity state are rejected.
 No TTL0/error claim may have an authority entry. The producer emits the existing
 stable content revision in `revision`; native also preserves the old revision
 compatibility semantics. No new parent publication, recipe or identity-binding
@@ -192,6 +196,15 @@ and final release; scope or connection revocation also retires hot anonymous
 claims. They use the same individual native object key/store and lifetimes,
 without an invented owner/tag or another cache. Parent schema1 does not accept
 the new identity-state member.
+
+Tagged anonymous claims use the same content tag revision, generation and active
+writer validation as dependency-bound personal claims, before native fill and
+final release. A hot stored body cannot authorize release after a dependency
+changes. The authenticated capability reply includes
+`X-UltraCache-VCL-Fragment-Anonymous-Authority: 1` only for an actually registered
+fragment route. Producers must observe this scoped feature before sending
+anonymous content-tagged claims; older native versions omit it. Registration,
+fragment-v1 transport and previously supported stateless claims are unchanged.
 
 ## Storage and browser projection
 
@@ -222,7 +235,7 @@ are400/404 and policy/context conflicts409. Valid batch responses use HTTP200
 with explicit per-item error statuses. The loader must preserve these failures.
 
 Successful results include the read-only `cacheScope` fact: `anonymous` for an
-explicit stateless anonymous object, `private` for an owner/dependency-bound
+explicit anonymous object (with or without content dependencies), `private` for an owner-bound
 object, or `none` for request-local output. Native emits a retained scope only
 after the normal object dispatch completed with HTTP200, its native object
 marker and positive remaining TTL (`do_stream=false` waits for the complete

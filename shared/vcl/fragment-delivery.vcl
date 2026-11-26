@@ -57,6 +57,7 @@ sub scp_fragment_negotiate {
 }
 
 sub scp_fragment_capabilities {
+    unset resp.http.X-UltraCache-VCL-Fragment-Anonymous-Authority;
     unset resp.http.X-UltraCache-VCL-Fragment-Delivery-Version;
     unset resp.http.X-UltraCache-VCL-Fragment-Delivery-Route;
     unset resp.http.X-UltraCache-VCL-Fragment-Caching-Enabled;
@@ -64,6 +65,7 @@ sub scp_fragment_capabilities {
         set resp.http.X-UltraCache-VCL-Fragment-Delivery-Route = cookie_handoff.fragment_route(
             req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
         if (resp.http.X-UltraCache-VCL-Fragment-Delivery-Route ~ "^/") {
+            set resp.http.X-UltraCache-VCL-Fragment-Anonymous-Authority = "1";
             set resp.http.X-UltraCache-VCL-Fragment-Delivery-Version = "1";
             set resp.http.X-UltraCache-VCL-Fragment-Caching-Enabled = "0";
             if (cookie_handoff.fragment_caching(req.http.X-SCP-Site,req.http.host,

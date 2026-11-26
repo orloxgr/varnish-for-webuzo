@@ -194,7 +194,7 @@ class FragmentBatchWire(unittest.TestCase):
         self.assertNotIn('identityState', json.dumps(result))
         self.assertNotIn('authority', json.dumps(result))
         for change in (dict(identityState='personal'), dict(identityState=None), dict(identityState=True),
-                       dict(tags='owner'), dict(tags=[]), dict(owner=None), dict(ttl=0)):
+                       dict(tags='content'), dict(tags=[]), dict(owner=None), dict(ttl=0)):
             item = copy.deepcopy(valid); item['renderedFragments'][0]['cache'].update(change)
             with self.subTest(change=change): self.assertIsNone(self.render(wire, item))
         for field in ('identityState', 'tags'):
@@ -209,6 +209,25 @@ class FragmentBatchWire(unittest.TestCase):
         self.assertIsNone(DeliveryEnvelope.parse(self, legacy, occurrences=2), 'Parent schema1 stays unchanged')
         del legacy['renderedFragments'][0]['cache']['identityState']
         self.assertIsNotNone(DeliveryEnvelope.parse(self, legacy, occurrences=2))
+
+    def test_anonymous_content_tags_require_dependency_authority_without_becoming_private(self):
+        wire = token(payload())
+        valid = envelope(wire)
+        valid['renderedFragments'][0]['cache'] = dict(key='e'*64, ttl=30, tags='content-product', identityState='anonymous')
+        valid['authority'] = authority()
+        result = self.render(wire, valid)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['results'][0]['cacheScope'], 'anonymous')
+        self.assertNotIn('authority', json.dumps(result))
+        self.assertNotIn('content-product', json.dumps(result))
+        for closure in (None, []):
+            item = copy.deepcopy(valid)
+            if closure is None: del item['authority']
+            else: item['authority']['fragments'][0]['authority'] = closure
+            self.assertIsNone(self.render(wire, item))
+        item = copy.deepcopy(valid)
+        item['renderedFragments'][0]['cache']['tags'] = ''
+        self.assertIsNone(self.render(wire, item), 'Stateless output cannot discard declared dependencies')
 
     def test_html_length_aware_projection_keeps_unicode_nul_and_json_escapes(self):
         wire = token(payload())

@@ -331,7 +331,10 @@ static int fragment_results_complete(const struct delivery_fragment_batch *batch
         if (!request) return 0;
         for (g = out->authority ? out->authority->fragments : NULL; g; g = g->next) if (!strcmp(g->url,f->url)) break;
         if ((f->cache_key && !g) || (!f->cache_key && g)) return 0;
-        if (g && (f->cache_anonymous ? g->authority != NULL : g->authority == NULL)) return 0;
+        /* Only explicitly anonymous output with no content dependencies may
+         * use an empty closure. Anonymous content tags still need authority. */
+        if (g && (f->cache_anonymous && f->cache_tags && !*f->cache_tags
+            ? g->authority != NULL : g->authority == NULL)) return 0;
     }
     for (failure = out->failed; failure; failure = failure->next) {
         for (request = batch->requested; request; request = request->next) if (!strcmp(request->url,failure->url)) break;
