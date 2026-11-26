@@ -298,7 +298,8 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRI
         !site || !public_policy(policy) || !http_GetHdr(ctx->http_req,H_Host,&host)) return;
     pthread_mutex_lock(&lock);
     p = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
-    if (p && *p->guest_policy && (!public || (p->public_source && p->public_projection))) {
+    if (p && fragment_cache_allowed_locked(site,host,ctx->http_req->hd[HTTP_HDR_URL].b) &&
+        *p->guest_policy && (!public || (p->public_source && p->public_projection))) {
         g->policy = strdup(p->guest_policy); g->wordpress_policy = strdup(p->wordpress_policy);
         g->scope = strdup(p->scope); g->epoch = strdup(public_registry_epoch);
         g->projected_fill = !shared && p->public_source && p->public_projection;
@@ -469,7 +470,8 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
     }
     guest = !reselect && g && (g->eligible || g->projected_fill) && !g->disabled && g->key &&
         !strcmp(g->wordpress_policy,wordpress_policy) && !strcmp(g->scope,scope);
-    paired = !reselect && cold && source_available && projection_available && g && g->warm_valid && g->warm_public;
+    paired = !reselect && cold && source_available && projection_available && g && g->warm_valid && g->warm_public &&
+        vmod_fragment_caching(ctx,site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
     /* Dynamic resolvers run before lookup. A registered non-resolver boundary
      * prepares on an actual cold MISS, leaving plain warm HITs alone. */
     before_lookup = has_variant && !projection_available;

@@ -77,6 +77,10 @@ sub scp_init {
     unset req.http.X-UltraCache-Delivery-Reuse-Context;
     unset req.http.X-UltraCache-Delivery-Reuse-Version;
     if (req.method != "PURGE" || req.url != "/__ultracache-vcl-contract-v2") {
+        unset req.http.X-UltraCache-Fragment-Delivery-Version;
+        unset req.http.X-UltraCache-Fragment-Delivery-Route;
+        unset req.http.X-UltraCache-Fragment-Caching-Enabled;
+        unset req.http.X-UltraCache-Fragment-Delivery-Request-Digest;
         unset req.http.X-UltraCache-Delivery-Execution-Drain-Context;
         unset req.http.X-UltraCache-Public-Selection-Execution-Drain-Version;
         unset req.http.X-UltraCache-Public-Selection-Public-Source-Version;
@@ -232,6 +236,10 @@ sub scp_backend_fetch {
     call scp_delivery_authorization;
     unset bereq.http.X-UltraCache-Delivery-Authorization;
     call scp_mutation_backend_fetch;
+    unset bereq.http.X-UltraCache-Fragment-Delivery-Version;
+    unset bereq.http.X-UltraCache-Fragment-Delivery-Route;
+    unset bereq.http.X-UltraCache-Fragment-Caching-Enabled;
+    unset bereq.http.X-UltraCache-Fragment-Delivery-Request-Digest;
     unset bereq.http.X-SCP-Cookie-Handoff;
     unset bereq.http.X-UltraCache-Guest-Issuer-Version;
     unset bereq.http.X-UltraCache-Guest-Issuer-Canonical-URL;
@@ -424,6 +432,7 @@ sub scp_backend_response {
     call scp_response_variants;
 }
 sub scp_deliver {
+    call scp_fragment_deliver;
     if (cookie_handoff.guest_shared_pending() && !cookie_handoff.guest_result()) {
         if (cookie_handoff.guest_fallback()) { return (restart); }
         return (synth(503, "Guest delivery proof unavailable"));

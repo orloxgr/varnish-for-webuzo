@@ -409,6 +409,7 @@ sub vcl_backend_error {
     }
 }
 sub vcl_synth {
+    if (cookie_handoff.fragment_synth()) { return (deliver); }
     call scp_public_source_diagnostic;
     unset resp.http.X-UltraCache-Delivery-Outcome;
     if (req.http.X-SCP-Profile == "ultracache" && req.esi_level > 0 &&

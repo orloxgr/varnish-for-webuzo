@@ -404,6 +404,45 @@ Authenticated capabilities only. Registration establishes the current policy
 namespace. New tags remain UNBOUND until their actual generation is published.
 Disabling and policy changes invalidate the previous namespace.
 
+$Function BOOL fragment_register(STRING site, STRING host, STRING scope, STRING route, BOOL caching)
+$Restrict vcl_recv
+
+Authenticated capability operation only: register the exact installation batch route.
+
+$Function STRING fragment_route(STRING site, STRING host, STRING scope)
+$Restrict vcl_recv vcl_synth
+
+Read an existing supported batch route; does not grant authority or enable a scope.
+
+$Function BOOL fragment_caching(STRING site, STRING host, STRING url)
+$Restrict vcl_recv vcl_synth
+
+Read effective negotiated fragment storage control for an actual scoped URI.
+Unregistered legacy scopes retain their existing enabled behavior.
+
+$Function INT fragment_recv(PRIV_TOP, STRING site)
+$Restrict vcl_recv
+
+Owned fragment-only operation: 0 ordinary, 1 prepare PASS, 2 final synth,
+3 individual native object hash, -1 malformed or invalid ownership.
+
+$Function INT fragment_deliver(PRIV_TOP)
+$Restrict vcl_deliver
+
+Advance only the current finite fragment operation: 1 owned restart, 2 synth,
+400/404/409 explicit application error, -1 failed protocol, 0 ordinary.
+
+$Function BOOL fragment_object(PRIV_TOP)
+$Restrict vcl_miss
+
+The exact current task is dispatching its admitted individual fragment object;
+ordinary document cookie-handoff MISS initialization must not replace this owner.
+
+$Function BOOL fragment_synth(PRIV_TOP)
+$Restrict vcl_synth
+
+Project only current validated fragment results and this operation's authentic cookies.
+
 $Function INT reuse_control(PRIV_TASK, STRING site, STRING native_policy)
 $Restrict vcl_recv
 

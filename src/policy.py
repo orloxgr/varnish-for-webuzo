@@ -153,6 +153,7 @@ sub vcl_recv {
  call scp_selection_context;
  std.collect(req.http.Cookie, "; ");
  if (req.http.X-WV-Disabled) { set req.http.X-WV-Reason = "site-disabled"; return (pass); }
+ call scp_fragment_recv;
 ''')
     for profile in profiles.NAMES:
         fragment=fragments.validate(profiles.rules(config,profile)['recv_vcl'],'recv',mark_pass=True,pass_reason='central-profile-vcl')

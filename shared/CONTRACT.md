@@ -451,6 +451,16 @@ neither ESI nor these continuation/private-document/private-TTL paths.
 No new panel controls, reverse policy bridge, provider-specific issuer or live
 configuration is introduced.
 
+### Optional registered fragment-only delivery
+
+The separately negotiated [fragment delivery v1](FRAGMENT-DELIVERY.md) operation
+uses the same individual native objects as ESI, with one request-owned application
+authority operation per private batch. Its schema2 decoder does not relax the
+existing parent schema1 contract. Public descriptors retain their canonical GET
+cache. Fragment storage, transport choice and cookie delivery are independent;
+the old unnegotiated behavior is preserved. Matching WordPress/frontend acceptance
+is required separately from native mock transport tests.
+
 ### Registered cold public selection
 
 Registered non-resolver applications prepare only an eligible actual MISS. Plain

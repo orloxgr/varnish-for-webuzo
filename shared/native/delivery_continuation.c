@@ -9,6 +9,7 @@
 #include "delivery_envelope.h"
 #include "delivery_reuse_wire.h"
 #include "delivery_mutation_wire.h"
+#include "delivery_fragments_wire.h"
 
 /* Separate top-request eligibility storage does not create a continuation. */
 static const char guest_top_token;
@@ -142,7 +143,7 @@ enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY,
     D_FINALIZE_QUEUED, D_FINALIZE, D_FINALIZE_RETURN, D_SOURCE_PERSONAL_QUEUED,
-    D_FAILED };
+    D_FRAGMENT_OBJECT, D_FRAGMENT_RETURN, D_FRAGMENT_SENT, D_FAILED };
 enum public_source_stage { SOURCE_NONE, SOURCE_RESOLVER, SOURCE_CAPTURE, SOURCE_PERSONAL, SOURCE_COMPLETE };
 enum reuse_lookup_result { REUSE_PLAN_MISS, REUSE_PLAN_HIT };
 struct delivery_reuse_plan;
@@ -188,6 +189,13 @@ struct continuation {
     char *body;
     size_t length, capacity;
     struct delivery_fragment *fragments;
+    struct delivery_fragment_batch *fragment_batch;
+    struct delivery_fragment_results *fragment_results;
+    struct delivery_fragment *fragment_cursor;
+    char *fragment_scope, *fragment_json, *fragment_resume_uri;
+    size_t fragment_json_length;
+    unsigned fragment_restart;
+    unsigned fragment_error_status;
     struct delivery_reuse_plan *reuse_plan; /* same top-request owner, not a body store */
     struct delivery_public_parent *public_parent; /* same-request public bytes */
     struct delivery_private_document *document;
@@ -223,6 +231,10 @@ static int delivery_reuse_schedule(VRT_CTX, struct vmod_priv *, struct continuat
 static int delivery_reuse_recv(VRT_CTX, struct continuation *);
 static int delivery_reuse_finish(VRT_CTX, struct continuation *);
 static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *, struct continuation *);
+static int fragment_dispatch_owner(VRT_CTX, const struct continuation *);
+static int fragment_source_owned(const struct continuation *, const char *, const char *);
+static int fragment_authority_current(const struct continuation *, const struct delivery_fragment *);
+static int fragment_cache_allowed_locked(const char *, const char *, const char *);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -296,7 +308,12 @@ static void delivery_fini(VRT_CTX, void *value) {
     delivery_selection_free(d->warm_source);
     delivery_manifest_free(d->manifest);
     for (i = 0; i < 6; ++i) free(d->conditional[i]);
-    free(d->body); delivery_free_fragments(d->fragments);
+    free(d->body);
+    if (d->fragment_results) d->fragment_results->rendered = d->fragments;
+    else delivery_free_fragments(d->fragments);
+    delivery_fragment_results_free(d->fragment_results);
+    delivery_fragment_batch_free(d->fragment_batch);
+    free(d->fragment_scope); free(d->fragment_json); free(d->fragment_resume_uri);
     clear_fields(d->public_headers);
     clear_fields(d->document_headers);
     delivery_private_document_free(d->document);
@@ -359,6 +376,13 @@ static int delivery_parse(VRT_CTX, struct continuation *d) {
     char *legacy = NULL, *candidate = NULL;
     size_t legacy_length = 0, candidate_length = 0;
     int ok;
+    if (d->fragment_batch) {
+        ok = delivery_fragment_envelope_parse_v1(d->body,d->length,d->request_id,d->url,
+            d->fragment_batch,&d->fragment_results);
+        if (ok) d->fragments = d->fragment_results->rendered;
+        free(d->body); d->body = NULL; d->length = d->capacity = 0;
+        return ok;
+    }
     if (d->source_stage == SOURCE_CAPTURE || d->source_stage == SOURCE_RESOLVER) {
         struct delivery_public_selection *source = NULL;
         struct delivery_public_projection *resolved = NULL;
@@ -711,6 +735,9 @@ VCL_INT vmod_delivery_recv(VRT_CTX, struct vmod_priv *priv) {
         if (d->phase != D_DELIVERED) return -1;
         url = ctx->http_req->hd[HTTP_HDR_URL].b;
         for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) {
+            int caching;
+            pthread_mutex_lock(&lock); caching = fragment_cache_allowed_locked(d->site,d->host,url); pthread_mutex_unlock(&lock);
+            if (!caching) return 2;
             if (!f->cache_key || !f->cache_ttl) return 2;
             http_ForceHeader(ctx->http_req,h_private_key,f->cache_key);
             http_ForceHeader(ctx->http_req,h_key,d->request_id);
@@ -773,6 +800,7 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
         return g && site && g->site && !strcmp(site,g->site) && vmod_guest_fallback_ready(ctx);
     }
     if (!d || ctx->req->esi_level != 0 || !site || !*site || !ctx->req->restarts) return 0;
+    if (d->fragment_batch) return d->site && !strcmp(d->site,site) && fragment_dispatch_owner(ctx,d);
     if (!http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
     url = ctx->http_req->hd[HTTP_HDR_URL].b;
     method = ctx->http_req->hd[HTTP_HDR_METHOD].b;
@@ -881,14 +909,20 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
         else {
             http_ForceHeader(ctx->http_bereq,h_version,"1");
             http_ForceHeader(ctx->http_bereq,h_phase,
-                d->phase == D_PREPARE ? (d->selection_entry ? "public-select" : "prepare") : "parent-snapshot");
+                d->phase == D_PREPARE ? (d->fragment_batch ? "fragment-prepare" : d->selection_entry ? "public-select" : "prepare") : "parent-snapshot");
             http_ForceHeader(ctx->http_bereq,h_recovery_version,"1");
             http_ForceHeader(ctx->http_bereq,h_request_snapshot_version,"1");
             if (d->phase == D_PREPARE)
                 http_ForceHeader(ctx->http_bereq,h_private_cache_version,"1");
             else http_Unset(ctx->http_bereq,h_private_cache_version);
-            if (d->phase == D_PREPARE) http_ForceHeader(ctx->http_bereq,h_private_document_version,"1");
+            if (d->phase == D_PREPARE && !d->fragment_batch) http_ForceHeader(ctx->http_bereq,h_private_document_version,"1");
             else http_Unset(ctx->http_bereq,h_private_document_version);
+            if (d->fragment_batch) {
+                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Fragment-Delivery-Version"),"1");
+                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Fragment-Delivery-Request-Digest"),d->fragment_batch->digest);
+                http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Fragment-Caching-Enabled"),
+                    fragment_cache_allowed_locked(d->site,d->host,d->url) ? "1" : "0");
+            }
             if (d->cookie_delivery && d->phase == D_PREPARE)
                 http_ForceHeader(ctx->http_bereq,h_cookie_delivery,"1");
             else http_Unset(ctx->http_bereq,h_cookie_delivery);
@@ -915,7 +949,7 @@ VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {
                 http_ForceHeader(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"),
                     d->source_unstable ? "unstable-public-projection" : "public-source-unavailable");
             else http_Unset(ctx->http_bereq,HDR("X-UltraCache-Delivery-Public-Source-Fallback"));
-            if (d->phase == D_PREPARE && !d->selection_entry && !d->reselect_attempted)
+            if (d->phase == D_PREPARE && !d->selection_entry && !d->reselect_attempted && !d->fragment_batch)
                 http_ForceHeader(ctx->http_bereq,h_reselect_version,"1");
             else http_Unset(ctx->http_bereq,h_reselect_version);
             if (d->manifest && !d->guest_complete) http_ForceHeader(ctx->http_bereq,h_manifest,d->manifest);
@@ -1030,6 +1064,10 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     d = entry ? entry->delivery : NULL;
     owned = d && d->phase == D_PREPARE;
     if (!owned) { pthread_mutex_unlock(&lock); return 0; }
+    if (d->fragment_batch) {
+        unsigned status = http_GetStatus(ctx->http_beresp);
+        if (status == 400 || status == 404 || status == 409) d->fragment_error_status = status;
+    }
     source_only = d->source_stage == SOURCE_CAPTURE;
     source_operation = source_only || d->source_stage == SOURCE_RESOLVER;
     declined = source_operation && http_GetStatus(ctx->http_beresp) == 409 &&
@@ -1077,6 +1115,11 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
             d->phase = D_RAW_PASS;
             pthread_mutex_unlock(&lock); return 0;
         }
+    } else if (d->fragment_batch && !d->fragment_error_status) {
+        static const char mime[] = "application/vnd.ultracache.fragment-delivery+json";
+        valid = content_type && !strncasecmp(content_type,mime,sizeof(mime)-1) &&
+            (!content_type[sizeof(mime)-1] || content_type[sizeof(mime)-1] == ';') &&
+            delivery_header_equals(ctx->http_beresp,HDR("X-UltraCache-Fragment-Delivery-Version"),"1");
     } else valid = 1;
     if (d->conflict_verified) {
         d->phase = D_CONFLICT;
@@ -1095,7 +1138,7 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
     if (d->guest_reply) valid = valid && d->selection_entry && d->guest_requested &&
         delivery_header_equals(ctx->http_beresp,h_guest_version,"1") &&
         !http_CountHdr(ctx->http_beresp,H_Set_Cookie) && !http_CountHdr(ctx->http_beresp,h_set_cookie2);
-    valid = valid && (declined || http_GetStatus(ctx->http_beresp) == 200) &&
+    valid = valid && (declined || d->fragment_error_status || http_GetStatus(ctx->http_beresp) == 200) &&
         (!http_GetHdr(ctx->http_beresp,H_Content_Encoding,&encoding) || !strcmp(encoding,"identity"));
     if (valid && d->source_projected && source_operation && !declined) {
         d->source_resolved_response = delivery_header_equals(ctx->http_beresp,
@@ -1141,9 +1184,9 @@ VCL_BOOL vmod_delivery_capture(VRT_CTX, struct vmod_priv *priv) {
             else if (!strcmp(outcome,"verified") && !entry->delivery->debug_fallback)
                 entry->delivery->outcome = 1;
         }
-        entry->delivery->recovery_ready = !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
+        entry->delivery->recovery_ready = !d->fragment_batch && !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
             (!strcmp(recovery,"public-snapshot-v1") || !strcmp(recovery,"request-snapshot-v1"));
-        entry->delivery->snapshot_ready = !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
+        entry->delivery->snapshot_ready = !d->fragment_batch && !d->selection_entry && http_GetHdr(ctx->http_beresp,h_recovery,&recovery) &&
             !strcmp(recovery,"request-snapshot-v1");
         entry->delivery->prepare_response_time = ctx->now;
     }
@@ -1483,3 +1526,4 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 #include "reuse_authority.c"
 #include "mutation_backend.c"
 #include "delivery_reuse_runtime.c"
+#include "delivery_fragments_runtime.c"

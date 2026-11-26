@@ -124,7 +124,8 @@ static int delivery_snapshot_gethdrs(VRT_CTX, VCL_BACKEND backend) {
     d = entry ? entry->delivery : NULL;
     fragment = is_private ? delivery_fragment_named(d,ctx->http_bereq->hd[HTTP_HDR_URL].b) : NULL;
     if (is_private) {
-        if (!d || d->phase != D_DELIVERED || !fragment || !fragment->cache_key || !fragment->cache_ttl) failed = 1;
+        if (!d || !fragment || !fragment->cache_key || !fragment->cache_ttl ||
+            (d->fragment_batch ? !fragment_source_owned(d,fragment->url,fragment->cache_key) : d->phase != D_DELIVERED)) failed = 1;
         else {
             http_PutResponse(ctx->http_beresp,"HTTP/1.1",200,"OK");
             http_ForceHeader(ctx->http_beresp,H_Content_Type,"text/html; charset=UTF-8");
@@ -248,13 +249,21 @@ VCL_BACKEND vmod_delivery_private_backend(VRT_CTX, struct vmod_priv *task_priv, 
     const char *key = NULL;
     int valid = 0;
     struct vmod_priv *filter;
-    if (!task || !task->key || !module) return NULL;
+    if (!task || !task->key || !module) {
+        VSLb(ctx->vsl,SLT_Debug,"uc-fragments source-association task=%d key=%d module=%d",task != NULL,task && task->key,module != NULL);
+        return NULL;
+    }
     http_GetHdr(ctx->http_bereq,h_private_key,&key);
     pthread_mutex_lock(&lock);
     entry = delivery_entry(task->key);
-    f = entry && entry->delivery && entry->delivery->phase == D_DELIVERED
+    f = entry && entry->delivery && (entry->delivery->phase == D_DELIVERED || entry->delivery->fragment_batch)
         ? delivery_fragment_named(entry->delivery,ctx->http_bereq->hd[HTTP_HDR_URL].b) : NULL;
     valid = f && f->cache_key && f->cache_ttl && key && !strcmp(f->cache_key,key);
+    if (valid && entry->delivery->fragment_batch)
+        valid = fragment_source_owned(entry->delivery,f->url,key);
+    if (!valid && entry && entry->delivery && entry->delivery->fragment_batch)
+        VSLb(ctx->vsl,SLT_Debug,"uc-fragments source-rejected phase=%d body=%d key=%d authority=%d",
+            (int)entry->delivery->phase,f != NULL,key != NULL,f && fragment_authority_current(entry->delivery,f));
     pthread_mutex_unlock(&lock);
     if (!valid) return NULL;
     filter = VRT_priv_task(ctx,&private_filter_task_token);
@@ -271,10 +280,12 @@ VCL_BOOL vmod_delivery_private_source(VRT_CTX) {
     if (!priv || !priv->priv) return 0;
     pthread_mutex_lock(&lock);
     entry = delivery_entry(*(uint64_t *)priv->priv);
-    f = entry && entry->delivery && entry->delivery->phase == D_DELIVERED
+    f = entry && entry->delivery && (entry->delivery->phase == D_DELIVERED || entry->delivery->fragment_batch)
         ? delivery_fragment_named(entry->delivery,ctx->http_bereq->hd[HTTP_HDR_URL].b) : NULL;
     valid = f && f->cache_key && f->cache_ttl &&
         http_GetStatus(ctx->http_beresp) == 200 && !http_CountHdr(ctx->http_beresp,H_Set_Cookie);
+    if (valid && entry->delivery->fragment_batch)
+        valid = fragment_source_owned(entry->delivery,f->url,f->cache_key);
     if (valid) remaining = delivery_fragment_deadline(entry->delivery,f)-ctx->now;
     pthread_mutex_unlock(&lock);
     if (!valid) { VRT_fail(ctx,"Prepared private source rejected"); return 1; }

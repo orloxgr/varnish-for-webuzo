@@ -23,6 +23,7 @@ sub wvw_http_control {
             }
             call scp_selection_negotiate;
             call scp_reuse_negotiate;
+            call scp_fragment_negotiate;
             return (synth(200, "Cache control capabilities"));
         }
         if (req.http.X-UltraCache-Operation == "exact-purge") {
@@ -136,6 +137,7 @@ sub vcl_synth {
         set resp.http.X-UltraCache-VCL-Operation = req.http.X-UltraCache-Operation;
         set resp.http.X-UltraCache-VCL-Capabilities = "exact-purge,exact-ban,batch-ban,html-ban,host-ban,soft-purge";
         call scp_selection_capabilities;
+        call scp_fragment_capabilities;
         if (req.http.X-UltraCache-Operation == "capabilities" && req.http.X-SCP-Profile == "ultracache" &&
             cookie_handoff.delivery_reuse_available()) {
             set resp.http.X-UltraCache-VCL-Private-Authority-Version = "1";

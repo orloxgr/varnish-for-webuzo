@@ -47,6 +47,8 @@ struct reuse_scope {
     char native_policy[65], wordpress_policy[65], policy[65];
     unsigned char reuse_key[32]; /* authenticated purpose-separated key, never raw site credential */
     unsigned enabled, revision_pending;
+    char *fragment_route; /* authenticated exact installation index path */
+    unsigned fragment_cache_disabled;
     struct mutation_execution *executions;
     struct reuse_discovery **discoveries; /* declarations only; cached record is authority */
     size_t discovery_capacity, discovery_count;
@@ -89,7 +91,7 @@ static void reuse_registry_free(void) {
             volatile unsigned char *wipe = scope->reuse_key;
             for (i = 0; i < sizeof(scope->reuse_key); ++i) wipe[i] = 0;
         }
-        free(scope->tags); free(scope->site); free(scope->host); free(scope->scope); free(scope);
+        free(scope->tags); free(scope->site); free(scope->host); free(scope->scope); free(scope->fragment_route); free(scope);
     }
 }
 static struct reuse_scope *reuse_scope_find(const char *site, const char *host, const char *scope) {
@@ -152,6 +154,23 @@ static int reuse_scope_ready(const struct reuse_scope *scope) {
 }
 static int reuse_tag_clean(const struct reuse_scope *scope, const struct reuse_tag *tag) {
     return reuse_scope_ready(scope) && tag->clean && !strcmp(tag->bound_scope_revision,scope->revision);
+}
+/* Same writer-lock predicate for parent reuse and fragment-only delivery.
+ * Scope/identity binding is the caller's responsibility, never a cache key. */
+static const char *reuse_authority_current_reason(const struct reuse_scope *scope,
+    const struct delivery_reuse_authority *authority) {
+    const struct delivery_reuse_authority *a;
+    if (!reuse_scope_ready(scope)) return "scope-not-ready";
+    for (a = authority; a; a = a->next) {
+        const struct reuse_tag *tag = reuse_tag_find((struct reuse_scope *)scope,a->tag,0);
+        if (!tag) return "tag-unavailable";
+        if (!tag->clean) return "tag-not-clean";
+        if (strcmp(tag->bound_scope_revision,scope->revision)) return "tag-scope-revision";
+        if (reuse_active(tag)) return "tag-active-writer";
+        if (strcmp(tag->content_revision,a->revision) && strcmp(tag->revision,a->revision)) return "tag-revision";
+        if (strcmp(tag->generation,a->generation)) return "tag-generation";
+    }
+    return NULL;
 }
 static struct reuse_transaction *reuse_transaction_lookup(struct reuse_transaction *list, const char *id) {
     struct reuse_transaction *transaction;

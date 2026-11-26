@@ -196,7 +196,7 @@ static int delivery_reuse_record_current_reason(const struct continuation *d, co
     delivery_reuse_frame_free(frame,length);
     if (!i) return delivery_reuse_record_reject(reason,"input-binding-rejected");
     for (f = record->fragments; f; f = f->next) {
-        const struct delivery_reuse_authority *a;
+        const char *authority_reason;
         const struct delivery_fragment *body = delivery_fragment_named(d,f->url);
         if (original && (!body || !body->cache_key || strcmp(body->cache_key,f->cache_key) ||
             !body->cache_tags || strcmp(body->cache_tags,f->cache_tags) ||
@@ -209,19 +209,8 @@ static int delivery_reuse_record_current_reason(const struct continuation *d, co
         i = delivery_reuse_identity_mac(scope->reuse_key,&page,frame,length,binding) && !strcmp(binding,f->identity_binding);
         delivery_reuse_frame_free(frame,length);
         if (!i) return delivery_reuse_record_reject(reason,"identity-binding-rejected");
-        for (a = f->authority; a; a = a->next) {
-            const struct reuse_tag *tag = reuse_tag_find((struct reuse_scope *)scope,a->tag,0);
-            if (!tag) return delivery_reuse_record_reject(reason,"tag-unavailable");
-            if (!tag->clean) return delivery_reuse_record_reject(reason,"tag-not-clean");
-            if (strcmp(tag->bound_scope_revision,scope->revision)) return delivery_reuse_record_reject(reason,"tag-scope-revision");
-            if (reuse_active(tag)) return delivery_reuse_record_reject(reason,"tag-active-writer");
-            /* New producer metadata uses stable content authority. The current
-             * CAS revision remains accepted for existing producer metadata;
-             * actual writes/generation changes advance both revisions. */
-            if (strcmp(tag->content_revision,a->revision) && strcmp(tag->revision,a->revision))
-                return delivery_reuse_record_reject(reason,"tag-revision");
-            if (strcmp(tag->generation,a->generation)) return delivery_reuse_record_reject(reason,"tag-generation");
-        }
+        authority_reason = reuse_authority_current_reason(scope,f->authority);
+        if (authority_reason) return delivery_reuse_record_reject(reason,authority_reason);
     }
     return 1;
 }
@@ -297,6 +286,7 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     scope = declaration ? reuse_scope_find(d->site,d->host,declaration->scope) : NULL;
     if (!scope) { reason = "scope-unavailable"; goto done_locked; }
     if (!scope->enabled) { reason = "scope-disabled"; goto done_locked; }
+    if (scope->fragment_cache_disabled) { reason = "fragment-caching-disabled"; goto done_locked; }
     if (!reuse_scope_ready(scope)) { reason = "scope-not-ready"; goto done_locked; }
     if (scope->revision_pending) { reason = "scope-revision-pending"; goto done_locked; }
     if (strcmp(native_policy,scope->native_policy)) { reason = "scope-native-policy"; goto done_locked; }

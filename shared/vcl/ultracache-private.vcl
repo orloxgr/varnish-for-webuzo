@@ -13,6 +13,9 @@ sub scp_private_lookup {
     if (req.http.X-UltraCache-Private-Key !~ "^[0-9a-f]{64}$") {
         return (synth(400, "Invalid private cache key"));
     }
+    if (!cookie_handoff.fragment_caching(req.http.X-SCP-Site,req.http.host,req.url)) {
+        return (synth(404,"Private cache unavailable"));
+    }
     set req.method = "GET";
     set req.http.X-SCP-Private-Key = req.http.X-UltraCache-Private-Key;
     set req.http.X-SCP-Private-Lookup = "1";

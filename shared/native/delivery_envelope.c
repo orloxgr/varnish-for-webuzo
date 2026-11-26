@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Only the fixed UltraCache delivery-v1 envelope grammar is accepted. There is
- * no recursive generic JSON tree, engine-private header or external JSON DSO.
+ * Fixed UltraCache delivery-v1 grammar and a separate fragment-only grammar.
+ * No recursive generic JSON tree, engine-private header or external JSON DSO.
  */
 #include "delivery_envelope.h"
 #include <stdlib.h>
@@ -499,3 +499,4 @@ int delivery_cookie_envelope_parse(const char *body, size_t length,
 #include "delivery_public_projection_wire.c"
 #include "delivery_reuse_wire.c"
 #include "delivery_reuse_metadata.c"
+#include "delivery_fragments_wire.c"

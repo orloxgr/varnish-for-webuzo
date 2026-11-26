@@ -86,6 +86,7 @@ VCL_BOOL vmod_mutation_backend_start(VRT_CTX, struct vmod_priv *priv, VCL_STRING
          * sources do not execute an application/provider. Client headers alone
          * cannot enter either phase or create a skip grant. */
         if (delivery && (delivery->phase == D_RECOVERY || delivery->phase == D_FINALIZE ||
+            (delivery->fragment_batch && fragment_source_owned(delivery,url,fragment ? fragment->cache_key : NULL)) ||
             (delivery->phase == D_DELIVERED && fragment && fragment->cache_key && fragment->cache_ttl))) goto done;
     }
     execution = calloc(1,sizeof(*execution));
