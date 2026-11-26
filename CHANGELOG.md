@@ -5,6 +5,21 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.1 — 2026-11-26
+
+- Development candidate for coordinated UltraCache fragment-delivery acceptance;
+  this is not a production release.
+- Reuse the same individual native fragment objects across ESI and browser
+  batches, with authenticated application preparation, current mutation
+  authority and sanitized request-local JSON delivery.
+- Keep parent delivery and fragment storage independent. Echo the accepted
+  parent flag; full connection retirement omits the fragment declaration.
+- Admit explicitly declared stateless anonymous fragments under the current
+  scope authority, while personal fragments retain their dependency checks.
+- Preserve canonical object keys, provider lifetimes and saved cookie choices.
+  Normal activation/update or Refresh sites rebuilds the native module and
+  reconciles the shipped policy for all existing enabled sites.
+
 ## 0.13.26 — 2026-11-26
 
 - Share public HTML across WordPress admin preference cookies (`wp-settings-`,
