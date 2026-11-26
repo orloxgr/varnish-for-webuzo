@@ -2,15 +2,31 @@
  * Fragment-only delivery reuses the existing continuation, native object
  * namespace, virtual source and mutation authority. No persistent body store. */
 
+static int fragment_route_valid(const char *scope, const char *route) {
+    return delivery_selection_scope_valid(scope) && delivery_relative(route) && !strchr(route,'?') &&
+        delivery_selection_scope_matches(scope,route) && strlen(route) >= 10 &&
+        !strcmp(route+strlen(route)-10,"/index.php");
+}
+
+static int fragment_declaration_active(VRT_CTX, const char *scope) {
+    const char *version = reuse_single(ctx->http_req,HDR("X-UltraCache-Fragment-Delivery-Version"));
+    const char *route = reuse_single(ctx->http_req,HDR("X-UltraCache-Fragment-Delivery-Route"));
+    const char *caching = reuse_single(ctx->http_req,HDR("X-UltraCache-Fragment-Caching-Enabled"));
+    return delivery_header_equals(ctx->http_req,HDR("X-SCP-Profile"),"ultracache") &&
+        version && !strcmp(version,"1") && caching && (!strcmp(caching,"0") || !strcmp(caching,"1")) &&
+        fragment_route_valid(scope,route);
+}
+
+VCL_BOOL vmod_fragment_declaration(VRT_CTX, VCL_STRING scope) {
+    return fragment_declaration_active(ctx,scope);
+}
+
 VCL_BOOL vmod_fragment_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     VCL_STRING scope, VCL_STRING route, VCL_BOOL caching) {
     struct reuse_scope *owner;
     char *copy_route = NULL;
     int accepted = 0;
-    if (!site || !host || !scope || !route || !delivery_selection_scope_valid(scope) ||
-        !delivery_relative(route) || strchr(route,'?') ||
-        !delivery_selection_scope_matches(scope,route)) return 0;
-    if (*route && (strlen(route) < 10 || strcmp(route+strlen(route)-10,"/index.php"))) return 0;
+    if (!site || !host || !fragment_route_valid(scope,route)) return 0;
     copy_route = strdup(route);
     if (!copy_route) return 0;
     pthread_mutex_lock(&lock);

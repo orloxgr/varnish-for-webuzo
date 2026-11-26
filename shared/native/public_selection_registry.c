@@ -36,6 +36,7 @@ struct public_declaration {
     char *site, *host, *scope, *wordpress_policy, *names, *guest_policy;
     unsigned public_source;
     unsigned public_projection;
+    unsigned parent_enabled; /* metadata/fragment authority may remain active */
     struct guest_input_publication *guest_inputs[BUCKETS]; /* publication metadata, no visitor state */
 };
 static struct public_declaration *public_declarations;
@@ -166,15 +167,16 @@ VCL_STRING vmod_selection_epoch(VRT_CTX) {
 VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     VCL_STRING scope, VCL_STRING wordpress_policy, VCL_STRING names, VCL_BOOL enabled, VCL_STRING guest_policy) {
     struct public_declaration *next = NULL, **p;
-    (void)ctx;
+    int participating = enabled || fragment_declaration_active(ctx,scope);
     if (!site || !*site || !host || !*host || !delivery_selection_scope_valid(scope) ||
-        (enabled && (!public_policy(wordpress_policy) || (guest_policy && *guest_policy && !public_policy(guest_policy))))) return 0;
-    if (enabled) {
+        (participating && (!public_policy(wordpress_policy) || (guest_policy && *guest_policy && !public_policy(guest_policy))))) return 0;
+    if (participating) {
         next = calloc(1,sizeof(*next));
         if (!next) return 0;
         next->site = strdup(site); next->host = strdup(host); next->scope = strdup(scope);
         next->wordpress_policy = strdup(wordpress_policy); next->names = public_names(names);
         next->guest_policy = strdup(guest_policy ? guest_policy : "");
+        next->parent_enabled = enabled;
         next->public_source = delivery_header_equals(ctx->http_req,
             HDR("X-UltraCache-Public-Selection-Public-Source-Version"),"1");
         next->public_projection = delivery_header_equals(ctx->http_req,
@@ -198,6 +200,24 @@ VCL_BOOL vmod_selection_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     }
     if (next) { next->next = public_declarations; public_declarations = next; }
     pthread_mutex_unlock(&lock); return 1;
+}
+VCL_STRING vmod_selection_enabled(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope) {
+    const struct public_declaration *p;
+    const char *enabled = NULL;
+    (void)ctx;
+    if (!site || !host || !delivery_selection_scope_valid(scope)) return NULL;
+    pthread_mutex_lock(&lock); p = public_declaration(site,host,scope);
+    if (p) enabled = p->parent_enabled ? "1" : "0";
+    pthread_mutex_unlock(&lock); return enabled;
+}
+VCL_BOOL vmod_selection_parent_allowed(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING url) {
+    const struct public_declaration *p;
+    int allowed = 1;
+    (void)ctx;
+    if (!site || !host || !url) return 1;
+    pthread_mutex_lock(&lock); p = public_declaration_for_url(site,host,url);
+    if (p) allowed = p->parent_enabled;
+    pthread_mutex_unlock(&lock); return allowed;
 }
 VCL_STRING vmod_selection_names(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_STRING scope) {
     struct public_declaration *p;
@@ -269,10 +289,10 @@ VCL_BOOL vmod_guest_warm_parent(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL
     http_GetHdr(ctx->http_req,HDR("Accept"),&accept);
     pthread_mutex_lock(&lock);
     p = public_declaration_for_url(site,host,url);
-    if (p && *p->guest_policy && public_policy(public_registry_epoch) && !g->warm_public)
+    if (p && p->parent_enabled && *p->guest_policy && public_policy(public_registry_epoch) && !g->warm_public)
         message = WS_Printf(ctx->ws,"ultracache-warm-projection-v1\nparent-v1\nGET\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s",
             host,url,scheme,accept ? accept : "",p->scope,policy,p->wordpress_policy,p->guest_policy,public_registry_epoch);
-    if (p && *p->guest_policy && public_policy(public_registry_epoch) && g->warm_public)
+    if (p && p->parent_enabled && *p->guest_policy && public_policy(public_registry_epoch) && g->warm_public)
         message = WS_Printf(ctx->ws,"ultracache-warm-projection-v2\nparent-v1\npublic-parent-only\nGET\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s",
             host,url,scheme,accept ? accept : "",p->scope,policy,p->wordpress_policy,p->guest_policy,public_registry_epoch);
     pthread_mutex_unlock(&lock);
@@ -298,7 +318,7 @@ VCL_VOID vmod_guest_select(VRT_CTX, VCL_STRING site, VCL_STRING policy, VCL_STRI
         !site || !public_policy(policy) || !http_GetHdr(ctx->http_req,H_Host,&host)) return;
     pthread_mutex_lock(&lock);
     p = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
-    if (p && fragment_cache_allowed_locked(site,host,ctx->http_req->hd[HTTP_HDR_URL].b) &&
+    if (p && p->parent_enabled && fragment_cache_allowed_locked(site,host,ctx->http_req->hd[HTTP_HDR_URL].b) &&
         *p->guest_policy && (!public || (p->public_source && p->public_projection))) {
         g->policy = strdup(p->guest_policy); g->wordpress_policy = strdup(p->wordpress_policy);
         g->scope = strdup(p->scope); g->epoch = strdup(public_registry_epoch);
@@ -366,7 +386,7 @@ static void guest_inputs_remember(VRT_CTX, struct continuation *d, struct delive
     bucket = guest_input_bucket(p->key,p->manifest);
     pthread_mutex_lock(&lock);
     owner = public_declaration(d->site,d->host,d->selection_scope);
-    if (!owner || strcmp(owner->wordpress_policy,d->wordpress_policy) ||
+    if (!owner || !owner->parent_enabled || strcmp(owner->wordpress_policy,d->wordpress_policy) ||
         strcmp(owner->guest_policy,d->guest_policy) || strcmp(public_registry_epoch,d->guest_epoch)) {
         pthread_mutex_unlock(&lock); guest_input_publication_free(p); return;
     }
@@ -392,7 +412,7 @@ VCL_BOOL vmod_guest_shared_hit(VRT_CTX, VCL_STRING key, VCL_STRING manifest, VCL
     bucket = guest_input_bucket(key,manifest);
     pthread_mutex_lock(&lock);
     owner = public_declaration(g->site,g->host,g->scope);
-    if (!owner || strcmp(owner->wordpress_policy,g->wordpress_policy) ||
+    if (!owner || !owner->parent_enabled || strcmp(owner->wordpress_policy,g->wordpress_policy) ||
         strcmp(owner->guest_policy,g->policy) || strcmp(public_registry_epoch,g->epoch)) goto done;
     guest_input_publications_prune(&owner->guest_inputs[bucket],ctx->now);
     for (p = owner->guest_inputs[bucket]; p; p = p->next)
@@ -453,7 +473,7 @@ VCL_INT vmod_selection_begin(VRT_CTX, struct vmod_priv *priv,
         !d->url || strcmp(d->url,ctx->http_req->hd[HTTP_HDR_URL].b))) return -1;
     if (!reselect && g && g->shared_candidate && !g->projected_fill && !g->disabled) return 0;
     pthread_mutex_lock(&lock); declaration = public_declaration_for_url(site,host,ctx->http_req->hd[HTTP_HDR_URL].b);
-    found = declaration != NULL;
+    found = declaration && declaration->parent_enabled;
     if (found) {
         names = strdup(declaration->names); wordpress_policy = strdup(declaration->wordpress_policy); scope = strdup(declaration->scope);
         source_available = declaration->public_source;

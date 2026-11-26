@@ -26,8 +26,8 @@ class NativeFragmentBatch(unittest.TestCase):
     begin = authority_tests.NativeReuseAuthority.begin
     commit = authority_tests.NativeReuseAuthority.commit
 
-    def register(self, get, caching=True):
-        result = control(get, enabled=True, names='', wordpress_policy='b'*64, extra={
+    def register(self, get, caching=True, parent=True):
+        result = control(get, enabled=parent, names='', wordpress_policy='b'*64, extra={
             'X-UltraCache-Public-Selection-Reuse-Version': '1',
             'X-UltraCache-Public-Selection-Reuse-Policy': 'c'*64,
             'X-UltraCache-Fragment-Delivery-Version': '1',
@@ -36,6 +36,7 @@ class NativeFragmentBatch(unittest.TestCase):
         self.assertEqual(result[0], 200, result)
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Delivery-Version'), '1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Caching-Enabled'), '1' if caching else '0')
+        self.assertEqual(result[1].get('X-UltraCache-VCL-Public-Selection-Enabled'), '1' if parent else '0')
 
     def test_unregistered_capabilities_do_not_advertise_partial_contract_then_register(self):
         fields = ('X-UltraCache-VCL-Fragment-Delivery-Version',
@@ -230,6 +231,82 @@ class NativeFragmentBatch(unittest.TestCase):
             result = json.loads(body)['results'][0]
             self.assertEqual(result, dict(url=item['url'], status=409, error=dict(code='state-conflict')))
             self.assertEqual(exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)[0], 404)
+
+    def test_hot_parent_and_fragment_controls_are_independent_until_full_teardown(self):
+        value, wire, uri = self.batch(1)
+        item = value['fragments'][0]
+        key = hashlib.sha256(b'committed-fragment-owner').hexdigest()
+        state = dict(context=None, renders=0, parent_calls=0, lookups=[])
+        def origin(path, headers):
+            if path != uri:
+                self.assertEqual(path, '/ordinary-parent/')
+                self.assertIsNone(headers.get('X-UltraCache-Delivery-Phase'))
+                state['parent_calls'] += 1
+                return 'fresh-parent-'+str(state['parent_calls']), [('Cache-Control', 'public, max-age=120')]
+            if headers.get('X-UltraCache-Delivery-Phase') != 'fragment-prepare':
+                return 403, 'no-shadow-native-fragment', [('Cache-Control', 'private, no-store')]
+            caching = headers.get('X-UltraCache-Fragment-Caching-Enabled') == '1'
+            if caching:
+                status, fields, output = exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)
+                state['lookups'].append(status)
+            else:
+                status, fields, output = 404, [], ''
+            if status == 200:
+                ttl = int(dict(fields)['X-UltraCache-Private-Remaining'])
+            else:
+                self.assertEqual(status, 404); state['renders'] += 1
+                output = 'fragment-render-'+str(state['renders']); ttl = 60
+            row = dict(item, html=output)
+            grant = None
+            if caching:
+                row['cache'] = dict(key=key, ttl=ttl, tags='fixture')
+                context = state['context']
+                grant = {name: context[name] for name in ('scope', 'epoch', 'incarnation', 'scopeRevision',
+                    'nativePolicy', 'wordpressPolicy', 'reusePolicy')}
+                grant['fragments'] = [dict(url=item['url'], authority=[dict(tag=context['tag'],
+                    revision=context['contentRevision'], generation=context['generation'])])]
+            return self.response(headers, wire, [row], authority=grant)
+        with proxy('ultracache', origin) as get:
+            self.assertEqual(get('/ordinary-parent/')[2], 'fresh-parent-1')
+            self.register(get); state['context'] = self.ready(get)
+            self.assertEqual(get('/ordinary-parent/')[2], 'fresh-parent-1')
+            self.assertEqual(get(uri)[0], 200)
+            self.assertEqual(get(uri)[0], 200)
+            self.assertEqual((state['parent_calls'], state['renders']), (1, 1))
+            before = self.observe(get)
+            before_remaining = int(dict(exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)[1])['X-UltraCache-Private-Remaining'])
+            self.register(get, parent=False)
+            after = self.observe(get)
+            self.assertEqual((after['scopeRevision'], after['contentRevision'], after['generation']),
+                (before['scopeRevision'], before['contentRevision'], before['generation']))
+            self.assertEqual(get('/ordinary-parent/')[2], 'fresh-parent-2')
+            self.assertEqual(get('/ordinary-parent/')[2], 'fresh-parent-3')
+            self.assertEqual(get('/ordinary-parent/', extra={'Accept': 'application/json'})[2], 'fresh-parent-4',
+                'A different request Accept cannot expose retained HTML while parent delivery is OFF')
+            hot = get(uri)
+            self.assertEqual(hot[0], 200, hot)
+            self.assertEqual(json.loads(hot[2])['results'][0]['html'], 'fragment-render-1')
+            self.assertEqual(state['renders'], 1, 'Parent OFF cannot disable or refresh the native fragment')
+            remaining = int(dict(exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)[1])['X-UltraCache-Private-Remaining'])
+            self.assertLessEqual(remaining, before_remaining, 'Parent toggle must not reset original fragment expiry')
+            self.register(get, caching=False, parent=False)
+            self.assertEqual(exchange(get, 'UC-PRIVATE-GET', item['url'], key, 'b'*64)[0], 404)
+            first = get(uri); second = get(uri)
+            self.assertEqual((first[0], second[0]), (200, 200))
+            self.assertEqual(state['renders'], 3)
+            self.assertNotEqual(json.loads(first[2]), json.loads(second[2]))
+            disabled = self.observe(get)
+            self.assertEqual(disabled['scopeRevision'], before['scopeRevision'])
+            self.assertEqual(get('/ordinary-parent/')[2], 'fresh-parent-5')
+            teardown = control(get, enabled=False, names='')
+            self.assertEqual(teardown[0], 200, teardown)
+            for header in ('X-UltraCache-VCL-Public-Selection-Enabled', 'X-UltraCache-VCL-Public-Selection-Scope',
+                'X-UltraCache-VCL-Fragment-Delivery-Version', 'X-UltraCache-VCL-Fragment-Delivery-Route',
+                'X-UltraCache-VCL-Fragment-Caching-Enabled'):
+                self.assertNotIn(header, teardown[1])
+            retired = self.call(get, 'private-authority-context', expected_status=409)
+            self.assertEqual(retired['reason'], 'authority-unavailable')
+            self.assertEqual(get(uri)[0], 403, 'Full teardown restores the ordinary unregistered origin path')
 
 
 if __name__ == '__main__': unittest.main()

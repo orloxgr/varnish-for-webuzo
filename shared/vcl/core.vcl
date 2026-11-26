@@ -1,6 +1,7 @@
 # Shared core policy. GPL-3.0-or-later.
 
 sub scp_init {
+    unset req.http.X-SCP-Parent-Disabled;
     unset req.http.X-UltraCache-VCL-Guest-Inputs-Version;
     unset req.http.X-UltraCache-Delivery-Public-Source-Version;
     unset req.http.X-UltraCache-Delivery-Public-Source-Role;
@@ -223,6 +224,12 @@ sub scp_pass {
     set req.http.X-SCP-Pass = "1";
 }
 sub scp_hit {
+    # A non-document Accept value cannot expose a retained HTML parent while
+    # delivery is OFF. Non-HTML objects keep their existing cache behavior.
+    if (req.http.X-SCP-Parent-Disabled == "1" && obj.http.Content-Type ~ "(?i)^(text/html|application/xhtml[+]xml)(?:;|$)") {
+        set req.http.X-SCP-Reason = "parent-delivery-disabled";
+        return (pass);
+    }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_private_hit; }
     if (req.http.X-SCP-Profile == "ultracache") { call scp_ultracache_hit; }
 }
@@ -412,6 +419,10 @@ sub scp_backend_response {
     call scp_aggressive_backend_response;
     call scp_shared_response_cookies;
     call scp_response_privacy;
+    if (bereq.http.X-SCP-Parent-Disabled == "1" && beresp.http.Content-Type ~ "(?i)^(text/html|application/xhtml[+]xml)(?:;|$)") {
+        set beresp.http.X-SCP-Reason = "parent-delivery-disabled";
+        call scp_mark_uncacheable;
+    }
     if (bereq.http.X-SCP-Profile == "ultracache") { call scp_ultracache_backend_response; }
     # The prepare capture consumes its own outcome before this cleanup. An
     # ordinary origin response cannot store a delivery verdict in the parent.

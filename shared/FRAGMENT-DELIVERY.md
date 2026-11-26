@@ -33,6 +33,33 @@ bytes may still be delivered request-locally. Parent HTML caching, actual
 provider lifetimes, canonical URLs and cookie policy choices remain independent.
 Truly unnegotiated legacy scopes keep their previous storage behavior.
 
+`X-UltraCache-Public-Selection-Enabled` remains the parent-delivery flag only.
+An accepted metadata scope echoes it exactly as
+`X-UltraCache-VCL-Public-Selection-Enabled: 0|1`. A valid complete fragment-v1
+declaration explicitly keeps the same metadata/authority owner participating
+even when parent delivery is 0 or fragment storage is 0. This does not send or
+infer parent 1. Discovery of an unregistered scope emits no accepted parent flag.
+
+Parent 0 bypasses retained HTML/XHTML parents, normal public selection, complete
+guest selection and parent fast reuse. Individual registered fragments remain
+independent. Non-HTML objects keep their existing origin/cache policy. An ordinary
+request Accept cannot expose a hot HTML parent while delivery is 0. Toggling only
+the parent or fragment storage flag does not rotate private authority or restart
+individual object lifetimes; actual policy/connection changes still revoke it.
+
+For **full teardown/connection retirement**, WordPress sends parent 0 and omits
+ALL fragment declaration fields (version, route and storage flag). This retains
+the old metadata removal, private authority disable/key wipe/revision advance.
+No accepted parent/fragment tuple remains. Retaining fragment-v1 fields would
+explicitly retain participation, so changing only the parent flag is not teardown.
+Legacy parent 0 requests without fragment-v1 retain their previous behavior.
+
+Applications must require the accepted parent echo together with the accepted
+fragment tuple before claiming independent operation. Older proxies that reject
+parent 0 plus fragment participation must not be worked around by silently sending
+parent 1. Use an explicit supported fallback. No new UI control, registry, batch
+schema or object namespace is introduced by this lifecycle separation.
+
 ## Public request
 
 ```http

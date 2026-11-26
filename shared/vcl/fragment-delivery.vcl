@@ -6,10 +6,39 @@ sub scp_fragment_recv {
     if (req.http.X-SCP-Fragment-State == "3") { return (hash); }
     if (req.http.X-SCP-Fragment-State == "-1") { return (synth(400,"Invalid fragment operation")); }
     unset req.http.X-SCP-Fragment-State;
-    if (req.url ~ "[?]([^&]+&)*ultracache_esi=" &&
-        !cookie_handoff.fragment_caching(req.http.X-SCP-Site,req.http.host,req.url)) {
-        set req.http.X-SCP-Reason = "fragment-caching-disabled";
-        return (pass);
+    if (req.url ~ "[?]([^&]+&)*ultracache_esi=") {
+        if (!cookie_handoff.fragment_caching(req.http.X-SCP-Site,req.http.host,req.url)) {
+            set req.http.X-SCP-Reason = "fragment-caching-disabled";
+            return (pass);
+        }
+        return;
+    }
+    # Reuse the ordinary document candidacy predicate; static Nginx handling,
+    # fragment operations and non-document requests keep their own paths.
+    if (req.esi_level == 0 && (req.method == "GET" || req.method == "HEAD") &&
+        !cookie_handoff.selection_parent_allowed(req.http.X-SCP-Site,req.http.host,req.url)) {
+        set req.http.X-SCP-Parent-Disabled = "1";
+        if (req.http.Accept ~ "(?i)(^|,)[[:blank:]]*(text/html|application/xhtml[+]xml)([[:blank:];,]|$)" ||
+            ((!req.http.Accept || req.http.Accept ~ "(^|,)[[:blank:]]*[*]/[*]([[:blank:];,]|$)") &&
+             (!req.http.Sec-Fetch-Dest || req.http.Sec-Fetch-Dest ~ "^(document|iframe|frame)$"))) {
+            set req.http.X-SCP-Reason = "parent-delivery-disabled";
+            return (pass);
+        }
+    }
+}
+
+# Validate before any metadata/lifecycle mutation in selection registration.
+sub scp_fragment_validate {
+    if (req.http.X-UltraCache-Fragment-Delivery-Version ||
+        req.http.X-UltraCache-Fragment-Delivery-Route || req.http.X-UltraCache-Fragment-Caching-Enabled) {
+        if (req.http.X-SCP-Profile != "ultracache" ||
+            req.http.X-UltraCache-Public-Selection-Version != "1" ||
+            req.http.X-UltraCache-Public-Selection-Enabled !~ "^[01]$" ||
+            req.http.X-UltraCache-Public-Selection-Reuse-Version != "1" ||
+            req.http.X-UltraCache-Public-Selection-Reuse-Policy !~ "^[0-9a-f]{64}$" ||
+            !cookie_handoff.fragment_declaration(req.http.X-UltraCache-Public-Selection-Scope)) {
+            return (synth(400,"Invalid fragment participation declaration"));
+        }
     }
 }
 

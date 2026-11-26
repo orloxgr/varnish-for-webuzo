@@ -285,7 +285,7 @@ static struct reuse_scope *delivery_reuse_current_scope(const struct continuatio
     if (!d || !d->reuse_negotiated || !d->reuse_scope) return NULL;
     scope = reuse_scope_find(d->site,d->host,d->reuse_scope);
     declaration = public_declaration_for_url(d->site,d->host,d->url);
-    if (!scope || !scope->enabled || !declaration || strcmp(declaration->scope,scope->scope) ||
+    if (!scope || !scope->enabled || !declaration || !declaration->parent_enabled || strcmp(declaration->scope,scope->scope) ||
         strcmp(declaration->wordpress_policy,scope->wordpress_policy) ||
         strcmp(public_registry_epoch,d->reuse_epoch) || strcmp(scope->incarnation,d->reuse_incarnation) ||
         strcmp(scope->native_policy,d->reuse_native_policy) || strcmp(scope->wordpress_policy,d->reuse_wp_policy) ||

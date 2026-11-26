@@ -1,7 +1,8 @@
 # Experimental metadata operations only, inside the existing authenticated
 # adapter control gate. This does not advertise or enable cached delivery reuse.
 sub scp_reuse_negotiate {
-    if (req.http.X-UltraCache-Public-Selection-Enabled == "0") {
+    if (req.http.X-UltraCache-Public-Selection-Enabled == "0" &&
+        !cookie_handoff.fragment_declaration(req.http.X-SCP-Selection-Scope)) {
         if (cookie_handoff.delivery_reuse_available()) {
             if (cookie_handoff.reuse_register(req.http.X-SCP-Site,req.http.host,
                 req.http.X-SCP-Selection-Scope,"","","",false)) {}

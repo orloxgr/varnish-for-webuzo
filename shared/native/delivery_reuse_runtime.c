@@ -283,6 +283,7 @@ static int delivery_reuse_try_hit(VRT_CTX, struct vmod_priv *priv, struct contin
     }
     pthread_mutex_lock(&lock);
     declaration = public_declaration_for_url(d->site,d->host,d->url);
+    if (declaration && !declaration->parent_enabled) { reason = "parent-delivery-disabled"; goto done_locked; }
     scope = declaration ? reuse_scope_find(d->site,d->host,declaration->scope) : NULL;
     if (!scope) { reason = "scope-unavailable"; goto done_locked; }
     if (!scope->enabled) { reason = "scope-disabled"; goto done_locked; }

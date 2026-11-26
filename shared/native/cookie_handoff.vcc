@@ -409,6 +409,23 @@ $Restrict vcl_recv
 
 Authenticated capability operation only: register the exact installation batch route.
 
+$Function BOOL fragment_declaration(STRING scope)
+$Restrict vcl_recv
+
+Validate complete fragment-v1 participation in the current authenticated declaration.
+Presence of only part of the tuple never retains or enables a metadata owner.
+
+$Function STRING selection_enabled(STRING site, STRING host, STRING scope)
+$Restrict vcl_recv vcl_synth
+
+Accepted parent delivery flag, or NULL for an unregistered scope.
+
+$Function BOOL selection_parent_allowed(STRING site, STRING host, STRING url)
+$Restrict vcl_recv
+
+Read the actual longest installation's parent gate without changing fragment authority.
+Unregistered legacy paths retain their existing origin-driven caching behavior.
+
 $Function STRING fragment_route(STRING site, STRING host, STRING scope)
 $Restrict vcl_recv vcl_synth
 

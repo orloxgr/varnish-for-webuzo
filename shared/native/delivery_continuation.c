@@ -235,6 +235,7 @@ static int fragment_dispatch_owner(VRT_CTX, const struct continuation *);
 static int fragment_source_owned(const struct continuation *, const char *, const char *);
 static int fragment_authority_current(const struct continuation *, const struct delivery_fragment *);
 static int fragment_cache_allowed_locked(const char *, const char *, const char *);
+static int fragment_declaration_active(VRT_CTX, const char *);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");

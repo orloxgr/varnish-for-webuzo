@@ -26,6 +26,7 @@ sub scp_selection_negotiate {
     std.collect(req.http.X-UltraCache-Public-Selection-Scope);
     std.collect(req.http.X-UltraCache-Public-Selection-Public-Source-Version);
     std.collect(req.http.X-UltraCache-Public-Selection-Public-Source-Projection-Version);
+    call scp_fragment_validate;
     if (req.http.X-UltraCache-Public-Selection-Public-Source-Projection-Version &&
         (req.http.X-UltraCache-Public-Selection-Public-Source-Projection-Version != "1" ||
          req.http.X-UltraCache-Public-Selection-Public-Source-Version != "1")) {
@@ -77,6 +78,7 @@ sub scp_selection_negotiate {
 }
 
 sub scp_selection_capabilities {
+    unset resp.http.X-UltraCache-VCL-Public-Selection-Enabled;
     if (req.http.X-SCP-Profile == "ultracache" && resp.status == 200 &&
         req.http.X-UltraCache-Operation == "capabilities") {
         if (req.http.X-SCP-Warm-Projection-Supported == "1") {
@@ -110,6 +112,11 @@ sub scp_selection_capabilities {
             unset resp.http.X-UltraCache-VCL-Public-Selection-WordPress-Policy;
         } else {
             set resp.http.X-UltraCache-VCL-Public-Selection-Scope = req.http.X-SCP-Selection-Scope;
+            set resp.http.X-UltraCache-VCL-Public-Selection-Enabled = cookie_handoff.selection_enabled(
+                req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
+            if (resp.http.X-UltraCache-VCL-Public-Selection-Enabled !~ "^[01]$") {
+                unset resp.http.X-UltraCache-VCL-Public-Selection-Enabled;
+            }
         }
         set resp.http.X-UltraCache-VCL-Public-Selection-Actions = req.http.X-SCP-Selection-Actions;
     }
