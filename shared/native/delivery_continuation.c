@@ -898,6 +898,11 @@ static void delivery_prepare_backend_scratch(VRT_CTX, const struct continuation 
     http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-Accept-Language"));
     http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-Cookie"));
     http_Unset(ctx->http_bereq,HDR("X-SCP-Vary-ESI-Cookie"));
+    /* The batch request/continuation already owns its exact identity. This
+     * uncacheable producer envelope is not the later stored fragment object;
+     * copying its internal hash carrier to PHP only duplicates the full ticket.
+     * Ordinary fetches and the subsequent native object dispatch retain theirs. */
+    if (d->fragment_batch) http_Unset(ctx->http_bereq,HDR("X-SCP-Key-URL"));
 }
 
 VCL_BOOL vmod_delivery_backend(VRT_CTX, struct vmod_priv *priv) {

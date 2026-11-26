@@ -5,6 +5,14 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.8 — 2026-11-27
+
+- Omit the redundant internal cache-key URL from the uncacheable fragment
+  prepare request. Keep the owning request, signed original URL, manifest,
+  authorization and subsequent native fragment object identities unchanged.
+- Verify actual default-Nginx preparation of a larger compressed batch without
+  changing request, header or workspace limits.
+
 ## 0.13.27-dev.7 — 2026-11-26
 
 - Retain large outbound delivery URL and manifest header lines on their existing

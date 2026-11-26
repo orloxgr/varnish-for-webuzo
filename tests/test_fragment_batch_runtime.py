@@ -112,6 +112,9 @@ class NativeFragmentBatch(unittest.TestCase):
             self.assertEqual(path, uri)
             self.assertEqual(headers.get('X-UltraCache-Delivery-Phase'), 'fragment-prepare')
             self.assertEqual(headers.get('X-UltraCache-Delivery-Authorization'), 'b'*64)
+            self.assertIsNone(headers.get('X-SCP-Key-URL'))
+            self.assertEqual(headers.get('X-UltraCache-Delivery-Original-URL'), uri)
+            self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'), wire)
             rows = [dict(item, html='actual-'+str(i)+'\x00"Ελληνικά') for i, item in enumerate(value['fragments'])]
             return self.response(headers, wire, rows)
         with proxy('ultracache', origin, daemon_parameters=('vsl_mask=+Debug',)) as get:
