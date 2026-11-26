@@ -1,5 +1,21 @@
 # Verification
 
+## Cookie-free finalizer return workspace — 26 November 2026
+
+The new native regression uses a 1,678-byte synthetic Cookie, browser headers
+including 125-byte User-Agent and 135-byte Accept fields, and thirteen signed
+private placements. The previous implementation reproduces HTTP 503 with
+`regsub: Out of workspace` at the finalizer return. The fixed implementation
+classifies each original cookie once across that same owned continuation,
+preserves two-owner isolation and complete native reuse, and leaves every
+workspace and header parameter at its existing setting.
+
+The focused case and five existing request-workspace/ingress methods pass on
+isolated Varnish 9.1. Client-forged reuse, changed cookies, changed site/host/URI
+and wrong restart ownership retain their existing rejection behavior. This
+qualifies the native transport with a trusted mock producer; actual application
+and browser acceptance remains a separate coordinated check.
+
 ## Paired Warm and authenticated opt-in — 26 November 2026
 
 Twenty distinct native methods passed without final skips: four paired

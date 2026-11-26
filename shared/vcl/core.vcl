@@ -26,7 +26,7 @@ sub scp_init {
     # Only native phase/site/host/URL ownership plus an unchanged raw Cookie
     # permits reuse. Client headers, ESI children and ordinary restarts cannot.
     unset req.http.X-SCP-Admin-Reuse;
-    if (req.http.X-SCP-Admin-Applied == "1" && req.http.Cookie &&
+    if (req.http.X-SCP-Admin-Applied == "1" &&
         cookie_handoff.delivery_cookie_unchanged() &&
         cookie_handoff.delivery_resume_authorized(req.http.X-SCP-Site)) {
         set req.http.X-SCP-Admin-Reuse = "1";

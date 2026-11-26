@@ -5,6 +5,16 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.2 — 2026-11-26
+
+- Preserve the verified original cookie classification across the cookie-free
+  native finalizer return, avoiding repeated full-cookie regex allocations.
+- Keep existing site, host, URI, restart and input identity checks. Changed or
+  duplicate cookies and client-supplied reuse markers cannot authorize reuse.
+- Reproduce the previous workspace exhaustion with ordinary browser headers,
+  a 1,678-byte synthetic Cookie and thirteen private placements. Keep native
+  workspace defaults, private components and cache policy unchanged.
+
 ## 0.13.27-dev.1 — 2026-11-26
 
 - Development candidate for coordinated UltraCache fragment-delivery acceptance;

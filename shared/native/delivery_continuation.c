@@ -824,11 +824,17 @@ VCL_BOOL vmod_delivery_resume_authorized(VRT_CTX, struct vmod_priv *priv, VCL_ST
 
 VCL_BOOL vmod_delivery_cookie_unchanged(VRT_CTX, struct vmod_priv *priv) {
     const struct guest_request *g = guest_context(ctx);
+    const struct continuation *d = priv->priv;
     const char *original, *current = NULL;
-    (void)priv;
     if (ctx->req->esi_level || !g || !g->classified || http_CountHdr(ctx->http_req,H_Cookie) > 1) return 0;
     original = g->classified_cookie;
     http_GetHdr(ctx->http_req,H_Cookie,&current);
+    /* The exact owned finalizer return deliberately carries no visitor Cookie.
+     * delivery_recv restores d->cookie before classification is consumed. Use
+     * that same original input only after the normal site/host/URI/phase proof;
+     * absent, changed or duplicate Cookie on any other request is not reuse. */
+    if (!current && d && d->phase == D_FINALIZE_RETURN &&
+        vmod_delivery_resume_authorized(ctx,priv,d->site)) current = d->cookie;
     return (!original && !current) || (original && current && !strcmp(original,current));
 }
 
