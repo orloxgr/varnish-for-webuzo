@@ -120,7 +120,7 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
     struct continuation *d = priv->priv;
     const char *url = ctx->http_req->hd[HTTP_HDR_URL].b, *host = NULL, *question;
     struct reuse_scope *scope;
-    char *token = NULL, *application_scope = NULL;
+    char *token = NULL, *subset = NULL, *application_scope = NULL;
     struct delivery_fragment_batch *batch = NULL;
     struct handoff *entry;
     unsigned i;
@@ -137,7 +137,7 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
     }
     if (d || !site || !*site || ctx->req->esi_level || ctx->req->restarts ||
         strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") ||
-        !(question = strchr(url,'?')) || strncmp(question+1,"ultracache_fragment_delivery=",sizeof("ultracache_fragment_delivery=")-1) ||
+        !(question = strchr(url,'?')) || !delivery_fragment_batch_operation(url) ||
         !http_GetHdr(ctx->http_req,H_Host,&host)) return 0;
     /* Only an already authenticated installation registration owns this route. */
     pthread_mutex_lock(&lock);
@@ -149,9 +149,12 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
         }
     pthread_mutex_unlock(&lock);
     if (!scope) return 0;
-    token = delivery_fragment_batch_token(url);
-    parsed = application_scope && token && delivery_fragment_batch_parse_scoped(token,strlen(token),
-        compression_key,application_scope,&batch);
+    parsed = application_scope && delivery_fragment_batch_request(url,&token,&subset) &&
+        delivery_fragment_batch_parse_scoped(token,strlen(token),compression_key,application_scope,&batch);
+    if (parsed && !delivery_fragment_batch_select(batch,token,subset)) {
+        delivery_fragment_batch_free(batch); batch = NULL; parsed = 0;
+    }
+    free(subset);
     { volatile unsigned char *wipe = compression_key; for (i = 0; i < sizeof(compression_key); ++i) wipe[i] = 0; }
     if (!parsed) {
         free(application_scope); free(token); return -1;

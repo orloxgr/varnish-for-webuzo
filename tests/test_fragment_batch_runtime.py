@@ -38,6 +38,7 @@ class NativeFragmentBatch(unittest.TestCase):
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Caching-Enabled'), '1' if caching else '0')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Anonymous-Authority'), '1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Batch-Compression'), 'deflate-v1')
+        self.assertEqual(result[1].get('X-UltraCache-VCL-Fragment-Subset'), 'indices-v1')
         self.assertEqual(result[1].get('X-UltraCache-VCL-Public-Selection-Enabled'), '1' if parent else '0')
 
     def test_unregistered_capabilities_do_not_advertise_partial_contract_then_register(self):
@@ -53,6 +54,36 @@ class NativeFragmentBatch(unittest.TestCase):
             accepted = control(get)
             self.assertEqual(accepted[0], 200, accepted)
             self.assertEqual(tuple(accepted[1].get(field) for field in fields), ('deflate-v1', '1', '1', '/index.php', '1'))
+
+    def test_selected_signed_rows_only_and_invalid_subsets_never_prepare(self):
+        value, wire, uri = self.batch(3)
+        selected, seen = [1], []
+        def origin(path, headers):
+            seen.append(path)
+            index_list = ','.join(str(i) for i in selected)
+            digest = hashlib.sha256(('ultracache-fragment-delivery-subset-v1\n'+wire+'\n'+index_list).encode()).hexdigest()
+            self.assertEqual(headers.get('X-UltraCache-Fragment-Delivery-Request-Digest'), digest)
+            self.assertEqual(headers.get('X-UltraCache-Delivery-Manifest'), wire)
+            self.assertEqual(headers.get('X-UltraCache-Delivery-Original-URL'), path)
+            body = dict(schemaVersion=2, requestId=headers['X-UltraCache-Delivery-Request'],
+                originalUrl=path, requestDigest=digest,
+                renderedFragments=[dict(value['fragments'][i], html='selected-'+str(i)) for i in selected],
+                failedFragments=[])
+            return json.dumps(body), [('Content-Type', 'application/vnd.ultracache.fragment-delivery+json; version=1'),
+                ('X-UltraCache-Fragment-Delivery-Version', '1'), ('Cache-Control', 'private, no-store')]
+        with proxy('ultracache', origin) as get:
+            self.register(get)
+            for selection, encoded in (([1], '1'), ([0, 2], '0%2C2')):
+                selected[:] = selection
+                result = get(uri+'&ultracache_fragment_subset='+encoded)
+                self.assertEqual(result[0], 200, result)
+                self.assertEqual([(r['url'], r['html']) for r in json.loads(result[2])['results']],
+                    [(value['fragments'][i]['url'], 'selected-'+str(i)) for i in selected])
+            self.assertEqual(len(seen), 2)
+            for suffix in ('', '3', '1,0', '0,0', '01', '0%252C2',
+                '1&ultracache_fragment_subset=2', '1&ultracache_fragment_delivery='+wire):
+                self.assertEqual(get(uri+'&ultracache_fragment_subset='+suffix)[0], 400, suffix)
+            self.assertEqual(len(seen), 2, 'Rejected membership must not execute the producer')
 
     def batch(self, count=2):
         value = payload(); value['context']['policy'] = 'b'*64

@@ -43,12 +43,20 @@ struct delivery_fragment_results {
 /* Extract only the one literal batch query argument, raw-decoded exactly once.
  * The exact index path is checked against authenticated registration by caller. */
 char *delivery_fragment_batch_token(const char *uri);
+/* Recognize reserved operation arguments before strict parsing, including a
+ * malformed selector. Invalid operations must not become a legacy full batch. */
+int delivery_fragment_batch_operation(const char *uri);
+int delivery_fragment_batch_request(const char *uri, char **token, char **subset);
 int delivery_fragment_batch_parse(const char *token, size_t length,
     struct delivery_fragment_batch **out);
 /* Compressed tickets additionally require the matched registered scope's
  * existing purpose-separated key before any output allocation/inflation. */
 int delivery_fragment_batch_parse_scoped(const char *token, size_t length,
     const unsigned char key[32], const char *scope, struct delivery_fragment_batch **out);
+/* NULL subset preserves the full legacy set and digest. Otherwise retain only
+ * original signed rows and derive the subset-specific execution digest. */
+int delivery_fragment_batch_select(struct delivery_fragment_batch *batch,
+    const char *token, const char *subset);
 void delivery_fragment_batch_free(struct delivery_fragment_batch *batch);
 void delivery_fragment_results_free(struct delivery_fragment_results *results);
 int delivery_fragment_envelope_parse_v1(const char *body, size_t length,
