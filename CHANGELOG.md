@@ -5,6 +5,23 @@ Entries describe their version's state; later releases can resolve the remaining
 work mentioned in an earlier entry. For current behavior and installation, see
 [README](README.md).
 
+## 0.13.27-dev.9 — 2026-11-27
+
+- Negotiate activated fragment subsets while preserving the full signed ticket,
+  original occurrence counts and shared ESI/Ajax body identities. Reject invalid
+  selectors before preparation without executing inactive fragments.
+- Reuse a complete admitted private fragment set entirely through native cache
+  objects, without PHP, SQL or an external helper on a qualified HIT. Bind both
+  actual identity and complete render inputs, deadlines and mutation generations.
+- Learn exact full-ticket acceptance only after authenticated application
+  validation. Missing objects, changed inputs, pending writers and revoked
+  sessions retain the ordinary selected preparation path without cookie replay.
+- Keep parent and fragment participation independent. Optional receipt storage
+  failure preserves completed results; storage OFF and teardown revoke reuse.
+- Qualify the shared implementation with the normal UltraCache WordPress
+  `3.13.13-dev.1431` ZIP on both panel adapters, including real sessions,
+  overlapping subsets, zero-PHP private HITs and actual session revocation.
+
 ## 0.13.27-dev.8 — 2026-11-27
 
 - Omit the redundant internal cache-key URL from the uncacheable fragment
