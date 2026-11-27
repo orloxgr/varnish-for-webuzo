@@ -4,18 +4,23 @@
  */
 static const char *reuse_context_names[] = {"siteId","canonicalHost","scope","epoch","incarnation","scopeRevision",
     "nativePolicy","wordpressPolicy","reusePolicy","publicationDigest","representation","recipeDigest"};
+void delivery_reuse_admitted_free(struct delivery_reuse_admitted_fragment *list) {
+    size_t i;
+    while (list) {
+        struct delivery_reuse_admitted_fragment *f = list;
+        list = f->next;
+        while (f->authority) { struct delivery_reuse_authority *next = f->authority->next; free(f->authority); f->authority = next; }
+        for (i = 0; i < f->identity_tag_count; ++i) free(f->identity_tags[i]);
+        free(f->identity_tags); delivery_reuse_inputs_free(f->identity_inputs);
+        delivery_reuse_inputs_free(f->inputs); free(f->inputs_json); free(f->wire);
+        free(f->url); free(f->cache_key); free(f->cache_tags); free(f);
+    }
+}
 void delivery_reuse_record_free(struct delivery_reuse_record *record) {
     size_t i;
     if (!record) return;
     for (i = 0; i < 12; ++i) free(record->context[i]);
-    while (record->fragments) {
-        struct delivery_reuse_admitted_fragment *f = record->fragments;
-        record->fragments = f->next;
-        while (f->authority) { struct delivery_reuse_authority *next = f->authority->next; free(f->authority); f->authority = next; }
-        for (i = 0; i < f->identity_tag_count; ++i) free(f->identity_tags[i]);
-        free(f->identity_tags); delivery_reuse_inputs_free(f->identity_inputs);
-        free(f->url); free(f->cache_key); free(f->cache_tags); free(f);
-    }
+    delivery_reuse_admitted_free(record->fragments);
     free(record->request_id); free(record->original_url); free(record->recipe_json);
     delivery_reuse_recipe_free(record->recipe); free(record);
 }
@@ -136,9 +141,11 @@ static int reuse_metadata_fragments(struct reader *r, const char *body, struct d
     if (take(r,']')) return 1;
     for (;;) {
         struct delivery_reuse_admitted_fragment *f = calloc(1,sizeof(*f));
+        size_t start;
         unsigned seen = 0;
         if (!f) return 0;
         f->next = record->fragments; record->fragments = f;
+        whitespace(r); start = r->offset;
         if (!take(r,'{')) return 0;
         for (;;) {
             struct text key, value;
@@ -150,6 +157,8 @@ static int reuse_metadata_fragments(struct reader *r, const char *body, struct d
             else if (equal(key,"bodyValidUntil")) bit = 8;
             else if (equal(key,"identity")) bit = 16;
             else if (equal(key,"authority")) bit = 32;
+            else if (equal(key,"inputs")) bit = 64;
+            else if (equal(key,"inputBinding")) bit = 128;
             else return 0;
             if (seen & bit) return 0;
             seen |= bit;
@@ -164,11 +173,27 @@ static int reuse_metadata_fragments(struct reader *r, const char *body, struct d
                     !(f->cache_key = copy(cache_key)) || !(f->cache_tags = copy(tags))) return 0;
             } else if (bit == 8) { if (!number(r,&f->body_valid_until) || !f->body_valid_until) return 0; }
             else if (bit == 16) { if (!reuse_metadata_identity(r,body,f)) return 0; }
-            else if (!reuse_metadata_authority(r,f)) return 0;
+            else if (bit == 32) { if (!reuse_metadata_authority(r,f)) return 0; }
+            else if (bit == 64) {
+                size_t begin, length;
+                whitespace(r); begin = r->offset;
+                if (!reuse_skip_value(r)) return 0;
+                length = r->offset-begin;
+                if (delivery_reuse_inputs_parse(body+begin,length,&f->inputs) != DELIVERY_REUSE_INPUT_OK ||
+                    !(f->inputs_json = malloc(length+1))) return 0;
+                memcpy(f->inputs_json,body+begin,length); f->inputs_json[length] = 0;
+            } else {
+                if (!string(r,&value) || !reuse_hex64(value)) return 0;
+                memcpy(f->input_binding,value.data,64);
+            }
             if (take(r,'}')) break;
             if (!take(r,',')) return 0;
         }
-        if (seen != 63) return 0;
+        if (seen != 63 && seen != 255) return 0;
+        f->wire_length = r->offset-start;
+        f->wire = malloc(f->wire_length+1);
+        if (!f->wire) return 0;
+        memcpy(f->wire,body+start,f->wire_length); f->wire[f->wire_length] = 0;
         if (take(r,']')) return 1;
         if (!take(r,',')) return 0;
     }

@@ -3,6 +3,7 @@ sub scp_fragment_recv {
     if (req.http.X-SCP-Profile != "ultracache") { return; }
     set req.http.X-SCP-Fragment-State = cookie_handoff.fragment_recv(req.http.X-SCP-Site);
     if (req.http.X-SCP-Fragment-State == "1") { return (pass); }
+    if (req.http.X-SCP-Fragment-State == "2") { return (synth(200,"Fragment results")); }
     if (req.http.X-SCP-Fragment-State == "3") { return (hash); }
     if (req.http.X-SCP-Fragment-State == "-1") { return (synth(400,"Invalid fragment operation")); }
     unset req.http.X-SCP-Fragment-State;
@@ -29,6 +30,9 @@ sub scp_fragment_recv {
 
 # Validate before any metadata/lifecycle mutation in selection registration.
 sub scp_fragment_validate {
+    if (req.http.X-UltraCache-Fragment-Reuse && req.http.X-UltraCache-Fragment-Reuse != "native-v1") {
+        return (synth(400,"Invalid fragment reuse declaration"));
+    }
     if (req.http.X-UltraCache-Fragment-Subset &&
         req.http.X-UltraCache-Fragment-Subset != "indices-v1") {
         return (synth(400,"Invalid fragment subset declaration"));
@@ -61,6 +65,7 @@ sub scp_fragment_negotiate {
 }
 
 sub scp_fragment_capabilities {
+    unset resp.http.X-UltraCache-VCL-Fragment-Reuse;
     unset resp.http.X-UltraCache-VCL-Fragment-Subset;
     unset resp.http.X-UltraCache-VCL-Fragment-Batch-Compression;
     unset resp.http.X-UltraCache-VCL-Fragment-Anonymous-Authority;
@@ -71,6 +76,7 @@ sub scp_fragment_capabilities {
         set resp.http.X-UltraCache-VCL-Fragment-Delivery-Route = cookie_handoff.fragment_route(
             req.http.X-SCP-Site,req.http.host,req.http.X-SCP-Selection-Scope);
         if (resp.http.X-UltraCache-VCL-Fragment-Delivery-Route ~ "^/") {
+            set resp.http.X-UltraCache-VCL-Fragment-Reuse = "native-v1";
             set resp.http.X-UltraCache-VCL-Fragment-Subset = "indices-v1";
             set resp.http.X-UltraCache-VCL-Fragment-Batch-Compression = "deflate-v1";
             set resp.http.X-UltraCache-VCL-Fragment-Anonymous-Authority = "1";

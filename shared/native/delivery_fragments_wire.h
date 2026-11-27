@@ -38,7 +38,19 @@ struct delivery_fragment_results {
     struct delivery_fragment *rendered;
     struct delivery_fragment_failure *failed;
     struct delivery_fragment_authority *authority;
+    struct delivery_fragment_admission *admission;
 };
+struct delivery_reuse_admitted_fragment;
+struct delivery_reuse_context;
+struct delivery_fragment_admission {
+    uint64_t cookie_valid_until;
+    struct delivery_reuse_admitted_fragment *fragments;
+};
+int delivery_fragment_admission_parse(const char *, size_t, struct delivery_fragment_admission **);
+void delivery_fragment_admission_free(struct delivery_fragment_admission *);
+int delivery_fragment_metadata_key(const struct delivery_reuse_context *,
+    const char *incarnation, const char *revision, const char *descriptor,
+    const char *binding, char key[65]);
 
 /* Extract only the one literal batch query argument, raw-decoded exactly once.
  * The exact index path is checked against authenticated registration by caller. */

@@ -8,6 +8,19 @@
 #include "delivery_reuse_inputs.h"
 
 struct reuse_scope;
+/* Public descriptor/input declarations and authenticated full-ticket
+ * membership only. Visitor bindings and receipts live in native cache objects. */
+struct fragment_discovery {
+    struct fragment_discovery *next;
+    char descriptor[65];
+    char *url, *inputs_json;
+    double deadline;
+};
+struct fragment_ticket {
+    struct fragment_ticket *next;
+    char digest[65];
+    double deadline;
+};
 struct reuse_discovery {
     struct reuse_discovery *next;
     char publication[65], representation[65], revision[65];
@@ -49,6 +62,8 @@ struct reuse_scope {
     unsigned enabled, revision_pending;
     char *fragment_route; /* authenticated exact installation index path */
     unsigned fragment_cache_disabled;
+    struct fragment_discovery *fragment_discoveries;
+    struct fragment_ticket *fragment_tickets;
     struct mutation_execution *executions;
     struct reuse_discovery **discoveries; /* declarations only; cached record is authority */
     size_t discovery_capacity, discovery_count;
@@ -56,6 +71,17 @@ struct reuse_scope {
     size_t tag_capacity, tag_count;
 };
 static struct reuse_scope *reuse_scopes;
+static void fragment_discovery_clear(struct reuse_scope *scope) {
+    while (scope->fragment_discoveries) {
+        struct fragment_discovery *row = scope->fragment_discoveries;
+        scope->fragment_discoveries = row->next;
+        free(row->url); free(row->inputs_json); free(row);
+    }
+    while (scope->fragment_tickets) {
+        struct fragment_ticket *row = scope->fragment_tickets;
+        scope->fragment_tickets = row->next; free(row);
+    }
+}
 static const char *reuse_single(const struct http *, hdr_t);
 static int reuse_random_id(char output[65]) {
     unsigned char bytes[32];
@@ -74,6 +100,7 @@ static void reuse_registry_free(void) {
         struct reuse_scope *scope = reuse_scopes;
         size_t i;
         reuse_scopes = scope->next;
+        fragment_discovery_clear(scope);
         while (scope->executions) {
             struct mutation_execution *next = scope->executions->next;
             mutation_execution_free(scope->executions); scope->executions = next;
@@ -211,6 +238,7 @@ static int reuse_scope_revision_repair(struct reuse_scope *scope) {
     return 1;
 }
 static void reuse_scope_advance(struct reuse_scope *scope) {
+    fragment_discovery_clear(scope);
     scope->revision_pending = 1;
     /* Failure keeps authority suspended and the old namespace unavailable.
      * A later authenticated observation may mint its actual replacement, but

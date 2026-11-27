@@ -143,7 +143,7 @@ enum delivery_phase { D_QUEUED, D_PREPARE, D_RETURN, D_READY,
     D_RECOVERY_QUEUED, D_RECOVERY, D_DELIVERED, D_DOCUMENT, D_DOCUMENT_SENT,
     D_RAW_PASS, D_RAW_DELIVERED, D_CONFLICT, D_RESELECT_QUEUED, D_RESELECT_READY,
     D_FINALIZE_QUEUED, D_FINALIZE, D_FINALIZE_RETURN, D_SOURCE_PERSONAL_QUEUED,
-    D_FRAGMENT_OBJECT, D_FRAGMENT_RETURN, D_FRAGMENT_SENT, D_FAILED };
+    D_FRAGMENT_OBJECT, D_FRAGMENT_METADATA, D_FRAGMENT_RETURN, D_FRAGMENT_SENT, D_FAILED };
 enum public_source_stage { SOURCE_NONE, SOURCE_RESOLVER, SOURCE_CAPTURE, SOURCE_PERSONAL, SOURCE_COMPLETE };
 enum reuse_lookup_result { REUSE_PLAN_MISS, REUSE_PLAN_HIT };
 struct delivery_reuse_plan;
@@ -192,6 +192,9 @@ struct continuation {
     struct delivery_fragment_batch *fragment_batch;
     struct delivery_fragment_results *fragment_results;
     struct delivery_fragment *fragment_cursor;
+    struct delivery_fragment *fragment_metadata, *fragment_metadata_cursor;
+    char fragment_ticket[65];
+    unsigned fragment_metadata_done, fragment_fast;
     char *fragment_scope, *fragment_json, *fragment_resume_uri;
     size_t fragment_json_length;
     unsigned fragment_restart;
@@ -236,6 +239,10 @@ static int fragment_source_owned(const struct continuation *, const char *, cons
 static int fragment_authority_current(const struct continuation *, const struct delivery_fragment *);
 static int fragment_cache_allowed_locked(const char *, const char *, const char *);
 static int fragment_declaration_active(VRT_CTX, const char *);
+static int fragment_admission_try_hit(VRT_CTX, struct continuation *);
+static int fragment_admission_sources(struct continuation *);
+static int fragment_admission_source_current(const struct continuation *, const struct delivery_fragment *);
+static void fragment_admission_publish(struct continuation *);
 static const char filter_task_token;
 static const char private_filter_task_token;
 static const hdr_t h_key = HDR("X-SCP-Cookie-Handoff");
@@ -286,6 +293,7 @@ static const struct delivery_fragment *delivery_fragment_named(const struct cont
     const struct delivery_fragment *f;
     if (!d || !url) return NULL;
     for (f = d->fragments; f; f = f->next) if (!strcmp(f->url,url)) return f;
+    for (f = d->fragment_metadata; f; f = f->next) if (!strcmp(f->url,url)) return f;
     return NULL;
 }
 
@@ -314,6 +322,7 @@ static void delivery_fini(VRT_CTX, void *value) {
     else delivery_free_fragments(d->fragments);
     delivery_fragment_results_free(d->fragment_results);
     delivery_fragment_batch_free(d->fragment_batch);
+    delivery_free_fragments(d->fragment_metadata);
     free(d->fragment_scope); free(d->fragment_json); free(d->fragment_resume_uri);
     clear_fields(d->public_headers);
     clear_fields(d->document_headers);
@@ -1546,3 +1555,4 @@ int vmod_delivery_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e event)
 #include "mutation_backend.c"
 #include "delivery_reuse_runtime.c"
 #include "delivery_fragments_runtime.c"
+#include "delivery_fragments_reuse.c"

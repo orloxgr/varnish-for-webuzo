@@ -454,8 +454,10 @@ configuration is introduced.
 ### Optional registered fragment-only delivery
 
 The separately negotiated [fragment delivery v1](FRAGMENT-DELIVERY.md) operation
-uses the same individual native objects as ESI, with one request-owned application
-authority operation per private batch. Its schema2 decoder does not relax the
+uses the same individual native objects as ESI. A qualified per-descriptor native
+admission reuses a complete selected set without application work; a real MISS
+uses one request-owned authority operation for only the selected rows. Its
+schema2 decoder does not relax the
 existing parent schema1 contract. Public descriptors retain their canonical GET
 cache. Fragment storage, transport choice and cookie delivery are independent;
 the old unnegotiated behavior is preserved. Matching WordPress/frontend acceptance

@@ -122,9 +122,54 @@ WordPress must use its dedicated batch entry validator, not the old parent
 snapshot validator or a forged ESI request level. Actual provider context,
 identity and generation authorize lookup-before-render through existing
 `UC-PRIVATE-GET`. This method remains authenticated, lookup-only, and MISS404
-never fetches an origin. A private batch still requires one application authority
-operation; a body HIT does not mean zero PHP. No full-page issuer render is
-implicitly enabled by this operation.
+never fetches an origin. Without a valid native admission, a private batch needs
+one application authority operation. The optional `native-v1` admission below
+permits a complete native HIT without PHP, SQL or an external helper. No
+full-page issuer render is implicitly enabled by this operation.
+
+## Activated subsets and native admission
+
+The unchanged full signed ticket may carry an independent
+`ultracache_fragment_subset=0,2` query field. Indices address the original sorted
+signed rows; they are canonical decimal, strictly increasing, unique and in
+range. Both values are decoded once. Duplicate/unknown query fields, an empty or
+invalid selector reject before preparation, without a full-batch fallback.
+Omitting the selector preserves the legacy full set and digest. An explicit
+selector uses SHA256 of `ultracache-fragment-delivery-subset-v1\n`, the exact
+decoded full ticket, a newline and the canonical comma-separated indices.
+Original occurrence counts remain unchanged. Activation timing and the subset
+never enter individual body keys.
+
+Accepted registered endpoints advertise `X-UltraCache-VCL-Fragment-Subset:
+indices-v1` and `X-UltraCache-VCL-Fragment-Reuse: native-v1`. Applications declare
+the corresponding `X-UltraCache-Fragment-Subset` / `X-UltraCache-Fragment-Reuse`
+headers and require acceptance by every configured endpoint before using the
+extension. Unsupported declarations are rejected rather than partially echoed.
+
+An authenticated schema2 preparation may include optional `reuseAdmission`:
+version 1, absolute `cookieValidUntil`, and fragment rows containing descriptor,
+URL, cache grant, absolute body deadline, existing identity/authority facts,
+complete render `inputs` and `inputBinding`. Both render and identity bindings
+use the existing seven-field scope/policy MAC over the actual PHP-compatible
+Cookie projection. They are separate checks. Cookie work must already be `none`;
+the native implementation does not manufacture a next-Cookie proof.
+
+Receipts are per-descriptor native metadata objects; bodies retain the existing
+ESI/private object namespace. No batch-body cache or global visitor-value map is
+created. The scope registry retains only input declarations and finite exact
+full-ticket acceptance learned after successful authenticated application
+validation. Parsing an uncompressed payload or a compressed admission MAC alone
+never authenticates its outer ticket signature. A changed tail, unknown ticket
+or different scope therefore returns to real application authentication.
+
+A fast HIT requires every selected receipt and body to be complete and fresh,
+both current input MACs, valid cookie/identity/body deadlines and current
+mutation generations. Objects remain pinned until final validation under the
+existing writer lock. No saved issuer cookies are replayed. Missing/expired
+objects, changed inputs, a writer, storage OFF or namespace teardown return to
+the ordinary selected preparation. Parent delivery may remain OFF. The private
+JSON response reports `X-UltraCache-Fragment-Reuse: HIT` only for this complete
+native path; it remains `private, no-store`.
 
 ## Strict producer schema 2
 
@@ -137,6 +182,7 @@ version response header, private/no-store, and the following exact members:
 - `renderedFragments`: existing `{url,html,occurrences,cache?}` records.
 - `failedFragments`: `{url,occurrences,status,code}` records.
 - Optional `authority`: required exactly when positive-TTL successes exist.
+- Optional `reuseAdmission`: the separately negotiated native admission above.
 
 Success and failure arrays form the exact disjoint requested set, with exact
 occurrences. Empty requested batches, unknown/duplicate members, extra/missing

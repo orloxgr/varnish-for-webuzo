@@ -39,7 +39,81 @@ void delivery_fragment_results_free(struct delivery_fragment_results *r) {
         }
         free(r->authority->scope); free(r->authority);
     }
-    free(r);
+    delivery_fragment_admission_free(r->admission); free(r);
+}
+
+void delivery_fragment_admission_free(struct delivery_fragment_admission *value) {
+    if (!value) return;
+    delivery_reuse_admitted_free(value->fragments); free(value);
+}
+int delivery_fragment_metadata_key(const struct delivery_reuse_context *context,
+    const char *incarnation, const char *revision, const char *descriptor,
+    const char *binding, char key[65]) {
+    struct reuse_frame frame = {NULL,0,0};
+    const char *fields[] = {"ultracache-fragment-admission-v1", context ? context->site_id : NULL,
+        context ? context->canonical_host : NULL, context ? context->scope : NULL,
+        context ? context->epoch : NULL, incarnation, revision,
+        context ? context->native_policy : NULL, context ? context->wordpress_policy : NULL,
+        context ? context->reuse_policy : NULL, descriptor, binding};
+    size_t i;
+    int valid = 0;
+    if (!context || !key) return 0;
+    for (i = 0; i < sizeof(fields)/sizeof(fields[0]); ++i)
+        if (!fields[i] || !reuse_lp(&frame,fields[i],strlen(fields[i]))) goto done;
+    valid = delivery_selection_digest(frame.bytes,frame.length,key);
+done:
+    delivery_reuse_frame_free(frame.bytes,frame.length); return valid;
+}
+int delivery_fragment_admission_parse(const char *body, size_t length,
+    struct delivery_fragment_admission **out) {
+    struct reader r;
+    struct delivery_reuse_record rows = {0};
+    struct delivery_fragment_admission *value = NULL;
+    struct delivery_reuse_admitted_fragment *f, *other;
+    unsigned seen = 0;
+    int valid = 0;
+    if (!out) return 0;
+    *out = NULL;
+    if (!body || !length || length == SIZE_MAX || !(r.buffer = malloc(length+1))) return 0;
+    memcpy(r.buffer,body,length); r.buffer[length] = 0; r.length = length; r.offset = 0;
+    value = calloc(1,sizeof(*value));
+    if (!value || !take(&r,'{')) goto done;
+    for (;;) {
+        struct text key;
+        unsigned bit;
+        uint64_t version;
+        if (!string(&r,&key) || !take(&r,':')) goto done;
+        if (equal(key,"version")) bit = 1;
+        else if (equal(key,"cookieValidUntil")) bit = 2;
+        else if (equal(key,"fragments")) bit = 4;
+        else goto done;
+        if (seen & bit) goto done;
+        seen |= bit;
+        if (bit == 1) { if (!number(&r,&version) || version != 1) goto done; }
+        else if (bit == 2) { if (!number(&r,&value->cookie_valid_until) || !value->cookie_valid_until) goto done; }
+        else if (!reuse_metadata_fragments(&r,body,&rows)) goto done;
+        if (take(&r,'}')) break;
+        if (!take(&r,',')) goto done;
+    }
+    whitespace(&r);
+    if (seen != 7 || r.offset != length || !rows.fragments) goto done;
+    for (f = rows.fragments; f; f = f->next) {
+        const struct delivery_reuse_authority *a;
+        size_t count = 0, i;
+        if (!f->inputs || !*f->input_binding) goto done;
+        for (other = f->next; other; other = other->next)
+            if (!strcmp(other->url,f->url) || !strcmp(other->descriptor,f->descriptor)) goto done;
+        for (a = f->authority; a; a = a->next) {
+            ++count;
+            for (i = 0; i < f->identity_tag_count; ++i) if (!strcmp(f->identity_tags[i],a->tag)) break;
+            if (i == f->identity_tag_count) goto done;
+        }
+        if (count != f->identity_tag_count) goto done;
+    }
+    value->fragments = rows.fragments; rows.fragments = NULL;
+    *out = value; value = NULL; valid = 1;
+done:
+    delivery_reuse_admitted_free(rows.fragments); delivery_fragment_admission_free(value); free(r.buffer); return valid;
 }
 
 static char *fragment_query_value(const char *p, size_t length) {
@@ -563,6 +637,7 @@ int delivery_fragment_envelope_parse_v1(const char *body, size_t length,
         else if (equal(key,"renderedFragments")) bit = 16;
         else if (equal(key,"failedFragments")) bit = 32;
         else if (equal(key,"authority")) bit = 64;
+        else if (equal(key,"reuseAdmission")) bit = 128;
         else goto done;
         if (seen & bit) goto done;
         seen |= bit;
@@ -574,12 +649,19 @@ int delivery_fragment_envelope_parse_v1(const char *body, size_t length,
             uint64_t total;
             if (!selection_fragments_mode(&r,&result->rendered,&total,1)) goto done;
         } else if (bit == 32) { if (!fragment_batch_failures(&r,result)) goto done; }
-        else if (!fragment_batch_authority(&r,result)) goto done;
+        else if (bit == 64) { if (!fragment_batch_authority(&r,result)) goto done; }
+        else {
+            size_t start;
+            whitespace(&r); start = r.offset;
+            if (!reuse_skip_value(&r)) goto done;
+            /* Optional admission can decline without losing completed results. */
+            (void)delivery_fragment_admission_parse(body+start,r.offset-start,&result->admission);
+        }
         if (take(&r,'}')) break;
         if (!take(&r,',')) goto done;
     }
     whitespace(&r);
-    if ((seen & ~64U) != 63 || r.offset != r.length || !fragment_results_complete(batch,result)) goto done;
+    if ((seen & ~192U) != 63 || r.offset != r.length || !fragment_results_complete(batch,result)) goto done;
     *out = result; result = NULL; ok = 1;
 done:
     delivery_fragment_results_free(result); free(r.buffer); return ok;

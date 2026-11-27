@@ -32,6 +32,8 @@ VCL_BOOL vmod_fragment_register(VRT_CTX, VCL_STRING site, VCL_STRING host,
     pthread_mutex_lock(&lock);
     owner = reuse_scope_find(site,host,scope);
     if (owner && owner->enabled && vmod_delivery_reuse_available(ctx)) {
+        if (!owner->fragment_route || strcmp(owner->fragment_route,route) || owner->fragment_cache_disabled != !caching)
+            fragment_discovery_clear(owner);
         free(owner->fragment_route); owner->fragment_route = copy_route; copy_route = NULL;
         owner->fragment_cache_disabled = !caching;
         accepted = 1;
@@ -69,7 +71,7 @@ VCL_STRING vmod_fragment_route(VRT_CTX, VCL_STRING site, VCL_STRING host, VCL_ST
 static int fragment_dispatch_owner(VRT_CTX, const struct continuation *d) {
     const char *host = NULL;
     return d && d->fragment_batch && !d->failed && !ctx->req->esi_level &&
-        d->phase == D_FRAGMENT_OBJECT && d->fragment_resume_uri &&
+        (d->phase == D_FRAGMENT_OBJECT || d->phase == D_FRAGMENT_METADATA) && d->fragment_resume_uri &&
         ctx->req->restarts == d->fragment_restart &&
         !strcmp(ctx->http_req->hd[HTTP_HDR_METHOD].b,"GET") &&
         !strcmp(ctx->http_req->hd[HTTP_HDR_URL].b,d->fragment_resume_uri) &&
@@ -100,6 +102,10 @@ static int fragment_authority_current(const struct continuation *d, const struct
 
 /* Both source selection and its final before-storage check call this under lock. */
 static int fragment_source_owned(const struct continuation *d, const char *url, const char *key) {
+    if (d && d->fragment_batch && d->phase == D_FRAGMENT_METADATA && !d->failed &&
+        d->fragment_metadata_cursor && key && url && !strcmp(d->fragment_metadata_cursor->url,url) &&
+        !strcmp(d->fragment_metadata_cursor->cache_key,key))
+        return fragment_admission_source_current(d,d->fragment_metadata_cursor);
     return d && d->fragment_batch && d->phase == D_FRAGMENT_OBJECT && !d->failed &&
         d->fragment_cursor && key && url && !strcmp(d->fragment_cursor->url,url) &&
         d->fragment_cursor->cache_key && !strcmp(d->fragment_cursor->cache_key,key) &&
@@ -108,10 +114,12 @@ static int fragment_source_owned(const struct continuation *d, const char *url, 
 
 VCL_BOOL vmod_fragment_object(VRT_CTX, struct vmod_priv *priv) {
     const struct continuation *d = priv->priv;
+    const struct delivery_fragment *current = d && d->phase == D_FRAGMENT_METADATA ? d->fragment_metadata_cursor : d ? d->fragment_cursor : NULL;
     const char *site = NULL, *host = NULL;
-    return d && d->fragment_batch && !d->failed && d->phase == D_FRAGMENT_OBJECT &&
-        d->fragment_cursor && !ctx->req->esi_level && ctx->req->restarts == d->fragment_restart &&
-        !strcmp(ctx->http_req->hd[HTTP_HDR_URL].b,d->fragment_cursor->url) &&
+    return d && d->fragment_batch && !d->failed &&
+        (d->phase == D_FRAGMENT_OBJECT || d->phase == D_FRAGMENT_METADATA) &&
+        current && !ctx->req->esi_level && ctx->req->restarts == d->fragment_restart &&
+        !strcmp(ctx->http_req->hd[HTTP_HDR_URL].b,current->url) &&
         http_GetHdr(ctx->http_req,h_adapter_site,&site) && !strcmp(site,d->site) &&
         http_GetHdr(ctx->http_req,H_Host,&host) && !strcmp(host,d->host);
 }
@@ -125,13 +133,16 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
     struct handoff *entry;
     unsigned i;
     unsigned char compression_key[32] = {0};
+    char ticket_digest[65] = {0};
     int parsed;
     if (d && d->fragment_batch) {
-        if (!site || strcmp(site,d->site) || !fragment_dispatch_owner(ctx,d) || !d->fragment_cursor) return -1;
+        struct delivery_fragment *current = d->phase == D_FRAGMENT_METADATA ? d->fragment_metadata_cursor : d->fragment_cursor;
+        if (!site || strcmp(site,d->site) || !fragment_dispatch_owner(ctx,d) || !current) return -1;
         http_Unset(ctx->http_req,H_Cookie); http_Unset(ctx->http_req,H_Authorization);
         http_Unset(ctx->http_req,H_Accept_Encoding);
-        VRT_l_req_url(ctx,NULL,TOSTRAND(d->fragment_cursor->url));
-        http_ForceHeader(ctx->http_req,h_private_key,d->fragment_cursor->cache_key);
+        VRT_l_req_url(ctx,NULL,TOSTRAND(current->url));
+        http_ForceHeader(ctx->http_req,h_private_key,current->cache_key);
+        if (d->phase == D_FRAGMENT_METADATA) VRT_l_req_hash_always_miss(ctx,1);
         http_ForceHeader(ctx->http_req,h_key,d->request_id);
         return WS_Overflowed(ctx->ws) ? -1 : 3;
     }
@@ -151,6 +162,7 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
     if (!scope) return 0;
     parsed = application_scope && delivery_fragment_batch_request(url,&token,&subset) &&
         delivery_fragment_batch_parse_scoped(token,strlen(token),compression_key,application_scope,&batch);
+    if (parsed) memcpy(ticket_digest,batch->digest,65);
     if (parsed && !delivery_fragment_batch_select(batch,token,subset)) {
         delivery_fragment_batch_free(batch); batch = NULL; parsed = 0;
     }
@@ -164,6 +176,7 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
     priv->priv = d; priv->methods = &delivery_methods;
     d->phase = D_FAILED;
     d->fragment_batch = batch; d->fragment_scope = application_scope; d->manifest = token;
+    memcpy(d->fragment_ticket,ticket_digest,65);
     d->url = strdup(url); d->host = strdup(host); d->site = strdup(site);
     if (!d->url || !d->host || !d->site ||
         !delivery_copy_header(ctx->http_req,HDR("X-SCP-Selection-Native-Policy"),&d->selection_policy) ||
@@ -175,6 +188,7 @@ VCL_INT vmod_fragment_recv(VRT_CTX, struct vmod_priv *priv, VCL_STRING site) {
         http_Unset(ctx->http_req,conditional_headers[i]);
     }
     http_Unset(ctx->http_req,H_Accept_Encoding);
+    if (fragment_admission_try_hit(ctx,d)) return 2;
     entry = calloc(1,sizeof(*entry));
     if (!entry) return -1;
     pthread_mutex_lock(&lock);
@@ -262,7 +276,18 @@ VCL_INT vmod_fragment_deliver(VRT_CTX, struct vmod_priv *priv) {
             http_GetStatus(ctx->http_resp) != 200 ||
             !delivery_header_equals(ctx->http_resp,HDR("X-SCP-Private-Object"),"1") ||
             VRT_r_obj_ttl(ctx) <= 0) return -1;
+        d->fragment_cursor->cache_deadline = fmin(delivery_fragment_deadline(d,d->fragment_cursor),
+            VTIM_real()+VRT_r_obj_ttl(ctx));
         d->fragment_cursor = d->fragment_cursor->next;
+    } else if (d->phase == D_FRAGMENT_METADATA) {
+        if (!d->fragment_metadata_cursor || ctx->req->restarts != d->fragment_restart ||
+            strcmp(ctx->http_req->hd[HTTP_HDR_URL].b,d->fragment_metadata_cursor->url)) return -1;
+        /* Admission storage failure does not invalidate completed fragments. */
+        if (http_GetStatus(ctx->http_resp) != 200 ||
+            !delivery_header_equals(ctx->http_resp,HDR("X-SCP-Private-Object"),"1") || VRT_r_obj_ttl(ctx) <= 0)
+            d->fragment_metadata_done = 2;
+        d->fragment_metadata_cursor = d->fragment_metadata_cursor->next;
+        VRT_l_req_hash_always_miss(ctx,0);
     } else return -1;
     while ((f = d->fragment_cursor) != NULL) {
         int current;
@@ -279,6 +304,24 @@ VCL_INT vmod_fragment_deliver(VRT_CTX, struct vmod_priv *priv) {
         d->fragment_restart = ctx->req->restarts+1;
         d->phase = D_FRAGMENT_OBJECT;
         return 1;
+    }
+    if (!d->fragment_metadata_done) {
+        d->fragment_metadata_done = 1;
+        pthread_mutex_lock(&lock);
+        (void)fragment_admission_sources(d);
+        pthread_mutex_unlock(&lock);
+        d->fragment_metadata_cursor = d->fragment_metadata;
+    }
+    if (d->fragment_metadata_cursor) {
+        if (ctx->req->restarts == UINT_MAX) return -1;
+        if (ctx->req->max_restarts < ctx->req->restarts+1) ctx->req->max_restarts = ctx->req->restarts+1;
+        free(d->fragment_resume_uri); d->fragment_resume_uri = strdup(ctx->http_req->hd[HTTP_HDR_URL].b);
+        if (!d->fragment_resume_uri) return -1;
+        d->fragment_restart = ctx->req->restarts+1; d->phase = D_FRAGMENT_METADATA;
+        return 1;
+    }
+    if (d->fragment_metadata_done == 1 && d->fragment_metadata) {
+        pthread_mutex_lock(&lock); fragment_admission_publish(d); pthread_mutex_unlock(&lock);
     }
     /* Build before the final writer-lock check. If a writer retired an item,
      * remove it and rebuild. Each pass retires >=1 item, so this is finite. */
@@ -310,7 +353,8 @@ VCL_BOOL vmod_fragment_synth(VRT_CTX, struct vmod_priv *priv) {
     http_ForceHeader(ctx->http_resp,H_Content_Type,"application/json; charset=UTF-8");
     http_ForceHeader(ctx->http_resp,HDR("X-Content-Type-Options"),"nosniff");
     http_ForceHeader(ctx->http_resp,HDR("X-Accel-Expires"),"0");
-    if (!delivery_append_cookies(ctx,d)) { VRT_fail(ctx,"Fragment cookies unavailable"); return 1; }
+    http_ForceHeader(ctx->http_resp,HDR("X-UltraCache-Fragment-Reuse"),d->fragment_fast ? "HIT" : "MISS");
+    if (!d->fragment_fast && !delivery_append_cookies(ctx,d)) { VRT_fail(ctx,"Fragment cookies unavailable"); return 1; }
     INIT_OBJ(&body,VRT_BLOB_MAGIC); body.blob = d->fragment_json; body.len = d->fragment_json_length;
     VRT_l_resp_body(ctx,LBODY_SET_BLOB,NULL,&body);
     d->phase = D_FRAGMENT_SENT;
